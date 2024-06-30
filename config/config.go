@@ -17,6 +17,7 @@ type Config struct {
 	UserAgent     string
 	Authorization string
 	SaveLocation  string
+    VODFileExt    string
 }
 
 type Account struct {
@@ -128,7 +129,8 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	Authorization := gjson.Get(string(cfg), "auth-token")
 	useragent := gjson.Get(string(cfg), "user-agent")
-	savelocation := gjson.Get(string(cfg), "save_location")
+	savelocation := gjson.Get(string(cfg), "save-location")
+    vodfileext := gjson.Get(string(cfg), "vods-file-extension")
 
 	if useragent.Type == gjson.Null {
 		return nil, fmt.Errorf("user-agent is empty")
@@ -141,6 +143,7 @@ func LoadConfig(configPath string) (*Config, error) {
 		UserAgent:     useragent.Str,
 		Authorization: Authorization.Str,
 		SaveLocation:  savelocation.Str,
+        VODFileExt:    vodfileext.Str,
 	}, nil
 }
 
