@@ -179,7 +179,7 @@ func (m *mainModel) View() string {
 		// Welcome message
 		configpath := GetConfigPath()
 		styledConfigPath := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFC8FF")).Render(configpath)
-		welcomeMessage := "Config path: " + styledConfigPath + "\n" + "Welcome to Fansly-scraper Version 0.0.1"
+		welcomeMessage := "Config path: " + styledConfigPath + "\n" + "Welcome to Fansly-scraper Version 0.0.2"
 		styledWelcomeMessage := lipgloss.NewStyle().Foreground(lipgloss.Color("#90EE90")).Render(welcomeMessage)
 		sb.WriteString(styledWelcomeMessage + "\n")
 		// Maintainer Repo
