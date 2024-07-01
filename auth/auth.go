@@ -56,8 +56,12 @@ type AccountID struct {
 }
 
 type TimelineStats struct {
-	ImageCount int `json:"imageCount"`
-	VideoCount int `json:"videoCount"`
+    AccountId       string  `json:"accountId"`
+    ImageCount      int     `json:"imageCount"`
+    VideoCount      int     `json:"videoCount"`
+    BundleCount     int     `json:"bundleCount"`
+    BundleImgCount  int     `json:"bundleImageCount"`
+    BundleVidCount  int     `json:"bundleVideoCount"`
 }
 
 type FollowedModel struct {

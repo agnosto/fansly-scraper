@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -19,12 +21,13 @@ import (
 type AppState int
 
 const (
-	MainMenuState AppState = iota
-	FollowedModelsState
-	DownloadState
-	LiveMonitorState
+    MainMenuState AppState = iota
+    FollowedModelsState
+    DownloadState
+    LiveMonitorState
     LikePostState
     UnlikePostState
+    FilterState
 )
 
 type mainModel struct {
@@ -34,10 +37,16 @@ type mainModel struct {
 	options         []string
 	state           AppState
 	followedModels  []auth.FollowedModel
+    filteredModels  []auth.FollowedModel
+    filterInput     string
     viewportStart   int
     viewportSize    int
     welcome         string
     table           table.Model
+    keys            keyMap
+    help            help.Model
+    width           int
+    height          int
 }
 
 type followedModelsModel struct {
@@ -45,6 +54,65 @@ type followedModelsModel struct {
 	selected        string
 	followedModels  []auth.FollowedModel
 	cursorPos       int
+}
+
+type keyMap struct {
+	Up      key.Binding
+	Down    key.Binding
+	Help    key.Binding
+	Quit    key.Binding
+    Filter  key.Binding
+    Reset   key.Binding
+    Back    key.Binding
+    Select  key.Binding
+}
+
+func (k keyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Up, k.Down, k.Help, k.Quit}
+}
+
+func (k keyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.Up, k.Filter}, // first column
+		{k.Down, k.Back},      // second column
+        {k.Help, k.Select},
+        {k.Quit, k.Reset},
+	}
+}
+
+var keys = keyMap{
+	Up: key.NewBinding(
+		key.WithKeys("up", "k"),
+		key.WithHelp("↑/k", "move up"),
+	),
+	Down: key.NewBinding(
+		key.WithKeys("down", "j"),
+		key.WithHelp("↓/j", "move down"),
+	),
+	Help: key.NewBinding(
+		key.WithKeys("?"),
+		key.WithHelp("?", "toggle help"),
+	),
+    Filter: key.NewBinding(
+        key.WithKeys("/"),
+        key.WithHelp("/", "filter"),
+    ),
+	Quit: key.NewBinding(
+		key.WithKeys("ctrl+c"),
+		key.WithHelp("ctrl+c", "quit"),
+	),
+    Reset: key.NewBinding(
+        key.WithKeys("r"),
+        key.WithHelp("r", "reset list"),
+    ),
+    Back: key.NewBinding(
+        key.WithKeys("esc"),
+        key.WithHelp("esc", "back to menu"),
+    ),
+    Select: key.NewBinding(
+        key.WithKeys("enter"),
+        key.WithHelp("enter", "select"),
+    ),
 }
 
 type tickMsg struct{}
@@ -59,20 +127,32 @@ func (mainModel) Init() tea.Cmd {
 func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	configPath := GetConfigPath()
 	switch msg := msg.(type) {
+    case tea.WindowSizeMsg:
+		m.help.Width = msg.Width
+        m.width = msg.Width
+		m.height = msg.Height 
+        m.updateTable()
 	case tea.KeyMsg:
+        switch {
+		case key.Matches(msg, m.keys.Help):
+			m.help.ShowAll = !m.help.ShowAll
+		case key.Matches(msg, m.keys.Quit):
+			m.quit = true
+			return m, tea.Quit
+		}
 		switch m.state {
 		case MainMenuState:
-			switch msg.String() {
-			case "ctrl+c", "q":
+			switch {
+			case key.Matches(msg, m.keys.Quit):
 				m.quit = true
 				return m, tea.Quit
-			case "up":
+			case key.Matches(msg, m.keys.Up):
 				m.cursorPos = (m.cursorPos - 1 + len(m.options)) % len(m.options)
 				return m, nil
-			case "down":
+			case key.Matches(msg, m.keys.Down):
 				m.cursorPos = (m.cursorPos + 1) % len(m.options)
 				return m, nil
-			case "enter":
+			case key.Matches(msg, m.keys.Select):
 				m.selected = m.options[m.cursorPos]
 				switch m.selected {
 				case "Download a user's post":
@@ -100,53 +180,64 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case FollowedModelsState:
-			switch msg.String() {
-			case "ctrl+c", "q":
+			switch {
+			case key.Matches(msg, m.keys.Quit):
 				m.quit = true
 				return m, tea.Quit
-		    case "up":
-				//if m.cursorPos > 0 {
-				//	m.cursorPos--
-				//} else {
-				//	m.cursorPos = len(m.followedModels) - 1
-				//}
-				//if m.cursorPos < m.viewportStart {
-				//	m.viewportStart = m.cursorPos
-				//} else if m.cursorPos >= m.viewportStart+m.viewportSize {
-				//	m.viewportStart = m.cursorPos - m.viewportSize + 1
-				//}
-                //m.table.SetCursor(m.table.Cursor() - 1)
+            case key.Matches(msg, m.keys.Reset):
+                m.filteredModels = m.followedModels // Reset to unfiltered list
+                m.filterInput = "" // Reset filter input
+                m.updateTable() // Update table to show unfiltered list
+                return m, nil
+		    case key.Matches(msg, m.keys.Up):
                 m.table.MoveUp(1)
 				return m, nil
-			case "down":
-				//if m.cursorPos < len(m.followedModels)-1 {
-				//	m.cursorPos++
-				//} else {
-				//	m.cursorPos = 0
-				//}
-				//if m.cursorPos >= m.viewportStart+m.viewportSize {
-				//	m.viewportStart = m.cursorPos - m.viewportSize + 1
-				//} else if m.cursorPos < m.viewportStart {
-				//	m.viewportStart = m.cursorPos
-				//}
-                //m.table.SetCursor(m.table.Cursor() + 1)
+			case key.Matches(msg, m.keys.Down):
                 m.table.MoveDown(1)
 				return m, nil	
-			case "enter":
+			case key.Matches(msg, m.keys.Select):
 				//selectedModel := m.followedModels[m.cursorPos]
 				//fmt.Printf("Selected model: %s\n", selectedModel.Username)
                 selectedRow := m.table.SelectedRow()
 				fmt.Printf("Selected model: %s\n", selectedRow[0])
 				// Handle post-download or other actions for the selected model here
 				return m, nil
-            case "/":
+            case key.Matches(msg, m.keys.Filter):
+                m.state = FilterState
                 return m, nil
-			case "esc":
+			case key.Matches(msg, m.keys.Back):
 				m.state = MainMenuState
                 m.cursorPos = 0
 				return m, nil
 			}
-		}
+        case FilterState:
+            switch msg.String() {
+            case "ctrl+c":
+                m.quit = true
+                return m, tea.Quit
+            case "esc":
+                m.filteredModels = m.followedModels // Reset to unfiltered list
+                m.filterInput = "" // Reset filter input
+                m.updateTable() // Update table to show unfiltered list
+
+                m.state = FollowedModelsState
+                return m, nil
+            case "enter":
+                m.applyFilter()
+                m.state = FollowedModelsState
+                m.filterInput = ""
+                return m, nil
+            case "backspace":
+                if len(m.filterInput) > 0 {
+						m.filterInput = m.filterInput[:len(m.filterInput)-1]
+                        m.applyFilter()
+				}
+            default:
+                m.filterInput += msg.String()
+                m.applyFilter()
+                return m, nil
+            }
+        }
 	default:
 		return m, nil
 	}
@@ -155,7 +246,7 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *mainModel) View() string {
 	var sb strings.Builder
-    version := "0.0.3"
+    version := "0.0.4"
 
 	switch m.state {
 	case MainMenuState:
@@ -179,8 +270,12 @@ func (m *mainModel) View() string {
 				sb.WriteString("  " + opt + "\n")
 			}
 		}
+        helpView := m.help.View(m.keys)
+        sb.WriteString("\n" + helpView)
+	    //height := 21 - strings.Count(helpView, "\n")
+        //sb.WriteString("\n" + strings.Repeat("\n", height) + helpView)
+
 	case FollowedModelsState:
-        //sb.Reset()
         sb.WriteString(m.welcome + "\n")
 		sb.WriteString("Select a followed model:\n")
 	    //for i := m.viewportStart; i < m.viewportStart+m.viewportSize && i < len(m.followedModels); i++ {
@@ -192,10 +287,31 @@ func (m *mainModel) View() string {
 		//	}
 		//}
         sb.WriteString(m.table.View() + "\n")
-		sb.WriteString("\nPress 'esc' to go back to the main menu.")
+        helpView := m.help.View(m.keys)
+	    //height := 8 - strings.Count(helpView, "\n")
+        height := m.height - strings.Count(helpView, "\n") - m.table.Height() - 8 
+
+	    sb.WriteString("\n" + strings.Repeat("\n", height) + helpView)
+
+    case FilterState:
+        sb.WriteString(m.welcome + "\n")
+        sb.WriteString("Filter by username: " + m.filterInput + "\n")
+        sb.WriteString(m.table.View() + "\n")
+
 	}
 
 	return sb.String()
+}
+
+func (m *mainModel) applyFilter() {
+	filtered := []auth.FollowedModel{}
+	for _, model := range m.followedModels {
+		if strings.Contains(strings.ToLower(model.Username), strings.ToLower(m.filterInput)) {
+			filtered = append(filtered, model)
+		}
+	}
+	m.filteredModels = filtered
+	m.updateTable()
 }
 
 func (m *mainModel) fetchAccInfo(configPath string) {
@@ -222,33 +338,50 @@ func (m *mainModel) fetchAccInfo(configPath string) {
 		return
 	}
 	m.followedModels = followedModels
+    m.filteredModels = followedModels
+    m.updateTable()
     //m.viewportStart = 0
     //m.viewportSize = 20
-    // Prepare the table with the fetched models
+   
+	m.state = FollowedModelsState
+
+}
+
+func (m *mainModel) updateTable() {
 	columns := []table.Column{
 		{Title: "Username", Width: 20},
+        //{Title: "AccountId", Width: 20},
 		{Title: "Images", Width: 10},
 		{Title: "Videos", Width: 10},
+        {Title: "Bundles", Width: 10},
+        {Title: "Bundle Images", Width: 15},
+        {Title: "Bundle Videos", Width: 15},
 	}
 
-	rows := make([]table.Row, len(m.followedModels))
-	for i, model := range m.followedModels {
+	rows := make([]table.Row, len(m.filteredModels))
+	for i, model := range m.filteredModels {
 		rows[i] = table.Row{
 			model.Username,
+            //model.ID,
 			fmt.Sprintf("%d", model.TimelineStats.ImageCount),
 			fmt.Sprintf("%d", model.TimelineStats.VideoCount),
+            fmt.Sprintf("%d", model.TimelineStats.BundleCount),
+            fmt.Sprintf("%d", model.TimelineStats.BundleImgCount),
+            fmt.Sprintf("%d", model.TimelineStats.BundleVidCount),
 		}
 	}
+
+    tableHeight := m.height - 10
 
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows(rows),
 		table.WithFocused(true),
-		table.WithHeight(21),
+		table.WithHeight(tableHeight),
 	)
 
-    s := table.DefaultStyles()
-    s.Header = s.Header.
+	s := table.DefaultStyles()
+	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color("240")).
 		BorderBottom(true).
@@ -260,14 +393,14 @@ func (m *mainModel) fetchAccInfo(configPath string) {
 	t.SetStyles(s)
 
 	m.table = t
-	m.state = FollowedModelsState
-
 }
 
 func main() {
 	p := tea.NewProgram(&mainModel{
-		options:   []string{"Download a user's post", "Monitor a user's livestreams", "Like all of a user's post", "Unlike all of a user's post", "Edit config.json file", "Quit"},
-		cursorPos: 0,
+		options:    []string{"Download a user's post", "Monitor a user's livestreams", "Like all of a user's post", "Unlike all of a user's post", "Edit config.json file", "Quit"},
+		cursorPos:  0,
+        keys:       keys,
+        help:       help.New(),
 	}, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
