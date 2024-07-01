@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
-	//"github.com/charmbracelet/bubbles"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -28,14 +28,16 @@ const (
 )
 
 type mainModel struct {
-	quit           bool
-	cursorPos      int
-	selected       string
-	options        []string
-	state          AppState
-	followedModels []auth.FollowedModel
-    viewportStart  int
-    viewportSize   int
+	quit            bool
+	cursorPos       int
+	selected        string
+	options         []string
+	state           AppState
+	followedModels  []auth.FollowedModel
+    viewportStart   int
+    viewportSize    int
+    welcome         string
+    table           table.Model
 }
 
 type followedModelsModel struct {
@@ -75,33 +77,7 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switch m.selected {
 				case "Download a user's post":
 					m.state = DownloadState
-
-					// Load the configuration
-					cfg, err := config.LoadConfig(configPath)
-					if err != nil {
-						log.Printf("Error loading config: %v", err)
-						return m, nil
-					}
-
-					// Fetch the account information using the auth token and user agent from the config
-					accountInfo, err := auth.Login(cfg.Authorization, cfg.UserAgent)
-					if err != nil {
-						log.Println(cfg.Authorization)
-						log.Printf("Error logging in: %v", err)
-						return m, nil
-					}
-					fmt.Println("Welcome ", accountInfo.DisplayName, " | ", accountInfo.Username)
-
-					// Fetch the list of followed users
-					followedModels, err := auth.GetFollowedUsers(accountInfo.ID, cfg.Authorization, cfg.UserAgent)
-					if err != nil {
-						fmt.Printf("\nError getting followed models: %v\n", err)
-						return m, nil
-					}
-					m.followedModels = followedModels
-                    m.viewportStart = 0
-                    m.viewportSize = 20
-					m.state = FollowedModelsState
+                    m.fetchAccInfo(configPath)
 					return m, nil
 				case "Monitor a user's livestream":
 					m.state = LiveMonitorState
@@ -129,32 +105,38 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.quit = true
 				return m, tea.Quit
 		    case "up":
-				if m.cursorPos > 0 {
-					m.cursorPos--
-				} else {
-					m.cursorPos = len(m.followedModels) - 1
-				}
-				if m.cursorPos < m.viewportStart {
-					m.viewportStart = m.cursorPos
-				} else if m.cursorPos >= m.viewportStart+m.viewportSize {
-					m.viewportStart = m.cursorPos - m.viewportSize + 1
-				}
+				//if m.cursorPos > 0 {
+				//	m.cursorPos--
+				//} else {
+				//	m.cursorPos = len(m.followedModels) - 1
+				//}
+				//if m.cursorPos < m.viewportStart {
+				//	m.viewportStart = m.cursorPos
+				//} else if m.cursorPos >= m.viewportStart+m.viewportSize {
+				//	m.viewportStart = m.cursorPos - m.viewportSize + 1
+				//}
+                //m.table.SetCursor(m.table.Cursor() - 1)
+                m.table.MoveUp(1)
 				return m, nil
 			case "down":
-				if m.cursorPos < len(m.followedModels)-1 {
-					m.cursorPos++
-				} else {
-					m.cursorPos = 0
-				}
-				if m.cursorPos >= m.viewportStart+m.viewportSize {
-					m.viewportStart = m.cursorPos - m.viewportSize + 1
-				} else if m.cursorPos < m.viewportStart {
-					m.viewportStart = m.cursorPos
-				}
+				//if m.cursorPos < len(m.followedModels)-1 {
+				//	m.cursorPos++
+				//} else {
+				//	m.cursorPos = 0
+				//}
+				//if m.cursorPos >= m.viewportStart+m.viewportSize {
+				//	m.viewportStart = m.cursorPos - m.viewportSize + 1
+				//} else if m.cursorPos < m.viewportStart {
+				//	m.viewportStart = m.cursorPos
+				//}
+                //m.table.SetCursor(m.table.Cursor() + 1)
+                m.table.MoveDown(1)
 				return m, nil	
 			case "enter":
-				selectedModel := m.followedModels[m.cursorPos]
-				fmt.Printf("Selected model: %s\n", selectedModel.Username)
+				//selectedModel := m.followedModels[m.cursorPos]
+				//fmt.Printf("Selected model: %s\n", selectedModel.Username)
+                selectedRow := m.table.SelectedRow()
+				fmt.Printf("Selected model: %s\n", selectedRow[0])
 				// Handle post-download or other actions for the selected model here
 				return m, nil
             case "/":
@@ -173,13 +155,14 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *mainModel) View() string {
 	var sb strings.Builder
+    version := "0.0.3"
 
 	switch m.state {
 	case MainMenuState:
 		// Welcome message
 		configpath := GetConfigPath()
 		styledConfigPath := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFC8FF")).Render(configpath)
-		welcomeMessage := "Config path: " + styledConfigPath + "\n" + "Welcome to Fansly-scraper Version 0.0.2"
+		welcomeMessage := "Config path: " + styledConfigPath + "\n" + "Welcome to Fansly-scraper Version " + version
 		styledWelcomeMessage := lipgloss.NewStyle().Foreground(lipgloss.Color("#90EE90")).Render(welcomeMessage)
 		sb.WriteString(styledWelcomeMessage + "\n")
 		// Maintainer Repo
@@ -197,20 +180,88 @@ func (m *mainModel) View() string {
 			}
 		}
 	case FollowedModelsState:
-        sb.Reset()
+        //sb.Reset()
+        sb.WriteString(m.welcome + "\n")
 		sb.WriteString("Select a followed model:\n")
-	    for i := m.viewportStart; i < m.viewportStart+m.viewportSize && i < len(m.followedModels); i++ {
-			model := m.followedModels[i]
-			if i == m.cursorPos {
-				sb.WriteString("> " + lipgloss.NewStyle().Foreground(lipgloss.Color("#ADD8E6")).Render(fmt.Sprintf("%s | images: %d | videos: %d", model.Username, model.TimelineStats.ImageCount, model.TimelineStats.VideoCount)) + "\n")
-			} else {
-				sb.WriteString("  " + fmt.Sprintf("%s | images: %d | videos: %d", model.Username, model.TimelineStats.ImageCount, model.TimelineStats.VideoCount) + "\n")
-			}
-		}	
+	    //for i := m.viewportStart; i < m.viewportStart+m.viewportSize && i < len(m.followedModels); i++ {
+		//	model := m.followedModels[i]
+		//	if i == m.cursorPos {
+		//		sb.WriteString("> " + lipgloss.NewStyle().Foreground(lipgloss.Color("#ADD8E6")).Render(fmt.Sprintf("%s | images: %d | videos: %d", model.Username, model.TimelineStats.ImageCount, model.TimelineStats.VideoCount)) + "\n")
+		//	} else {
+		//		sb.WriteString("  " + fmt.Sprintf("%s | images: %d | videos: %d", model.Username, model.TimelineStats.ImageCount, model.TimelineStats.VideoCount) + "\n")
+		//	}
+		//}
+        sb.WriteString(m.table.View() + "\n")
 		sb.WriteString("\nPress 'esc' to go back to the main menu.")
 	}
 
 	return sb.String()
+}
+
+func (m *mainModel) fetchAccInfo(configPath string) {
+    // Load the configuration
+	cfg, err := config.LoadConfig(configPath)
+	if err != nil {
+	    log.Printf("Error loading config: %v", err)
+		return
+	}
+
+	// Fetch the account information using the auth token and user agent from the config
+	accountInfo, err := auth.Login(cfg.Authorization, cfg.UserAgent)
+	if err != nil {
+		log.Println(cfg.Authorization)
+		log.Printf("Error logging in: %v", err)
+		return
+	}
+    m.welcome = fmt.Sprintf("Welcome %s | %s", accountInfo.DisplayName, accountInfo.Username)
+
+	// Fetch the list of followed users
+	followedModels, err := auth.GetFollowedUsers(accountInfo.ID, cfg.Authorization, cfg.UserAgent)
+	if err != nil {
+		fmt.Printf("\nError getting followed models: %v\n", err)
+		return
+	}
+	m.followedModels = followedModels
+    //m.viewportStart = 0
+    //m.viewportSize = 20
+    // Prepare the table with the fetched models
+	columns := []table.Column{
+		{Title: "Username", Width: 20},
+		{Title: "Images", Width: 10},
+		{Title: "Videos", Width: 10},
+	}
+
+	rows := make([]table.Row, len(m.followedModels))
+	for i, model := range m.followedModels {
+		rows[i] = table.Row{
+			model.Username,
+			fmt.Sprintf("%d", model.TimelineStats.ImageCount),
+			fmt.Sprintf("%d", model.TimelineStats.VideoCount),
+		}
+	}
+
+	t := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithFocused(true),
+		table.WithHeight(21),
+	)
+
+    s := table.DefaultStyles()
+    s.Header = s.Header.
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		BorderBottom(true).
+		Bold(false)
+	s.Selected = s.Selected.
+		Foreground(lipgloss.Color("229")).
+		Background(lipgloss.Color("57")).
+		Bold(false)
+	t.SetStyles(s)
+
+	m.table = t
+	m.state = FollowedModelsState
+
 }
 
 func main() {
