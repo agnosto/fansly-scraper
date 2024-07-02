@@ -24,6 +24,7 @@ const (
     MainMenuState AppState = iota
     FollowedModelsState
     DownloadState
+    DownloadActionsState 
     LiveMonitorState
     LikePostState
     UnlikePostState
@@ -48,6 +49,9 @@ type mainModel struct {
     width           int
     height          int
     actionChosen    string
+    downloadOptions []string
+    selectedModel   string
+    selectedModelId string
 }
 
 type followedModelsModel struct {
@@ -158,22 +162,18 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switch m.selected {
 				case "Download a user's post":
                     m.actionChosen = "download"
-					m.state = DownloadState
                     m.fetchAccInfo(configPath)
 					return m, nil
 				case "Monitor a user's livestreams":
                     m.actionChosen = "monitor"
-					m.state = LiveMonitorState
                     m.fetchAccInfo(configPath)
                     return m, nil 
 				case "Like all of a user's post":
                     m.actionChosen = "like"
-					m.state = LikePostState
                     m.fetchAccInfo(configPath)
                     return m, nil 
 				case "Unlike all of a user's post":
                     m.actionChosen = "unlike"
-					m.state = UnlikePostState
                     m.fetchAccInfo(configPath)
                     return m, nil 
 				case "Edit config.json file":
@@ -210,7 +210,23 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				//selectedModel := m.followedModels[m.cursorPos]
 				//fmt.Printf("Selected model: %s\n", selectedModel.Username)
                 selectedRow := m.table.SelectedRow()
-				fmt.Printf("Selected model: %s\n", selectedRow[0])
+				m.selectedModel = selectedRow[0]
+                for _, model := range m.followedModels {
+                    if model.Username == m.selectedModel {
+                        m.selectedModelId = model.ID
+                        break
+                    }
+                }
+                switch m.actionChosen {
+                case "download":
+                    m.state = DownloadActionsState
+                case "monitor":
+                    m.state = LiveMonitorState
+                case "like":
+                    m.state = LikePostState
+                case "unlike":
+                    m.state = UnlikePostState
+                }
 				// Handle post-download or other actions for the selected model here
 				return m, nil
             case key.Matches(msg, m.keys.Filter):
@@ -254,6 +270,27 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
                 m.applyFilter()
                 return m, nil
             }
+        case DownloadActionsState:
+            switch {
+            case key.Matches(msg, m.keys.Quit):
+				m.quit = true
+				return m, tea.Quit
+			case key.Matches(msg, m.keys.Up):
+				m.cursorPos = (m.cursorPos - 1 + len(m.downloadOptions)) % len(m.downloadOptions)
+				return m, nil
+			case key.Matches(msg, m.keys.Down):
+				m.cursorPos = (m.cursorPos + 1) % len(m.downloadOptions)
+				return m, nil
+			case key.Matches(msg, m.keys.Select):
+				selectedOption := m.downloadOptions[m.cursorPos]
+				fmt.Printf("Selected action for %s (ID: %s): %s\n", m.selectedModel, m.selectedModelId ,selectedOption)
+				// Handle the download action for the selected option here
+				return m, nil
+			case key.Matches(msg, m.keys.Back):
+				m.state = FollowedModelsState
+				m.cursorPos = 0
+				return m, nil
+            }
         }
 	default:
 		return m, nil
@@ -263,7 +300,7 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *mainModel) View() string {
 	var sb strings.Builder
-    version := "0.0.5"
+    version := "0.0.6"
 
 	switch m.state {
 	case MainMenuState:
@@ -312,6 +349,18 @@ func (m *mainModel) View() string {
         sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#f5c2e7")).Render(m.welcome) + "\n")
         sb.WriteString("Filter by username: " + m.filterInput + "\n")
         sb.WriteString(m.table.View() + "\n")
+
+    case DownloadActionsState:
+		sb.WriteString(fmt.Sprintf("What would you like to scrape from %s?\n", m.selectedModel))
+		for i, opt := range m.downloadOptions {
+			if i == m.cursorPos {
+				sb.WriteString("> " + lipgloss.NewStyle().Foreground(lipgloss.Color("#89dceb")).Render(opt) + "\n")
+			} else {
+				sb.WriteString("  " + opt + "\n")
+			}
+		}
+        helpView := m.help.View(m.keys)
+        sb.WriteString("\n" + helpView)
 
 	}
 
@@ -410,6 +459,7 @@ func (m *mainModel) updateTable() {
 func main() {
 	p := tea.NewProgram(&mainModel{
 		options:    []string{"Download a user's post", "Monitor a user's livestreams", "Like all of a user's post", "Unlike all of a user's post", "Edit config.json file", "Quit"},
+        downloadOptions: []string{"All", "Timeline", "Messages", "Stories"},
 		cursorPos:  0,
         keys:       keys,
         help:       help.New(),
