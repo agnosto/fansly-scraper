@@ -275,14 +275,14 @@ func (m *mainModel) View() string {
 		sb.WriteString(styledWelcomeMessage + "\n")
 		// Maintainer Repo
 		repoLink := "https://github.com/agnosto/fansly-scraper"
-		styledRepoLink := lipgloss.NewStyle().Foreground(lipgloss.Color("#cba6f7")).Render(repoLink)
+		styledRepoLink := lipgloss.NewStyle().Foreground(lipgloss.Color("#89b4fa")).Render(repoLink)
 		sb.WriteString("Maintainer's repo: " + styledRepoLink + "\n\n")
 
 		sb.WriteString("What would you like to do? " + m.selected + "\n")
 
 		for i, opt := range m.options {
 			if i == m.cursorPos {
-				sb.WriteString("> " + lipgloss.NewStyle().Foreground(lipgloss.Color("#89b4fa")).Render(opt) + "\n")
+				sb.WriteString("> " + lipgloss.NewStyle().Foreground(lipgloss.Color("#89dceb")).Render(opt) + "\n")
 			} else {
 				sb.WriteString("  " + opt + "\n")
 			}
