@@ -47,6 +47,7 @@ type mainModel struct {
     help            help.Model
     width           int
     height          int
+    actionChosen    string
 }
 
 type followedModelsModel struct {
@@ -75,8 +76,8 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Filter}, // first column
 		{k.Down, k.Back},      // second column
-        {k.Help, k.Select},
-        {k.Quit, k.Reset},
+        {k.Help, k.Reset},
+        {k.Quit, k.Select},
 	}
 }
 
@@ -156,15 +157,25 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selected = m.options[m.cursorPos]
 				switch m.selected {
 				case "Download a user's post":
+                    m.actionChosen = "download"
 					m.state = DownloadState
                     m.fetchAccInfo(configPath)
 					return m, nil
-				case "Monitor a user's livestream":
+				case "Monitor a user's livestreams":
+                    m.actionChosen = "monitor"
 					m.state = LiveMonitorState
+                    m.fetchAccInfo(configPath)
+                    return m, nil 
 				case "Like all of a user's post":
+                    m.actionChosen = "like"
 					m.state = LikePostState
+                    m.fetchAccInfo(configPath)
+                    return m, nil 
 				case "Unlike all of a user's post":
+                    m.actionChosen = "unlike"
 					m.state = UnlikePostState
+                    m.fetchAccInfo(configPath)
+                    return m, nil 
 				case "Edit config.json file":
 					// Ensure the config.json file exists
 					err := config.EnsureConfigExists(configPath)
@@ -246,7 +257,7 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *mainModel) View() string {
 	var sb strings.Builder
-    version := "0.0.4"
+    version := "0.0.5"
 
 	switch m.state {
 	case MainMenuState:
@@ -277,7 +288,16 @@ func (m *mainModel) View() string {
 
 	case FollowedModelsState:
         sb.WriteString(m.welcome + "\n")
-		sb.WriteString("Select a followed model:\n")
+        switch m.actionChosen {
+        case "download":
+            sb.WriteString("Who would you like to scrape? \n")
+        case "monitor":
+             sb.WriteString("Who would you like to monitor? \n")
+        case "like":
+             sb.WriteString("Who do you want to like all post from? \n")
+        case "unlike":
+             sb.WriteString("Who do you want to unlike all post from? \n")
+        }
 	    //for i := m.viewportStart; i < m.viewportStart+m.viewportSize && i < len(m.followedModels); i++ {
 		//	model := m.followedModels[i]
 		//	if i == m.cursorPos {
