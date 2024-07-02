@@ -289,9 +289,7 @@ func (m *mainModel) View() string {
 		}
         helpView := m.help.View(m.keys)
         sb.WriteString("\n" + helpView)
-	    //height := 21 - strings.Count(helpView, "\n")
-        //sb.WriteString("\n" + strings.Repeat("\n", height) + helpView)
-
+	    
 	case FollowedModelsState:
         sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#f5c2e7")).Render(m.welcome) + "\n")
         switch m.actionChosen {
@@ -304,17 +302,8 @@ func (m *mainModel) View() string {
         case "unlike":
              sb.WriteString("Who do you want to unlike all post from? \n")
         }
-	    //for i := m.viewportStart; i < m.viewportStart+m.viewportSize && i < len(m.followedModels); i++ {
-		//	model := m.followedModels[i]
-		//	if i == m.cursorPos {
-		//		sb.WriteString("> " + lipgloss.NewStyle().Foreground(lipgloss.Color("#ADD8E6")).Render(fmt.Sprintf("%s | images: %d | videos: %d", model.Username, model.TimelineStats.ImageCount, model.TimelineStats.VideoCount)) + "\n")
-		//	} else {
-		//		sb.WriteString("  " + fmt.Sprintf("%s | images: %d | videos: %d", model.Username, model.TimelineStats.ImageCount, model.TimelineStats.VideoCount) + "\n")
-		//	}
-		//}
-        sb.WriteString(m.table.View() + "\n")
+	    sb.WriteString(m.table.View() + "\n")
         helpView := m.help.View(m.keys)
-	    //height := 8 - strings.Count(helpView, "\n")
         height := m.height - strings.Count(helpView, "\n") - m.table.Height() - 8 
 
 	    sb.WriteString("\n" + strings.Repeat("\n", height) + helpView)
@@ -366,10 +355,7 @@ func (m *mainModel) fetchAccInfo(configPath string) {
 	m.followedModels = followedModels
     m.filteredModels = followedModels
     m.updateTable()
-    //m.viewportStart = 0
-    //m.viewportSize = 20
-   
-	m.state = FollowedModelsState
+   	m.state = FollowedModelsState
 
 }
 
