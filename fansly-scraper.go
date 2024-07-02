@@ -233,6 +233,12 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
                 m.state = FollowedModelsState
                 return m, nil
+            case "up":
+                m.table.MoveUp(1)
+				return m, nil
+			case "down":
+                m.table.MoveDown(1)
+				return m, nil
             case "enter":
                 m.applyFilter()
                 m.state = FollowedModelsState
@@ -263,20 +269,20 @@ func (m *mainModel) View() string {
 	case MainMenuState:
 		// Welcome message
 		configpath := GetConfigPath()
-		styledConfigPath := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFC8FF")).Render(configpath)
+		styledConfigPath := lipgloss.NewStyle().Foreground(lipgloss.Color("#f5c2e7")).Render(configpath)
 		welcomeMessage := "Config path: " + styledConfigPath + "\n" + "Welcome to Fansly-scraper Version " + version
-		styledWelcomeMessage := lipgloss.NewStyle().Foreground(lipgloss.Color("#90EE90")).Render(welcomeMessage)
+		styledWelcomeMessage := lipgloss.NewStyle().Foreground(lipgloss.Color("#a6e3a1")).Render(welcomeMessage)
 		sb.WriteString(styledWelcomeMessage + "\n")
 		// Maintainer Repo
 		repoLink := "https://github.com/agnosto/fansly-scraper"
-		styledRepoLink := lipgloss.NewStyle().Foreground(lipgloss.Color("#7676ff")).Render(repoLink)
+		styledRepoLink := lipgloss.NewStyle().Foreground(lipgloss.Color("#cba6f7")).Render(repoLink)
 		sb.WriteString("Maintainer's repo: " + styledRepoLink + "\n\n")
 
 		sb.WriteString("What would you like to do? " + m.selected + "\n")
 
 		for i, opt := range m.options {
 			if i == m.cursorPos {
-				sb.WriteString("> " + lipgloss.NewStyle().Foreground(lipgloss.Color("#ADD8E6")).Render(opt) + "\n")
+				sb.WriteString("> " + lipgloss.NewStyle().Foreground(lipgloss.Color("#89b4fa")).Render(opt) + "\n")
 			} else {
 				sb.WriteString("  " + opt + "\n")
 			}
@@ -287,7 +293,7 @@ func (m *mainModel) View() string {
         //sb.WriteString("\n" + strings.Repeat("\n", height) + helpView)
 
 	case FollowedModelsState:
-        sb.WriteString(m.welcome + "\n")
+        sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#f5c2e7")).Render(m.welcome) + "\n")
         switch m.actionChosen {
         case "download":
             sb.WriteString("Who would you like to scrape? \n")
@@ -314,7 +320,7 @@ func (m *mainModel) View() string {
 	    sb.WriteString("\n" + strings.Repeat("\n", height) + helpView)
 
     case FilterState:
-        sb.WriteString(m.welcome + "\n")
+        sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#f5c2e7")).Render(m.welcome) + "\n")
         sb.WriteString("Filter by username: " + m.filterInput + "\n")
         sb.WriteString(m.table.View() + "\n")
 
@@ -408,7 +414,7 @@ func (m *mainModel) updateTable() {
 		Bold(false)
 	s.Selected = s.Selected.
 		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
+		Background(lipgloss.Color("#cba6f7")).
 		Bold(false)
 	t.SetStyles(s)
 
