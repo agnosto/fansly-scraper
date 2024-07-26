@@ -130,7 +130,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	Authorization := gjson.Get(string(cfg), "auth-token")
 	useragent := gjson.Get(string(cfg), "user-agent")
 	savelocation := gjson.Get(string(cfg), "save-location")
-    vodfileext := gjson.Get(string(cfg), "vods-file-extension")
+    //vodfileext := gjson.Get(string(cfg), "vods-file-extension")
 
 	if useragent.Type == gjson.Null {
 		return nil, fmt.Errorf("user-agent is empty")
@@ -138,12 +138,15 @@ func LoadConfig(configPath string) (*Config, error) {
 	if Authorization.Type == gjson.Null {
 		return nil, fmt.Errorf("authoriztion is empty")
 	}
+    if savelocation.Type == gjson.Null {
+        return nil, fmt.Errorf("save-location is empty")
+    }
 
 	return &Config{
 		UserAgent:     useragent.Str,
 		Authorization: Authorization.Str,
 		SaveLocation:  savelocation.Str,
-        VODFileExt:    vodfileext.Str,
+        //VODFileExt:    vodfileext.Str,
 	}, nil
 }
 

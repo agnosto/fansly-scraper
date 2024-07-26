@@ -4,15 +4,21 @@ import (
 	"fmt"
 	"go-fansly-scraper/auth"
 	"go-fansly-scraper/config"
+    "go-fansly-scraper/download"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
+    "sync"
+    "context"
+
+    "github.com/schollz/progressbar/v3"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
+    //"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -29,6 +35,7 @@ const (
     LikePostState
     UnlikePostState
     FilterState
+    DownloadProgressState
 )
 
 type mainModel struct {
@@ -50,8 +57,12 @@ type mainModel struct {
     height          int
     actionChosen    string
     downloadOptions []string
+    selectedOption  string
     selectedModel   string
     selectedModelId string
+    downloader      *download.Downloader
+    progressBar *progressbar.ProgressBar 
+	cancelDownload     context.CancelFunc
 }
 
 type followedModelsModel struct {
@@ -137,13 +148,18 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
         m.width = msg.Width
 		m.height = msg.Height 
         m.updateTable()
+    case downloadCompleteMsg:
+        m.state = MainMenuState
+        // The download is complete and the state has already been set to MainMenuState
+        // We don't need to do anything here, but this will trigger a redraw
+        return m, nil
 	case tea.KeyMsg:
         switch {
 		case key.Matches(msg, m.keys.Help):
 			m.help.ShowAll = !m.help.ShowAll
 		case key.Matches(msg, m.keys.Quit):
 			m.quit = true
-			return m, tea.Quit
+			return m, tea.Quit 
 		}
 		switch m.state {
 		case MainMenuState:
@@ -207,8 +223,6 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
                 m.table.MoveDown(1)
 				return m, nil	
 			case key.Matches(msg, m.keys.Select):
-				//selectedModel := m.followedModels[m.cursorPos]
-				//fmt.Printf("Selected model: %s\n", selectedModel.Username)
                 selectedRow := m.table.SelectedRow()
 				m.selectedModel = selectedRow[0]
                 for _, model := range m.followedModels {
@@ -282,15 +296,28 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursorPos = (m.cursorPos + 1) % len(m.downloadOptions)
 				return m, nil
 			case key.Matches(msg, m.keys.Select):
-				selectedOption := m.downloadOptions[m.cursorPos]
-				fmt.Printf("Selected action for %s (ID: %s): %s\n", m.selectedModel, m.selectedModelId ,selectedOption)
-				// Handle the download action for the selected option here
-				return m, nil
+				m.selectedOption = m.downloadOptions[m.cursorPos]
+                m.state = DownloadProgressState
+                return m, m.startDownload(m.selectedOption)
 			case key.Matches(msg, m.keys.Back):
 				m.state = FollowedModelsState
 				m.cursorPos = 0
 				return m, nil
             }
+         case DownloadProgressState:
+            switch {
+            case key.Matches(msg, m.keys.Back):
+                m.state = FollowedModelsState
+                m.cursorPos = 0
+                return m, nil
+            case key.Matches(msg, m.keys.Quit):
+                m.quit = true
+                return m, tea.Quit
+            }
+            // Remove the progress update handling
+            return m, nil
+            // Continue downloading if no key was pressed
+            //return m, m.startDownload(m.selectedOption)
         }
 	default:
 		return m, nil
@@ -300,7 +327,7 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *mainModel) View() string {
 	var sb strings.Builder
-    version := "0.0.6"
+    version := "0.0.7"
 
 	switch m.state {
 	case MainMenuState:
@@ -362,10 +389,51 @@ func (m *mainModel) View() string {
         helpView := m.help.View(m.keys)
         sb.WriteString("\n" + helpView)
 
+    case DownloadProgressState:
+        sb.WriteString(fmt.Sprintf("Downloading %s content for %s...\n\n", m.selectedOption, m.selectedModel))
+
 	}
 
 	return sb.String()
 }
+
+func (m *mainModel) startDownload(option string) tea.Cmd {
+    return func() tea.Msg {
+        //log.Println("startDownload function called")
+        var wg sync.WaitGroup
+        wg.Add(1)
+        go func() {
+            //log.Println("Starting download goroutine")
+            defer wg.Done()
+            var err error
+            ctx := context.Background()
+            switch option {
+            case "Timeline":
+                err = m.downloader.DownloadTimeline(ctx, m.selectedModelId, m.selectedModel)
+            // ... (add cases for other download options)
+            }
+            if err != nil {
+                if err.Error() == "not subscribed or followed: unable to get timeline feed" {
+                    log.Printf("Unable to download timeline for %s: Not subscribed or followed", m.selectedModel)
+                    // You might want to update the UI here to show this message
+                } else {
+                    log.Printf("Error downloading %s for %s: %v", option, m.selectedModel, err)
+                } 
+            }
+            //log.Println("Download goroutine finished")
+        }()
+
+        //m.state = MainMenuState
+        //return nil
+        return func() tea.Msg {
+            wg.Wait()
+            m.state = MainMenuState
+            return downloadCompleteMsg{}
+        }
+    }
+}
+
+type downloadCompleteMsg struct{}
 
 func (m *mainModel) applyFilter() {
 	filtered := []auth.FollowedModel{}
@@ -456,14 +524,25 @@ func (m *mainModel) updateTable() {
 	m.table = t
 }
 
-func main() {
+func main() { 
+    cfg, err := config.LoadConfig(GetConfigPath())
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    downloader, err := download.NewDownloader(cfg)
+    if err != nil {
+        log.Fatal(err)
+    }
+
 	p := tea.NewProgram(&mainModel{
 		options:    []string{"Download a user's post", "Monitor a user's livestreams", "Like all of a user's post", "Unlike all of a user's post", "Edit config.json file", "Quit"},
         downloadOptions: []string{"All", "Timeline", "Messages", "Stories"},
 		cursorPos:  0,
         keys:       keys,
         help:       help.New(),
-	}, tea.WithAltScreen())
+        downloader: downloader,
+	}, tea.WithAltScreen() )
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)

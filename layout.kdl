@@ -1,0 +1,15 @@
+layout {
+    pane size=1 borderless=true {
+        plugin location="tab-bar"
+    } 
+    pane split_direction="vertical" {
+        pane edit="fansly-scraper.go"
+        pane command="go" {
+            args "run" "fansly-scraper.go"
+            start_suspended true
+        }
+    }
+    pane size=1 borderless=true {
+        plugin location="status-bar"
+    }
+}

@@ -7,24 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+    //"go-fansly-scraper/headers"
 )
-
-type Headers struct {
-	Authorization string
-	UserAgent     string
-
-	Authority       string
-	Accept          string
-	AcceptLanguage  string
-	Origin          string
-	Referer         string
-	SecChUa         string
-	SecChUaMobile   string
-	SecChUaPlatform string
-	SecFetchDest    string
-	SecFetchMode    string
-	SecFetchSite    string
-}
 
 type Config struct {
 	Client        http.Client
@@ -71,23 +55,6 @@ type FollowedModel struct {
 	TimelineStats TimelineStats `json:"timelineStats"`
 }
 
-func NewHeaders(token, userAgent string) map[string]string {
-	headers := map[string]string{
-		"authority":          "apiv3.fansly.com",
-		"accept":             "application/json, text/plain, */*",
-		"accept-language":    "en;q=0.8,en-US;q=0.7",
-		"authorization":      token,
-		"origin":             "https://fansly.com",
-		"referer":            "https://fansly.com/",
-		"sec-ch-ua-mobile":   "?0",
-		"sec-ch-ua-platform": "Windows",
-		"sec-fetch-dest":     "empty",
-		"sec-fetch-mode":     "cors",
-		"sec-fetch-site":     "same-site",
-		"user-agent":         userAgent,
-	}
-	return headers
-}
 
 // Login retrieves the user's account information using the provided auth token and user agent.
 func Login(authToken string, userAgent string) (*AccountInfo, error) {
@@ -143,7 +110,7 @@ func GetFollowedUsers(userId string, authToken string, userAgent string) ([]Foll
 	}
 	// Get List of followed account IDs
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", "https://apiv3.fansly.com/api/v1/account/"+userId+"/following?before=0&after=0&limit=200&offset=0", nil)
+	req, err := http.NewRequest("GET", "https://apiv3.fansly.com/api/v1/account/"+userId+"/following?before=0&after=0&limit=425&offset=0", nil)
 	if err != nil {
 		return nil, err
 	}
