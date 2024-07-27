@@ -11,15 +11,19 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
-    //"strconv"
 
+	//"strconv"
+
+	"github.com/grafov/m3u8"
+	"github.com/schollz/progressbar/v3"
 	"golang.org/x/time/rate"
-    "github.com/schollz/progressbar/v3"
-    //"github.com/k0kubun/go-ansi"
+
+	//"github.com/k0kubun/go-ansi"
 
 	"go-fansly-scraper/config"
 	"go-fansly-scraper/posts"
@@ -52,7 +56,10 @@ func (w logWriter) Write(p []byte) (n int, err error) {
     return len(p), nil
 }
 
- 
+func (d *Downloader) isFFmpegAvailable() bool {
+    _, err := exec.LookPath("ffmpeg")
+    return err == nil
+}
 
 func NewDownloader(cfg *config.Config) (*Downloader, error) {
     db, err := sql.Open("sqlite3", filepath.Join(cfg.SaveLocation, "downloads.db"))
@@ -249,32 +256,6 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 }
 
 func (d *Downloader) downloadMediaItem(accountMedia posts.AccountMedia, baseDir string, modelId string, modelName string) error {
-    // Download main media
-    //log.Printf("[INFO] [DLMediaItem] PREVIEW ITEM: %v", accountMedia.Preview)
-    //err := d.downloadSingleItem(accountMedia.Media, baseDir, modelId, false, currentItem, totalItems, progressChan)
-    //if err != nil {
-    //    return fmt.Errorf("error downloading main media: %v", err)
-    //}
-
-    // Check if there's a preview and download it
-    /*
-    if accountMedia.Preview != nil {
-        previewItem := *accountMedia.Preview
-        //previewItem.ID += "_preview"
-        //log.Printf("[INFO] PREVIEW ITEM: %v", previewItem)
-        err := d.downloadSingleItem(previewItem, baseDir, modelId, true)
-        if err != nil {
-            return fmt.Errorf("error downloading preview: %v", err)
-        }
-    } else {
-        //log.Printf("[INFO] [DLMediaItem] MAIN ITEM: %v", accountMedia.Media)
-        err := d.downloadSingleItem(accountMedia.Media, baseDir, modelId, false)
-        if err != nil { 
-            return fmt.Errorf("error downloading main media: %v", err)
-        }
-    }
-    */ 
-
     hasValidLocations := func(item posts.MediaItem) bool {
         if len(item.Locations) > 0 {
             return true
@@ -313,6 +294,48 @@ func (d *Downloader) downloadMediaItem(accountMedia posts.AccountMedia, baseDir 
 }
 
 func (d *Downloader) downloadSingleItem(item posts.MediaItem, baseDir string, modelId string, modelName string, isPreview bool) error {
+    var bestMedia *posts.MediaItem
+    var bestHeight int
+    var bestMetadata map[string]string
+    var mediaUrl string
+    ffmpegAvailable := d.isFFmpegAvailable()
+
+
+    processMediaItem := func(mediaItem posts.MediaItem) {
+        if len(mediaItem.Locations) > 0 && mediaItem.Height > bestHeight {
+            bestMedia = &mediaItem
+            bestHeight = mediaItem.Height
+            bestMetadata = mediaItem.Locations[0].Metadata
+            mediaUrl = mediaItem.Locations[0].Location
+        }
+        if ffmpegAvailable {
+            for _, variant := range mediaItem.Variants {
+                if variant.Mimetype == "application/vnd.apple.mpegurl" && variant.Height > bestHeight {
+                    if len(variant.Locations) > 0 {
+                        bestMedia = &posts.MediaItem{
+                            ID:        variant.ID,
+                            Type:      variant.Type,
+                            Height:    variant.Height,
+                            Mimetype:  variant.Mimetype,
+                            Locations: variant.Locations,
+                        }
+                        bestHeight = variant.Height
+                        bestMetadata = variant.Locations[0].Metadata
+                        mediaUrl = variant.Locations[0].Location
+                    }
+                }
+            }
+        }
+    }
+
+    processMediaItem(item)
+    //log.Printf("[BEST MEDIA] IS: %v", mediaUrl)
+
+    if bestMedia == nil || mediaUrl == ""  {
+        d.progressBar.Describe(fmt.Sprintf("[red]No suitable media found[reset] for item %s", item.ID))
+        return nil
+    }
+
     var subDir string
     switch {
     case strings.HasPrefix(item.Mimetype, "image/"):
@@ -331,69 +354,28 @@ func (d *Downloader) downloadSingleItem(item posts.MediaItem, baseDir string, mo
         return fmt.Errorf("unknown media type: %s", item.Mimetype)
     }
 
-    mediaUrl := ""
-    variantId := item.ID 
-    maxHeight := 0
-    /*
-    if len(item.Locations) > 0 && item.Locations[0].Location != "" {
-        mediaUrl = item.Locations[0].Location 
-        //log.Printf("[INFO] [DLSingleItem] ITEM: %v", item)
-        //log.Printf("[INFO] [DLSingleItem] ITEM.LOCATIONS: %v", item.Locations[0].Location)
-    } else if len(item.Variants) > 0 {
-        // If main item doesn't have a location, use the first variant with a valid location
-        for _, variant := range item.Variants {
-            if len(variant.Locations) > 0 && variant.Locations[0].Location != "" {
-                mediaUrl = variant.Locations[0].Location
-                variantId = variant.ID 
-                break
-            }
-        }
-    }
-    */ 
-
-    processLocations := func(locations []struct{ Location string `json:"location"`}) bool {
-        if len(locations) > 0 && locations[0].Location != "" {
-            mediaUrl = locations[0].Location
-            return true
-        }
-        return false
-    }
-
-    // Check main item locations
-    if processLocations(item.Locations) {
-        maxHeight = item.Height
-    } else {
-        // If main item doesn't have a location, check variants
-        for _, variant := range item.Variants {
-            if processLocations(variant.Locations) {
-                if variant.Height > maxHeight {
-                    maxHeight = variant.Height
-                    mediaUrl = variant.Locations[0].Location
-                    //variantId = variant.ID
-                }
-            }
-        }
-    }
-
-    if mediaUrl == "" {
-        d.progressBar.Describe(fmt.Sprintf("[red]No Media URL[reset] for item %s", item.ID))
-        //log.Printf("Warning: No valid media URL found for item %s, skipping", item.ID)
-        return nil
-    }
-
     parsedURL, err := url.Parse(mediaUrl)
     if err != nil {
         return fmt.Errorf("error parsing URL: %v", err)
     }
     ext := filepath.Ext(parsedURL.Path)
 
+    if strings.HasSuffix(mediaUrl, ".m3u8") {
+        ext = ".mp4" // We'll still save as .mp4 even though it's originally m3u8
+    }
+
     previewSuffix := ""
     if isPreview {
         previewSuffix = "_preview"
     }
-    fileName := fmt.Sprintf("%s_%s%s%s", modelId, variantId, previewSuffix, ext)
+    fileName := fmt.Sprintf("%s_%s%s%s", modelId, bestMedia.ID, previewSuffix, ext)
     filePath := filepath.Join(baseDir, subDir, fileName)
-    //log.Printf("[INFO] [DLSingleItem] FILENAME: %v", fileName) 
+    //log.Printf("[INFO] [DLSingleItem] FILENAME: %v", fileName)  
+
+    //if strings.HasSuffix(mediaUrl, ".m3u8") {
+    //    log.Printf("[INFO] M3U8 URL: %v",mediaUrl )
+    //    return d.downloadM3U8(mediaUrl, filePath, metadata)
+    //}
 
     if d.fileExists(filePath) {
         if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -422,52 +404,31 @@ func (d *Downloader) downloadSingleItem(item posts.MediaItem, baseDir string, mo
     
     d.progressBar.Describe(fmt.Sprintf("[green]Downloading[reset] %s", fileName))
 
-    if err := d.limiter.Wait(context.Background()); err != nil {
-        return fmt.Errorf("rate limiter wait error: %v", err)
+    if strings.HasSuffix(mediaUrl, ".m3u8") && ffmpegAvailable {
+        fullUrl := mediaUrl
+        if bestMetadata != nil {
+            fullUrl += fmt.Sprintf("?ngsw-bypass=true&Policy=%s&Key-Pair-Id=%s&Signature=%s",
+                url.QueryEscape(bestMetadata["Policy"]),
+                url.QueryEscape(bestMetadata["Key-Pair-Id"]),
+                url.QueryEscape(bestMetadata["Signature"]))
+        }
+        // Check if it's a master M3U8
+        isMaster, err := d.isMasterM3U8(fullUrl)
+        if err != nil {
+            return fmt.Errorf("error checking M3U8 type: %v", err)
+        }
+
+        if isMaster {
+            // If it's a master M3U8, use the original media URL
+            d.progressBar.Describe(fmt.Sprintf("[yellow]Master M3U8 detected[reset], using original URL for %s", fileName))
+            return d.downloadRegularFile(item.Locations[0].Location, filePath, modelName)
+        } else {
+            // If it's a media M3U8, proceed with M3U8 download
+            return d.DownloadM3U8(modelName, fullUrl, filePath)
+        }
     }
 
-    // Create a new request with the necessary headers
-    //req, err := http.NewRequest("GET", mediaUrl, nil)
-    //if err != nil {
-    //    return fmt.Errorf("error creating request: %v", err)
-    //}
-
-    resp, err := d.downloadWithRetry(mediaUrl)
-    if err != nil {
-        return err
-    }
-    defer resp.Body.Close()
-
-    // Per File Download Progress - I prefer the overall, even though this 
-    //actually smoothly progresses.
-
-    //contentLength, _ := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
-
-    //d.progressBar = progressbar.DefaultBytes(
-    //    contentLength,
-    //    fmt.Sprintf("Downloading %s", fileName),
-    //)
-
-    out, err := os.Create(filePath)
-    if err != nil {
-        return err
-    }
-    defer out.Close()
-
-    hash := sha256.New()
-    tee := io.TeeReader(resp.Body, hash)
-
-    //_, err = io.Copy(io.MultiWriter(out, d.progressBar), tee)
-    _, err = io.Copy(out, tee)
-    if err != nil {
-        return err
-    }
-
-    hashString := hex.EncodeToString(hash.Sum(nil))
-    err = d.saveFileHash(modelName, hashString, filePath)
-    if err != nil {
-        return err
-    }
+    d.downloadRegularFile(mediaUrl, filePath, modelName)
 
     //log.Printf("Downloaded: %s\n", filePath)
 
@@ -492,6 +453,12 @@ func (d *Downloader) downloadWithRetry(url string) (*http.Response, error) {
         req.Header.Add("Authorization", d.authToken)
         req.Header.Add("User-Agent", d.userAgent)
 
+         if strings.HasSuffix(url, ".m3u8") {
+            req.Header.Add("Accept", "*/*")
+            req.Header.Add("Origin", "https://fansly.com")
+            req.Header.Add("Referer", "https://fansly.com/")
+        }
+
         client := &http.Client{}
         resp, err := client.Do(req)
         if err == nil && resp.StatusCode < 500 {
@@ -509,6 +476,56 @@ func (d *Downloader) downloadWithRetry(url string) (*http.Response, error) {
     return nil, fmt.Errorf("failed to download %s after %d retries", url, maxRetries)
 }
 
+func (d *Downloader) isMasterM3U8(url string) (bool, error) {
+    content, err := fetchM3U8Playlist(url, GetM3U8Cookies(url))
+    if err != nil {
+        return false, err
+    }
+
+    //log.Printf("[Master M3U8 Check] M3U8 Content: %v", content)
+    return strings.Contains(content, "#EXT-X-I-FRAME-STREAM-INF:"), nil
+}
+
+func (d *Downloader) downloadRegularFile(url, filePath string, modelName string) error {
+    //log.Printf("[FallBackDownload] MasterPlaylistFallBack: %v", url)
+    if err := d.limiter.Wait(context.Background()); err != nil {
+        return fmt.Errorf("rate limiter wait error: %v", err)
+    }
+
+    resp, err := d.downloadWithRetry(url)
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+
+    out, err := os.Create(filePath)
+    if err != nil {
+        return err
+    }
+    defer out.Close()
+
+    hash := sha256.New()
+    tee := io.TeeReader(resp.Body, hash)
+
+    //_, err = io.Copy(io.MultiWriter(out, d.progressBar), tee)
+    _, err = io.Copy(out, tee)
+    if err != nil {
+        return err
+    }
+
+    hashString := hex.EncodeToString(hash.Sum(nil))
+    err = d.saveFileHash(modelName, hashString, filePath)
+    if err != nil {
+        return err
+    }
+
+    //_, err = io.Copy(out, resp.Body)
+    //if err != nil {
+    //    return err
+    //}
+
+    return nil
+}
 
 func (d *Downloader) fileExists(filePath string) bool {
     var count int
@@ -542,4 +559,78 @@ func (d *Downloader) saveFileHash(modelName string, hash, path string) error {
 
 func (d *Downloader) Close() error {
     return d.db.Close()
+}
+
+
+func (d *Downloader) downloadM3U8(mediaUrl, filePath string, metadata map[string]string) error {
+    // Construct the full URL with query parameters
+    fullUrl := mediaUrl
+    if metadata != nil {
+        fullUrl += fmt.Sprintf("?ngsw-bypass=true&Policy=%s&Key-Pair-Id=%s&Signature=%s",
+            url.QueryEscape(metadata["Policy"]),
+            url.QueryEscape(metadata["Key-Pair-Id"]),
+            url.QueryEscape(metadata["Signature"]))
+    }
+    //log.Printf("[M3U8 DOWNLOAD] URL: %v", fullUrl)
+
+    d.downloadMediaPlaylist(fullUrl, filePath)
+
+    /*
+    // Download the M3U8 file
+    resp, err := d.downloadWithRetry(fullUrl)
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+
+    // Parse the M3U8 playlist
+    playlist, listType, err := m3u8.DecodeFrom(resp.Body, false)
+    log.Printf("[M3U8 DOWNLOAD] Playlist: %v \nListType: %v", playlist, listType)
+    if err != nil {
+        return err
+    }
+
+    if listType == m3u8.MEDIA {
+        return d.downloadMediaPlaylist(fullUrl, filePath)
+    } else if listType == m3u8.MASTER {
+        masterpl := playlist.(*m3u8.MasterPlaylist)
+        return d.downloadHighestQualityStream(masterpl, fullUrl, filePath)
+    }
+
+    return fmt.Errorf("unknown playlist type")
+    */ 
+    return nil
+}
+
+func (d *Downloader) downloadMediaPlaylist(playlistUrl, outputPath string) error {
+    // Use FFmpeg to download and convert the stream
+    log.Printf("[M3U8 DOWNLAOD] Downloading %v", playlistUrl)
+    cmd := exec.Command("ffmpeg", "-i", playlistUrl, "-c", "copy", outputPath)
+    return cmd.Run()
+}
+
+func (d *Downloader) downloadHighestQualityStream(playlist *m3u8.MasterPlaylist, baseUrl, outputPath string) error {
+    var highestBandwidth uint32
+    var selectedVariant *m3u8.Variant
+
+    for _, variant := range playlist.Variants {
+        if variant.Bandwidth > highestBandwidth {
+            highestBandwidth = variant.Bandwidth
+            selectedVariant = variant
+        }
+    }
+
+    if selectedVariant == nil {
+        return fmt.Errorf("no valid variants found in master playlist")
+    }
+
+    // Resolve the URL of the highest quality variant
+    variantUrl, err := url.Parse(selectedVariant.URI)
+    if err != nil {
+        return err
+    }
+    fullVariantUrl := baseUrl[:strings.LastIndex(baseUrl, "/")+1] + variantUrl.String()
+
+    // Download the highest quality variant
+    return d.downloadMediaPlaylist(fullVariantUrl, outputPath)
 }

@@ -13,6 +13,7 @@ require (
 )
 
 require (
+	github.com/grafov/m3u8 v0.12.0 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect

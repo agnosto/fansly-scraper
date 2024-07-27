@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+    "log"
+    "runtime"
 
 	"github.com/tidwall/gjson"
 )
@@ -24,6 +26,26 @@ type Account struct {
 	ID          string `json:"id"`
 	Username    string `json:"username"`
 	DisplayName string `json:"displayName"`
+}
+
+func GetConfigPath() string {
+	var configDir string
+    var err error 
+    
+    if runtime.GOOS == "darwin" {
+        homeDir, err := os.UserHomeDir()
+        if err != nil {
+            log.Fatal(err)
+        }
+        configDir = filepath.Join(homeDir, ".config")
+    } else {
+        configDir, err = os.UserConfigDir()
+        if err != nil {
+            log.Fatal(err)
+        }
+    }
+
+	return filepath.Join(configDir, "fansly-scraper", "config.json")
 }
 
 func OpenConfigInEditor(configPath string) error {
@@ -119,6 +141,7 @@ func EnsureConfigExists(configPath string) error {
 
 	// Open config file in editor
 	return OpenConfigInEditor(configPath)
+    //return nil
 }
 
 func LoadConfig(configPath string) (*Config, error) {

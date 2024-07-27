@@ -26,6 +26,11 @@ type AccountMediaBundles struct {
     
 }
 
+type Location struct {
+    Location string            `json:"location"`
+    Metadata map[string]string `json:"metadata,omitempty"`
+}
+
 type MediaItem struct {
     ID       string `json:"id"`
     Type     int    `json:"type"`
@@ -36,13 +41,9 @@ type MediaItem struct {
         Type     int    `json:"type"`
         Height   int    `json:"height"`
         Mimetype string `json:"mimetype"`
-        Locations []struct {
-            Location string `json:"location"`
-        } `json:"locations"`
+        Locations []Location `json:"locations"`
     } `json:"variants"`
-    Locations []struct {
-        Location string `json:"location"`
-    } `json:"locations"`
+    Locations []Location `json:"locations"`
 }
 
 type AccountMedia struct {
