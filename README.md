@@ -20,12 +20,6 @@ The program will automatically move/download an example config into the config p
 Pre-compiled binaries can be downloaded from the [releases](https://github.com/agnosto/fansly-scraper/releases) section.
 
 
-### Install Via Go
-
-```bash
-go get github.com/agnosto/fansly-scraper
-```
-
 ### Manual Compile
 
 ```bash
@@ -36,6 +30,15 @@ go build -v -o fansly-scraper
 # run the binary
 ./fansly-scraper
 ```
+
+### Install Via Go
+
+Need to change project directory structure before it can be used
+
+```bash
+go install github.com/agnosto/fansly-scraper
+```
+
 
 ## Updating
 
