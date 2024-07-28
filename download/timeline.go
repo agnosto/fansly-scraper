@@ -23,13 +23,12 @@ import (
 	"github.com/schollz/progressbar/v3"
 	"golang.org/x/time/rate"
 
-	//"github.com/k0kubun/go-ansi"
+	"github.com/agnosto/fansly-scraper/config"
+	"github.com/agnosto/fansly-scraper/posts"
+    "github.com/agnosto/fansly-scraper/logger"
 
-	"go-fansly-scraper/config"
-	"go-fansly-scraper/posts"
-
-	_ "github.com/mattn/go-sqlite3"
-	//"go-fansly-scraper/headers"
+    _ "modernc.org/sqlite"
+	//"github.com/agnosto/fansly-scraper/headers"
 )
 
 type logWriter struct {
@@ -41,10 +40,12 @@ type Downloader struct {
     saveLocation string
     authToken    string
     userAgent    string
+    M3U8Download bool
     //headers      *headers.FanslyHeaders
     limiter      *rate.Limiter
     progressBar  *progressbar.ProgressBar
     logMu        sync.Mutex
+    ffmpegAvailable bool
 }
 
 func (w logWriter) Write(p []byte) (n int, err error) {
@@ -56,14 +57,10 @@ func (w logWriter) Write(p []byte) (n int, err error) {
     return len(p), nil
 }
 
-func (d *Downloader) isFFmpegAvailable() bool {
-    _, err := exec.LookPath("ffmpeg")
-    return err == nil
-}
-
-func NewDownloader(cfg *config.Config) (*Downloader, error) {
-    db, err := sql.Open("sqlite3", filepath.Join(cfg.SaveLocation, "downloads.db"))
+func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error) {
+    db, err := sql.Open("sqlite", filepath.Join(cfg.Options.SaveLocation, "downloads.db"))
     if err != nil {
+        logger.Logger.Printf("Error: %v", err)
         return nil, err
     }
 
@@ -73,6 +70,7 @@ func NewDownloader(cfg *config.Config) (*Downloader, error) {
         path TEXT NOT NULL
     )`)
     if err != nil {
+        logger.Logger.Printf("Error: %v", err)
         return nil, err
     }
 
@@ -122,20 +120,25 @@ func NewDownloader(cfg *config.Config) (*Downloader, error) {
 
     return &Downloader{
         db:           db,
-        authToken:    cfg.Authorization,
-        userAgent:    cfg.UserAgent,
-        saveLocation: cfg.SaveLocation,
+        authToken:    cfg.Account.AuthToken,
+        userAgent:    cfg.Account.UserAgent,
+        saveLocation: cfg.Options.SaveLocation,
+        M3U8Download: cfg.Options.M3U8Download,
         //headers:      fanslyHeaders,
         limiter:      limiter,
         progressBar: bar,
+        ffmpegAvailable: ffmpegAvailable,
     }, nil
 }
 
 func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName string) error { 
+    ctx, cancel := context.WithCancel(ctx)
+    defer cancel()
     timelinePosts, err := posts.GetAllTimelinePosts(modelId, d.authToken, d.userAgent)
     //log.Printf("Got all timeline posts for %v", modelName)
     //log.Printf("[TimelinePosts] Info: %v", timelinePosts)
     if err != nil {
+        logger.Logger.Printf("[ERROR] [%s] Failed to get timeline posts: %v", modelName, err)
         return err
     }
     //log.Printf("Retrieved %d posts for %s", len(timelinePosts), modelName)
@@ -226,7 +229,8 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
             accountMediaItems, err := posts.GetPostMedia(post.ID, d.authToken, d.userAgent)
             //log.Printf("Getting Media Items for Post: %v", post.ID)
             if err != nil {
-                log.Printf("Error fetching media for post %s: %v", post.ID, err)
+                logger.Logger.Printf("[ERROR] [%s] Failed to fetch media for post %s: %v", modelName, post.ID, err)
+                //log.Printf("Error fetching media for post %s: %v", post.ID, err)
                 //if err.Error() == "rate limiter error: context canceled" {
                     // This error indicates that the context was canceled, possibly due to the user stopping the process
                 //    return
@@ -238,10 +242,11 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
             for _, accountMedia := range accountMediaItems { 
                 //log.Printf("[ACCOUNT MEDIA]: %v", accountMedia)
                 //log.Printf("Downloading media item %d/%d for post %d/%d: %v", j+1, len(accountMediaItems), i+1, totalItems, accountMedia.ID)
-                err = d.downloadMediaItem(accountMedia, baseDir, modelId, modelName)
+                err = d.downloadMediaItem(ctx, accountMedia, baseDir, modelId, modelName)
                 //log.Printf("Downloading Media Item: %v", accountMedia.ID)
                 if err != nil {
-                    log.Printf("Error downloading media item %s: %v", accountMedia.ID, err)
+                    logger.Logger.Printf("[ERROR] [%s] Failed to download media item %s: %v", modelName, accountMedia.ID, err)
+                    //log.Printf("Error downloading media item %s: %v", accountMedia.ID, err)
                     continue
                 }
                 d.progressBar.Add(1) 
@@ -255,7 +260,7 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
     return nil
 }
 
-func (d *Downloader) downloadMediaItem(accountMedia posts.AccountMedia, baseDir string, modelId string, modelName string) error {
+func (d *Downloader) downloadMediaItem(ctx context.Context, accountMedia posts.AccountMedia, baseDir string, modelId string, modelName string) error {
     hasValidLocations := func(item posts.MediaItem) bool {
         if len(item.Locations) > 0 {
             return true
@@ -270,16 +275,18 @@ func (d *Downloader) downloadMediaItem(accountMedia posts.AccountMedia, baseDir 
 
     // Download main media if it has valid locations
     if hasValidLocations(accountMedia.Media) {
-        err := d.downloadSingleItem(accountMedia.Media, baseDir, modelId, modelName, false)
+        err := d.downloadSingleItem(ctx, accountMedia.Media, baseDir, modelId, modelName, false)
         if err != nil {
+            logger.Logger.Printf("[ERROR] [%s] Failed to download main media item %s: %v", modelName, accountMedia.ID, err)
             return fmt.Errorf("error downloading main media: %v", err)
         }
     }
 
     // Check if there's a preview with valid locations and download it
     if accountMedia.Preview != nil && hasValidLocations(*accountMedia.Preview) {
-        err := d.downloadSingleItem(*accountMedia.Preview, baseDir, modelId, modelName, true)
+        err := d.downloadSingleItem(ctx, *accountMedia.Preview, baseDir, modelId, modelName, true)
         if err != nil {
+            logger.Logger.Printf("[ERROR] [%s] Failed to download preview item for media item %s : %v", modelName, accountMedia.ID, err)
             return fmt.Errorf("error downloading preview: %v", err)
         }
     }
@@ -293,22 +300,23 @@ func (d *Downloader) downloadMediaItem(accountMedia posts.AccountMedia, baseDir 
     return nil
 }
 
-func (d *Downloader) downloadSingleItem(item posts.MediaItem, baseDir string, modelId string, modelName string, isPreview bool) error {
+func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaItem, baseDir string, modelId string, modelName string, isPreview bool) error {
     var bestMedia *posts.MediaItem
     var bestHeight int
     var bestMetadata map[string]string
-    var mediaUrl string
-    ffmpegAvailable := d.isFFmpegAvailable()
-
+    var mediaUrl string 
 
     processMediaItem := func(mediaItem posts.MediaItem) {
-        if len(mediaItem.Locations) > 0 && mediaItem.Height > bestHeight {
+        if len(mediaItem.Locations) > 0 && mediaItem.Height > bestHeight { 
             bestMedia = &mediaItem
             bestHeight = mediaItem.Height
             bestMetadata = mediaItem.Locations[0].Metadata
             mediaUrl = mediaItem.Locations[0].Location
+            //log.Printf("\n[Main Media Height] H: %v", bestHeight)
+            //log.Printf("\n[MAIN Media URL] %v\n", mediaUrl)
         }
-        if ffmpegAvailable {
+        if d.M3U8Download && d.ffmpegAvailable {
+            //log.Printf("[FFMPEG] Status: %v", d.ffmpegAvailable)
             for _, variant := range mediaItem.Variants {
                 if variant.Mimetype == "application/vnd.apple.mpegurl" && variant.Height > bestHeight {
                     if len(variant.Locations) > 0 {
@@ -322,6 +330,8 @@ func (d *Downloader) downloadSingleItem(item posts.MediaItem, baseDir string, mo
                         bestHeight = variant.Height
                         bestMetadata = variant.Locations[0].Metadata
                         mediaUrl = variant.Locations[0].Location
+                        //log.Printf("\n[Variant Media Height] %v", bestHeight)
+                        //log.Printf("\n[Variant Media URL] %v\n", mediaUrl)
                     }
                 }
             }
@@ -329,7 +339,8 @@ func (d *Downloader) downloadSingleItem(item posts.MediaItem, baseDir string, mo
     }
 
     processMediaItem(item)
-    //log.Printf("[BEST MEDIA] IS: %v", mediaUrl)
+    //logger.Logger.Printf("[INFO] [%s] BestMedia URL: %v", modelName, mediaUrl)
+    //log.Printf("[BEST MEDIA] URL IS: %v", mediaUrl)
 
     if bestMedia == nil || mediaUrl == ""  {
         d.progressBar.Describe(fmt.Sprintf("[red]No suitable media found[reset] for item %s", item.ID))
@@ -389,14 +400,16 @@ func (d *Downloader) downloadSingleItem(item posts.MediaItem, baseDir string, mo
 
     // Check if the file actually exists on the filesystem
     if _, err := os.Stat(filePath); err == nil {
-        d.progressBar.Describe(fmt.Sprintf("[yellow]No DB Record[reset], Adding %s", filePath))
+        d.progressBar.Describe(fmt.Sprintf("[yellow]No DB Record[reset], Adding %s", fileName))
         //log.Printf("File exists on filesystem but not in DB, adding to DB: %s\n", filePath)
         hashString, err := d.hashExistingFile(filePath)
         if err != nil {
+            logger.Logger.Printf("[ERROR] failed to hash existing file %s: %v", filePath, err)
             return fmt.Errorf("error hashing existing file: %v", err)
         }
         err = d.saveFileHash(modelName, hashString, filePath)
         if err != nil {
+            logger.Logger.Printf("[ERROR] failed to save hash for existing file %s: %v", filePath, err)
             return fmt.Errorf("error saving hash for existing file: %v", err)
         }
         return nil
@@ -404,7 +417,7 @@ func (d *Downloader) downloadSingleItem(item posts.MediaItem, baseDir string, mo
     
     d.progressBar.Describe(fmt.Sprintf("[green]Downloading[reset] %s", fileName))
 
-    if strings.HasSuffix(mediaUrl, ".m3u8") && ffmpegAvailable {
+    if strings.HasSuffix(mediaUrl, ".m3u8") && d.ffmpegAvailable {
         fullUrl := mediaUrl
         if bestMetadata != nil {
             fullUrl += fmt.Sprintf("?ngsw-bypass=true&Policy=%s&Key-Pair-Id=%s&Signature=%s",
@@ -413,6 +426,7 @@ func (d *Downloader) downloadSingleItem(item posts.MediaItem, baseDir string, mo
                 url.QueryEscape(bestMetadata["Signature"]))
         }
         // Check if it's a master M3U8
+        //log.Printf("[M3U8 CHECK] URL: %v", fullUrl)
         isMaster, err := d.isMasterM3U8(fullUrl)
         if err != nil {
             return fmt.Errorf("error checking M3U8 type: %v", err)
@@ -424,7 +438,7 @@ func (d *Downloader) downloadSingleItem(item posts.MediaItem, baseDir string, mo
             return d.downloadRegularFile(item.Locations[0].Location, filePath, modelName)
         } else {
             // If it's a media M3U8, proceed with M3U8 download
-            return d.DownloadM3U8(modelName, fullUrl, filePath)
+            return d.DownloadM3U8(ctx, modelName, fullUrl, filePath)
         }
     }
 
@@ -477,17 +491,19 @@ func (d *Downloader) downloadWithRetry(url string) (*http.Response, error) {
 }
 
 func (d *Downloader) isMasterM3U8(url string) (bool, error) {
+    //log.Printf("[M3U8 URL FOR DL] URL: %v\n", url)
     content, err := fetchM3U8Playlist(url, GetM3U8Cookies(url))
     if err != nil {
         return false, err
     }
 
     //log.Printf("[Master M3U8 Check] M3U8 Content: %v", content)
+    //logger.Logger.Printf("[DEBUG] M3U8 Content: %v", content)
     return strings.Contains(content, "#EXT-X-I-FRAME-STREAM-INF:"), nil
 }
 
 func (d *Downloader) downloadRegularFile(url, filePath string, modelName string) error {
-    //log.Printf("[FallBackDownload] MasterPlaylistFallBack: %v", url)
+    //log.Printf("[Download URL] URL: %v", url)
     if err := d.limiter.Wait(context.Background()); err != nil {
         return fmt.Errorf("rate limiter wait error: %v", err)
     }
@@ -531,7 +547,8 @@ func (d *Downloader) fileExists(filePath string) bool {
     var count int
     err := d.db.QueryRow("SELECT COUNT(*) FROM files WHERE path = ?", filePath).Scan(&count)
     if err != nil {
-        log.Printf("Error checking if file exists in DB: %v", err)
+        logger.Logger.Printf("[ERROR] Failed checking if file exists in DB: %v", err)
+        //log.Printf("Error checking if file exists in DB: %v", err)
         return false
     }
     return count > 0

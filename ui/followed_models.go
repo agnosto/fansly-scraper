@@ -3,8 +3,8 @@ package ui
 import (
 	"strings"
     "fmt"
-    //"go-fansly-scraper/config"
-    //"go-fansly-scraper/core"
+    //"github.com/agnosto/fansly-scraper/config"
+    //"github.com/agnosto/fansly-scraper/core"
     
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -66,9 +66,11 @@ func (m *MainModel) handleFollowedModelsSelection() (tea.Model, tea.Cmd) {
         case "monitor":
             m.state = LiveMonitorState
         case "like":
-            m.state = LikePostState
+            m.state = LikeUnlikeState
+            return m, m.InitiateLikeUnlike(m.actionChosen)
         case "unlike":
-            m.state = UnlikePostState
+            m.state = LikeUnlikeState
+            return m, m.InitiateLikeUnlike(m.actionChosen)
         }
 	return m, nil
 }

@@ -14,11 +14,15 @@ import (
 	"sync"
     "strconv"
 
+    "context"
+    "golang.org/x/sync/semaphore"
 	//"github.com/grafov/m3u8"
 
-	//"go-fansly-scraper/config"
-	"go-fansly-scraper/utils"
+	//"github.com/agnosto/fansly-scraper/config"
+	"github.com/agnosto/fansly-scraper/utils"
 )
+
+var m3u8Semaphore = semaphore.NewWeighted(2) // Limit to 2 concurrent M3U8 downloads, shitop programming
 
 func GetM3U8Cookies(m3u8URL string) map[string]string {
     return map[string]string{
@@ -28,7 +32,11 @@ func GetM3U8Cookies(m3u8URL string) map[string]string {
     }
 }
 
-func (d *Downloader) DownloadM3U8(modelName string, m3u8URL string, savePath string) error {
+func (d *Downloader) DownloadM3U8(ctx context.Context, modelName string, m3u8URL string, savePath string) error {
+    if err := m3u8Semaphore.Acquire(ctx, 1); err != nil {
+        return err
+    }
+    defer m3u8Semaphore.Release(1)
     cookies := GetM3U8Cookies(m3u8URL)
     baseURL, _ := utils.SplitURL(m3u8URL)
 
@@ -48,7 +56,7 @@ func (d *Downloader) DownloadM3U8(modelName string, m3u8URL string, savePath str
 
     // Download segments
     //log.Printf("Extracted segment URLs: %v", segmentURLs)
-    segmentFiles, err := downloadSegments(segmentURLs, filepath.Dir(savePath), cookies)
+    segmentFiles, err := downloadSegments(ctx, segmentURLs, filepath.Dir(savePath), cookies)
     //log.Printf("[DOWNLOAD M3U8] SegmentedFiles: %v", segmentFiles)
     if err != nil {
         return err
@@ -178,18 +186,26 @@ func parseSegments(content, baseURL string) ([]string, error) {
     return segmentURLs, nil
 }
 
-func downloadSegments(segmentURLs []string, savePath string, cookies map[string]string) ([]string, error) {
+func downloadSegments(ctx context.Context, segmentURLs []string, savePath string, cookies map[string]string) ([]string, error) {
     var wg sync.WaitGroup
     segmentFiles := make([]string, len(segmentURLs))
     errors := make(chan error, len(segmentURLs))
+
+    sem := semaphore.NewWeighted(3)
 
     for i, segmentURL := range segmentURLs {
         wg.Add(1)
         go func(i int, segmentURL string) {
             defer wg.Done()
+            if err := sem.Acquire(ctx, 1); err != nil {
+                errors <- fmt.Errorf("failed to acquire semaphore: %w", err)
+                return
+            }
+            defer sem.Release(1)
+
             fileName := filepath.Join(savePath, fmt.Sprintf("segment_%d.ts", i))
             
-            err := downloadFile(segmentURL, fileName, cookies)
+            err := downloadFile(ctx, segmentURL, fileName, cookies)
             if err != nil {
                 log.Printf("Error downloading segment %d: %v", i, err)
                 errors <- err
@@ -205,6 +221,8 @@ func downloadSegments(segmentURLs []string, savePath string, cookies map[string]
             }
             if fileInfo.Size() == 0 {
                 log.Printf("Warning: Segment %d has zero size", i)
+                errors <- fmt.Errorf("segment %d has zero size", i)
+                return
             }
             
             segmentFiles[i] = fileName
@@ -215,21 +233,35 @@ func downloadSegments(segmentURLs []string, savePath string, cookies map[string]
     wg.Wait()
     close(errors)
 
+    var errs []error 
     for err := range errors {
         if err != nil {
-            return nil, err
+            errs = append(errs, err)
         }
+    }
+
+    // Check if all segments were downloaded successfully
+    for i, file := range segmentFiles {
+        if file == "" {
+            errs = append(errs, fmt.Errorf("segment %d failed to download", i))
+        }
+    }
+
+    if len(errs) > 0 {
+        return nil, fmt.Errorf("multiple errors occurred: %v", errs)
     }
 
     return segmentFiles, nil
 }
 
-func downloadFile(url string, fileName string, cookies map[string]string) error {
+func downloadFile(ctx context.Context, url string, fileName string, cookies map[string]string) error {
     client := &http.Client{}
     req, err := http.NewRequest("GET", url, nil)
     if err != nil {
         return err
     }
+
+    req = req.WithContext(ctx)
 
     for k, v := range cookies {
         req.AddCookie(&http.Cookie{Name: k, Value: v})
@@ -252,7 +284,7 @@ func downloadFile(url string, fileName string, cookies map[string]string) error 
 }
 
 func combineSegments(segmentFiles []string, outputFile string) error {
-    tempFile, err := os.CreateTemp("", "segments_list_*.txt")
+    tempFile, err := os.CreateTemp("", fmt.Sprintf("segments_list_%s_*.txt", filepath.Base(outputFile)))
     if err != nil {
         return fmt.Errorf("failed to create temporary file: %w", err)
     }

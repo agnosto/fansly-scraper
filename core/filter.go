@@ -1,6 +1,6 @@
 package core
 
 //import (
-//    "go-fansly-scraper/auth"
-//    "go-fansly-scraper/ui"
+//    "github.com/agnosto/fansly-scraper/auth"
+//    "github.com/agnosto/fansly-scraper/ui"
 //)

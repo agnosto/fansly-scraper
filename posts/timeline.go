@@ -4,16 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
 	//"log"
 	"net/http"
 	"os"
 	"time"
 
+    //"github.com/agnosto/fansly-scraper/logger"
+
 	"github.com/schollz/progressbar/v3"
 	"golang.org/x/time/rate"
 	//"github.com/k0kubun/go-ansi"
-	//"go-fansly-scraper/headers"
+	//"github.com/agnosto/fansly-scraper/headers"
 	//"strings"
 )
 

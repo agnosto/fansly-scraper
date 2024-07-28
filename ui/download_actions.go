@@ -6,10 +6,10 @@ import (
     "sync"
     "log"
     "context"
-    //"go-fansly-scraper/auth"
-    //"go-fansly-scraper/config"
-    //"go-fansly-scraper/core"
-    
+    //"github.com/agnosto/fansly-scraper/auth"
+    //"github.com/agnosto/fansly-scraper/config"
+    //"github.com/agnosto/fansly-scraper/core"
+    "github.com/agnosto/fansly-scraper/logger"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -97,6 +97,7 @@ func (m *MainModel) startDownload(option string) tea.Cmd {
                     log.Printf("Unable to download timeline for %s: Not subscribed or followed", m.selectedModel)
                     // You might want to update the UI here to show this message
                 } else {
+                    logger.Logger.Printf("Error downloading %v for %s: %v", option, m.selectedModel, err)
                     log.Printf("Error downloading %s for %s: %v", option, m.selectedModel, err)
                 } 
             }

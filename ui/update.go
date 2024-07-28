@@ -3,9 +3,10 @@ package ui
 import (
 	//"strings"
 	//"fmt"
-	//"go-fansly-scraper/auth"
-	//"go-fansly-scraper/config"
-	//"go-fansly-scraper/core"
+	//"github.com/agnosto/fansly-scraper/auth"
+	//"github.com/agnosto/fansly-scraper/config"
+	//"github.com/agnosto/fansly-scraper/core"
+    "github.com/agnosto/fansly-scraper/logger"
 
 	tea "github.com/charmbracelet/bubbletea"
 	//"github.com/charmbracelet/lipgloss"
@@ -17,6 +18,7 @@ import (
 func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
     case tea.WindowSizeMsg:
+        logger.Logger.Printf("Window size changed to %dx%d", msg.Width, msg.Height)
         m.help.Width = msg.Width
         m.width = msg.Width
         m.height = msg.Height
@@ -42,10 +44,14 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
                 return m.HandleDownloadActionsMenuUpdate(msg)
             case DownloadProgressState:
                 return m.HandleDownloadProgressMenuUpdate(msg)
+            case LikeUnlikeState:
+                logger.Logger.Printf("[DEBUG] Update: Handling LikeUnlikeState")
+                return m.HandleLikeUnlikeUpdate(msg)
             // Add cases for other states
             default:
+                logger.Logger.Printf("[DEBUG] Update: Unhandled state: %v", m.state)
                 return m, nil
-        }
+        } 
     case fetchAccountInfoMsg:
         if msg.Success {
             m.welcome = msg.AccountInfo.Welcome
@@ -82,6 +88,8 @@ func (m *MainModel) View() string {
         return m.RenderDownloadActionsMenu()
     case DownloadProgressState:
         return m.RenderDownloadProgressMenu()
+    case LikeUnlikeState:
+        return m.RenderLikeUnlikeMenu()
 	default:
 		return "Unknown state"
 	}

@@ -1,8 +1,8 @@
 package ui
 
 import (
-    //"go-fansly-scraper/config"
-    "go-fansly-scraper/core"
+    //"github.com/agnosto/fansly-scraper/config"
+    "github.com/agnosto/fansly-scraper/core"
 )
 
 func (m *MainModel) FetchAccInfo(configPath string) error {

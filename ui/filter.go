@@ -3,9 +3,9 @@ package ui
 import (
 	"strings"
     //"fmt"
-    "go-fansly-scraper/auth"
-    //"go-fansly-scraper/config"
-    //"go-fansly-scraper/core"
+    "github.com/agnosto/fansly-scraper/auth"
+    //"github.com/agnosto/fansly-scraper/config"
+    //"github.com/agnosto/fansly-scraper/core"
     
 
 	tea "github.com/charmbracelet/bubbletea"

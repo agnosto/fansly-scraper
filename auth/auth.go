@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-    //"go-fansly-scraper/headers"
+    //"github.com/agnosto/fansly-scraper/headers"
 )
 
 type Config struct {

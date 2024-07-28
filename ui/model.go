@@ -1,10 +1,10 @@
 package ui
 
 import (
-	"go-fansly-scraper/auth"
-	//"go-fansly-scraper/config"
-	"go-fansly-scraper/core"
-	"go-fansly-scraper/download"
+	"github.com/agnosto/fansly-scraper/auth"
+	//"github.com/agnosto/fansly-scraper/config"
+	"github.com/agnosto/fansly-scraper/core"
+	"github.com/agnosto/fansly-scraper/download"
 
 	//"fmt"
 	//"log"
@@ -35,13 +35,13 @@ const (
     DownloadState
     DownloadActionsState 
     LiveMonitorState
-    LikePostState
-    UnlikePostState
+    LikeUnlikeState 
     FilterState
     DownloadProgressState
 )
 
 type MainModel struct {
+    version             string
 	quit                bool
 	cursorPos           int
 	selected            string
@@ -193,8 +193,9 @@ func (m *MainModel) View() string {
 }
 */
 
-func NewMainModel(downloader *download.Downloader) *MainModel {
+func NewMainModel(downloader *download.Downloader, version string) *MainModel {
     return &MainModel{
+        version: version,
         options:         []string{"Download a user's post", "Monitor a user's livestreams", "Like all of a user's post", "Unlike all of a user's post", "Edit config.json file", "Quit"},
         downloadOptions: []string{"All", "Timeline", "Messages", "Stories"},
         cursorPos:       0,

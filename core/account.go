@@ -2,8 +2,8 @@ package core
 
 import (
     "fmt"
-    "go-fansly-scraper/auth"
-    "go-fansly-scraper/config"
+    "github.com/agnosto/fansly-scraper/auth"
+    "github.com/agnosto/fansly-scraper/config"
 )
 
 type AccountInfo struct {
@@ -17,14 +17,14 @@ func FetchAccountInfo(configPath string) (AccountInfo, error) {
         return AccountInfo{}, fmt.Errorf("error loading config: %v", err)
     }
 
-    accountInfo, err := auth.Login(cfg.Authorization, cfg.UserAgent)
+    accountInfo, err := auth.Login(cfg.Account.AuthToken, cfg.Account.UserAgent)
     if err != nil {
         return AccountInfo{}, fmt.Errorf("error logging in: %v", err)
     }
 
     welcome := fmt.Sprintf("Welcome %s | %s", accountInfo.DisplayName, accountInfo.Username)
 
-    followedModels, err := auth.GetFollowedUsers(accountInfo.ID, cfg.Authorization, cfg.UserAgent)
+    followedModels, err := auth.GetFollowedUsers(accountInfo.ID, cfg.Account.AuthToken, cfg.Account.UserAgent)
     if err != nil {
         return AccountInfo{}, fmt.Errorf("error getting followed models: %v", err)
     }

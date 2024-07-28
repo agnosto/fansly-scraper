@@ -11,15 +11,23 @@ import (
     "log"
     "runtime"
 
-	"github.com/tidwall/gjson"
+    "github.com/BurntSushi/toml"
 )
 
 type Config struct {
-	Client        http.Client
-	UserAgent     string
-	Authorization string
-	SaveLocation  string
-    VODFileExt    string
+    Account AccountConfig
+    Options OptionsConfig
+}
+
+type AccountConfig struct {
+    AuthToken string `toml:"auth_token"`
+    UserAgent string `toml:"user_agent"`
+}
+
+type OptionsConfig struct {
+    SaveLocation     string `toml:"save_location"`
+    M3U8Download     bool   `toml:"m3u8_dl"`
+    VODsFileExtension string `toml:"vods_file_extension"`
 }
 
 type Account struct {
@@ -45,7 +53,7 @@ func GetConfigPath() string {
         }
     }
 
-	return filepath.Join(configDir, "fansly-scraper", "config.json")
+	return filepath.Join(configDir, "fansly-scraper", "config.toml")
 }
 
 func OpenConfigInEditor(configPath string) error {
@@ -123,10 +131,10 @@ func EnsureConfigExists(configPath string) error {
 	// Check if config file exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		// Config doesn't exist, check for example config
-		exampleConfig := filepath.Join("example-config.json")
+		exampleConfig := filepath.Join("example-config.toml")
 		if _, err := os.Stat(exampleConfig); os.IsNotExist(err) {
 			// Example config doesn't exist, download default
-			err = DownloadConfig("https://github.com/agnosto/fansly-scraper/blob/master/example-config.json", configPath)
+			err = DownloadConfig("https://github.com/agnosto/fansly-scraper/blob/master/example-config.toml", configPath)
 			if err != nil {
 				return err
 			}
@@ -140,39 +148,31 @@ func EnsureConfigExists(configPath string) error {
 	}
 
 	// Open config file in editor
-	return OpenConfigInEditor(configPath)
-    //return nil
+	//return OpenConfigInEditor(configPath)
+    return nil
 }
 
 func LoadConfig(configPath string) (*Config, error) {
-	cfg, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, err
-	}
-
-	Authorization := gjson.Get(string(cfg), "auth-token")
-	useragent := gjson.Get(string(cfg), "user-agent")
-	savelocation := gjson.Get(string(cfg), "save-location")
-    //vodfileext := gjson.Get(string(cfg), "vods-file-extension")
-
-	if useragent.Type == gjson.Null {
-		return nil, fmt.Errorf("user-agent is empty")
-	}
-	if Authorization.Type == gjson.Null {
-		return nil, fmt.Errorf("authoriztion is empty")
-	}
-    if savelocation.Type == gjson.Null {
-        return nil, fmt.Errorf("save-location is empty")
+    var config Config
+    _, err := toml.DecodeFile(configPath, &config)
+    if err != nil {
+        return nil, err
     }
 
-	return &Config{
-		UserAgent:     useragent.Str,
-		Authorization: Authorization.Str,
-		SaveLocation:  savelocation.Str,
-        //VODFileExt:    vodfileext.Str,
-	}, nil
-}
+    // Validate config values
+    if config.Account.UserAgent == "" {
+        return nil, fmt.Errorf("user_agent is empty in %v", configPath)
+    }
+    if config.Account.AuthToken == "" {
+        return nil, fmt.Errorf("auth_token is empty in %v", configPath)
+    }
+    if config.Options.SaveLocation == "" {
+        return nil, fmt.Errorf("save_location is empty in $v", configPath)
+    }
 
+    return &config, nil
+}
+ 
 // TODO: get rid of the below functions
 
 func createHeaders(authToken string, userAgent string) map[string]string {

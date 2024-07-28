@@ -4,8 +4,9 @@ import (
     "strings"
     "time"
     //"log"
-	"go-fansly-scraper/config"
-	"go-fansly-scraper/core"
+	"github.com/agnosto/fansly-scraper/config"
+	"github.com/agnosto/fansly-scraper/core"
+    "github.com/agnosto/fansly-scraper/logger"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -61,9 +62,9 @@ func (m *MainModel) RenderMainMenu() string {
 	var sb strings.Builder
 
 	// Initial Load Welcome message
-	configPath := config.GetConfigPath() // Implement this function to get the config path
+	configPath := config.GetConfigPath()
 	styledConfigPath := lipgloss.NewStyle().Foreground(lipgloss.Color("#f5c2e7")).Render(configPath)
-	welcomeMessage := "Config path: " + styledConfigPath + "\n" + "Welcome to Fansly-scraper Version " + "0.0.8" // Replace with actual version
+	welcomeMessage := "Config path: " + styledConfigPath + "\n" + "Welcome to Fansly-scraper Version " + m.version
 	styledWelcomeMessage := lipgloss.NewStyle().Foreground(lipgloss.Color("#a6e3a1")).Render(welcomeMessage)
 	sb.WriteString(styledWelcomeMessage + "\n")
 
@@ -90,6 +91,7 @@ func (m *MainModel) fetchAccountInfoCmd() tea.Cmd {
     return func() tea.Msg {
         accountInfo, err := core.FetchAccountInfo(config.GetConfigPath())
         if err != nil {
+            logger.Logger.Printf("Error fetching account info: %v", err)
             return fetchAccountInfoMsg{Success: false, Error: err}
         }
         return fetchAccountInfoMsg{Success: true, AccountInfo: accountInfo}
@@ -102,6 +104,13 @@ func (m *MainModel) editConfigCmd() tea.Cmd {
         configPath := config.GetConfigPath()
         err := config.EnsureConfigExists(configPath)
         if err != nil {
+            logger.Logger.Printf("Error check config %v", err)
+            return editConfigMsg{Success: false, Error: err}
+        }
+
+        err = config.OpenConfigInEditor(configPath)
+        if err != nil {
+            logger.Logger.Printf("Error opening config %v", err)
             return editConfigMsg{Success: false, Error: err}
         }
 

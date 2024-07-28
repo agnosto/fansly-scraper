@@ -8,11 +8,12 @@ import (
     "golang.org/x/time/rate"
     "context"
     //"log"
-    //"go-fansly-scraper/headers"
+    //"github.com/agnosto/fansly-scraper/headers"
+    "github.com/agnosto/fansly-scraper/logger"
 )
 
 var (
-    limiter = rate.NewLimiter(rate.Every(3*time.Second), 2) // Adjust these values as needed
+    limiter = rate.NewLimiter(rate.Every(3*time.Second), 2)
 )
 
 type AccountMediaBundles struct {
@@ -75,6 +76,7 @@ func GetPostMedia(postId string, authToken string, userAgent string) ([]AccountM
     }
 
     url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/post?ids=%s&ngsw-bypass=true", postId)
+    logger.Logger.Printf("[INFO] Starting media parsing for Post: %s with URL: %v", postId,url)
     //log.Printf("\n[INFO] Starting  media extraction for postId: %s with url: %s \n", postId, url)
     
     client := &http.Client{}
@@ -140,6 +142,7 @@ func GetPostMedia(postId string, authToken string, userAgent string) ([]AccountM
                         accountMediaItems = append(accountMediaItems, accountMedia)
                         //log.Printf("[INFO] Added AccountMedia: %s", accountMedia.ID)
                     } else {
+                        logger.Logger.Printf("[WARN] POST: %s, Skipping AccountMedia %s: No locations found", postId, accountMedia.ID)
                         //log.Printf("[WARN] Skipping AccountMedia %s: No locations found", accountMedia.ID)
                     }
                     break
@@ -181,6 +184,7 @@ func GetPostMedia(postId string, authToken string, userAgent string) ([]AccountM
     }
     
     //log.Printf("[INFO] Retrieved %d media items for post %s", len(accountMediaItems), postId)
+    logger.Logger.Printf("[INFO] Retrieved %d media items for post %s", len(accountMediaItems), postId)
     return accountMediaItems, nil
 }
 
