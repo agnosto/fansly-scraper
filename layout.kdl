@@ -5,7 +5,7 @@ layout {
     pane split_direction="vertical" {
         pane edit="fansly-scraper.go"
         pane command="go" {
-            args "run" "fansly-scraper.go"
+            args "run" "main.go"
             start_suspended true
         }
     }
