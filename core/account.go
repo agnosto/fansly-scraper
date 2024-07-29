@@ -1,9 +1,12 @@
 package core
 
 import (
-    "fmt"
-    "github.com/agnosto/fansly-scraper/auth"
-    "github.com/agnosto/fansly-scraper/config"
+	"fmt"
+	"net/http"
+    "encoding/json"
+
+	"github.com/agnosto/fansly-scraper/auth"
+	"github.com/agnosto/fansly-scraper/config"
 )
 
 type AccountInfo struct {
@@ -37,3 +40,50 @@ func FetchAccountInfo(configPath string) (AccountInfo, error) {
 
 
 //func EditConfig(configPath string) () {}
+
+type AccountResponse struct {
+	Success  bool `json:"success"`
+	Response []struct {
+		ID       string `json:"id"`
+		Username string `json:"username"`
+	} `json:"response"`
+}
+
+func GetModelIDFromUsername(username string) (string, error) {
+    cfg, err := config.LoadConfig(config.GetConfigPath())
+    if err != nil {
+        return "", fmt.Errorf("failed to load config: %v", err)
+    }
+
+    AccountURL := fmt.Sprintf("https://apiv3.fansly.com/api/v1/account?usernames=%s&ngsw-bypass=true", username)
+    client := &http.Client{}
+
+    req, err := http.NewRequest("GET", AccountURL, nil)
+    if err != nil {
+        return "", err
+    }
+
+    req.Header.Add("Authorization", cfg.Account.AuthToken)
+    req.Header.Add("User-Agent", cfg.Account.UserAgent)
+
+    resp, err := client.Do(req)
+    if err != nil {
+        return "", fmt.Errorf("failed to send request: %v", err)
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        return "", fmt.Errorf("request failed with status code %d", resp.StatusCode)
+    }
+
+    var accountResponse AccountResponse
+	if err := json.NewDecoder(resp.Body).Decode(&accountResponse); err != nil {
+		return "", fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	if len(accountResponse.Response) == 0 {
+		return "", fmt.Errorf("no account found for username %s", username)
+	}
+
+    return accountResponse.Response[0].ID, nil
+}

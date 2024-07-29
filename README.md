@@ -39,6 +39,29 @@ Need to change project directory structure before it can be used
 go install github.com/agnosto/fansly-scraper
 ```
 
+## Running the program 
+
+### Interactive TUI 
+
+Simply run the program to launch the tui:
+
+```bash
+./fansly-scraper
+```
+
+### Non-Interactive  CLI Mode 
+
+```bash 
+# Defaults to selecting all
+./fansly-scraper --username {creator name} 
+# Or using short flag 
+./fansly-scraper -u {creator name}
+
+# With Download Option 
+./fansly-scraper --username {creator name} --download [all|timeline|messages]
+# Or using short flags
+./fansly-scraper -u {creator name} -d [all|timeline|messages]
+```
 
 ## Updating
 

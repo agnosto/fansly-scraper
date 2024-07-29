@@ -88,6 +88,13 @@ func (m *MainModel) startDownload(option string) tea.Cmd {
             var err error
             ctx := context.Background()
             switch option {
+            case "All": 
+                if err := m.downloader.DownloadTimeline(ctx, m.selectedModelId, m.selectedModel); err != nil {
+                    logger.Logger.Printf("Error downloading timeline: %v", err)
+                }
+                if err := m.downloader.DownloadMessages(ctx, m.selectedModelId, m.selectedModel); err != nil {
+                    logger.Logger.Printf("Error downloading messages: %v", err)
+                }
             case "Timeline":
                 err = m.downloader.DownloadTimeline(ctx, m.selectedModelId, m.selectedModel)
             // ... (add cases for other download options)

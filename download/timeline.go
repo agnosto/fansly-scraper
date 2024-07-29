@@ -147,7 +147,7 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
     }
     //log.Printf("Retrieved %d posts for %s", len(timelinePosts), modelName)
 
-    baseDir := filepath.Join(d.saveLocation, modelName, "timeline")
+    baseDir := filepath.Join(d.saveLocation, strings.ToLower(modelName), "timeline")
     for _, subDir := range []string{"images", "videos", "audios"} {
 		if err = os.MkdirAll(filepath.Join(baseDir, subDir), os.ModePerm); err != nil {
 			return err
