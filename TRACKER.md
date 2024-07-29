@@ -12,20 +12,20 @@
 - [x] Download Model Timeline (partial)
 - [x] Timeline post (un)liking (probably want to add the appropriate fansly-* headers)
 - [x] Update command argument to get new binary releases
+- [x] Handle getting messages with a selected model 
+- [x] Handle content downloading from messages
 
 ## ToDo:
 
 - [ ] Test windows pathing for save location is handled correctly
-- [ ] Fix editing config (broke in refactor lol)
+- [ ] Fix editing config option (broke in refactor lol)
 - [ ] Fix m3u8 downloading for potential higher quality
 - [ ] Fix sometimes saving video extension to images and vice versa
-- [ ] Fix occasional <Access Denied> file download (rarely appears mostly from one model from short test)
+- [ ] Fix occasional <Access Denied> file download (rarely appears mostly from one model from short test, most likely rate limit issue)
 - [ ] Properly handle going back during post fetching to cancel
 - [ ] Properly handle going back to main menu once finished (downloading/interactions)
 - [ ] More testing for timeline scraping (not subbed to any models atm)
 - [ ] Implement message post (un)liking (ig if I really want it to be all-in-one)
-- [ ] Handle getting messages with a selected model 
-- [ ] Handle content downloading from messages 
 - [ ] Handle getting model stories if available and saving
 - [ ] Implement All selection to go through each download option
 - [ ] Rethink about live monitoring (already have [this](https://github.com/agnosto/fansly-recorder) for recording lives, but might want to have this project use [services](https://github.com/kardianos/service) for managing lives? not really sure)

@@ -15,8 +15,9 @@ import (
 )
 
 type Config struct {
-    Account AccountConfig
-    Options OptionsConfig
+    Account         AccountConfig
+    Options         OptionsConfig
+    SecurityHeaders SecurityHeadersConfig
 }
 
 type AccountConfig struct {
@@ -25,10 +26,18 @@ type AccountConfig struct {
 }
 
 type OptionsConfig struct {
-    SaveLocation     string `toml:"save_location"`
-    M3U8Download     bool   `toml:"m3u8_dl"`
-    VODsFileExtension string `toml:"vods_file_extension"`
+    SaveLocation        string `toml:"save_location"`
+    M3U8Download        bool   `toml:"m3u8_dl"`
+    VODsFileExtension   string `toml:"vods_file_extension"`
 }
+
+
+type SecurityHeadersConfig struct {
+    DeviceID  string `toml:"device_id"`
+    SessionID string `toml:"session_id"`
+    CheckKey  string `toml:"check_key"`
+}
+
 
 type Account struct {
 	ID          string `json:"id"`
@@ -54,6 +63,18 @@ func GetConfigPath() string {
     }
 
 	return filepath.Join(configDir, "fansly-scraper", "config.toml")
+}
+
+func SaveConfig(cfg *Config) error {
+    configPath := GetConfigPath()
+    file, err := os.Create(configPath)
+    if err != nil {
+        return err
+    }
+    defer file.Close()
+
+    encoder := toml.NewEncoder(file)
+    return encoder.Encode(cfg)
 }
 
 func OpenConfigInEditor(configPath string) error {

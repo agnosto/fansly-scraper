@@ -8,3 +8,8 @@ save_location = "/path/to/save/content/to"
 # videos, set this to true
 m3u8_dl = false
 vods_file_extension = ".mp4" # this is going to play a role in livestreams
+
+[security_headers]
+device_id = ""
+session_id = ""
+check_key = ""

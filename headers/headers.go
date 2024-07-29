@@ -12,6 +12,8 @@ import (
     "time"
     "encoding/json"
     "github.com/gorilla/websocket"
+
+    "github.com/agnosto/fansly-scraper/config"
 )
 
 type FanslyHeaders struct {
@@ -20,9 +22,63 @@ type FanslyHeaders struct {
     DeviceID     string
     SessionID    string
     CheckKey     string
+    Config       *config.Config
 }
 
 const fallbackCheckKey = "qybZy9-fyszis-bybxyf"
+
+func NewFanslyHeaders(cfg *config.Config) (*FanslyHeaders, error) {
+    headers := &FanslyHeaders{
+        AuthToken: cfg.Account.AuthToken,
+        UserAgent: cfg.Account.UserAgent,
+        DeviceID:  cfg.SecurityHeaders.DeviceID,
+        SessionID: cfg.SecurityHeaders.SessionID,
+        CheckKey:  cfg.SecurityHeaders.CheckKey,
+        Config:    cfg,
+    }
+
+    var updated bool
+
+    if headers.DeviceID == "" {
+        deviceID, err := GetDeviceID()
+        if err != nil {
+            return nil, err
+        }
+        headers.DeviceID = deviceID
+        cfg.SecurityHeaders.DeviceID = deviceID
+        updated = true
+    }
+
+    if headers.SessionID == "" {
+        sessionID, err := GetSessionID(headers.AuthToken)
+        if err != nil {
+            return nil, err
+        }
+        headers.SessionID = sessionID
+        cfg.SecurityHeaders.SessionID = sessionID
+        updated = true
+    }
+
+    if headers.CheckKey == "" {
+        err := headers.SetCheckKey()
+        if err != nil {
+            return nil, err
+        }
+        cfg.SecurityHeaders.CheckKey = headers.CheckKey
+        updated = true
+    }
+
+    // Save the updated config
+    if updated {
+        err := config.SaveConfig(cfg)
+        if err != nil {
+            return nil, err
+        }
+    }
+
+    return headers, nil
+}
+
 
 func (f *FanslyHeaders) GetBasicHeaders() map[string]string {
     return map[string]string{
@@ -63,8 +119,8 @@ func getClientTimestamp() int64 {
 }
 
 func (f *FanslyHeaders) SetCheckKey() error {
-    mainJSPattern := `<script src="(/main\.[a-f0-9]+\.js)"`
-    checkKeyPattern := `this\.checkKey_=\["([a-zA-Z0-9]+)","([a-zA-Z0-9]+)"\]\.reverse\(\)\.join\("-"\)\+"-bubayf"`
+    mainJSPattern := `\ssrc\s*=\s*"(main\..*?\.js)"`
+    checkKeyPattern := `this\.checkKey_\s*=\s*\["([^"]+)","([^"]+)"\]\.reverse\(\)\.join\("-"\)\+"([^"]+)"`
     
     checkKey, err := GuessCheckKey(mainJSPattern, checkKeyPattern, f.UserAgent)
     if err != nil {
@@ -187,7 +243,7 @@ func GetSessionID(authToken string) (string, error) {
 }
 
 func GuessCheckKey(mainJSPattern, checkKeyPattern, userAgent string) (string, error) {
-    fanslyURL := "https://fansly.com"
+    fanslyURL := "https://fansly.com/"
     client := &http.Client{}
 
     // Make request to fansly.com
@@ -247,12 +303,12 @@ func GuessCheckKey(mainJSPattern, checkKeyPattern, userAgent string) (string, er
     // Find check key
     checkKeyRegex := regexp.MustCompile(checkKeyPattern)
     checkKeyMatch := checkKeyRegex.FindStringSubmatch(string(jsBody))
-    if len(checkKeyMatch) < 3 {
+    if len(checkKeyMatch) < 4 {
         return "", fmt.Errorf("check key not found")
     }
 
-    reversedPart := strings.Join([]string{checkKeyMatch[2], checkKeyMatch[1]}, "-")
-    checkKey := reversedPart + "-bubayf"
+    checkKey := strings.Join([]string{checkKeyMatch[2], checkKeyMatch[1]}, "-") + checkKeyMatch[3]
+    //checkKey := reversedPart + "-bubayf"
 
     return checkKey, nil
 }

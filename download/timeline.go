@@ -74,7 +74,7 @@ func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error
         return nil, err
     }
 
-    
+    /*
     deviceID, err := headers.GetDeviceID()
     if err != nil {
         return nil, err
@@ -95,8 +95,12 @@ func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error
     err = fanslyHeaders.SetSessionID()
     if err != nil {
         return nil, fmt.Errorf("failed to set session ID: %v", err)
-    }
+    }*/
     
+    fanslyHeaders, err := headers.NewFanslyHeaders(cfg)
+    if err != nil {
+        return nil, fmt.Errorf("failed to create Fansly headers: %v", err)
+    }
 
     limiter := rate.NewLimiter(rate.Every(2*time.Second), 3)
 
@@ -275,7 +279,7 @@ func (d *Downloader) downloadMediaItem(ctx context.Context, accountMedia posts.A
 
     // Download main media if it has valid locations
     if hasValidLocations(accountMedia.Media) {
-        err := d.downloadSingleItem(ctx, accountMedia.Media, baseDir, post, modelName, false)
+        err := d.downloadSingleItem(ctx, accountMedia.Media, baseDir, post.ID, modelName, false)
         if err != nil {
             logger.Logger.Printf("[ERROR] [%s] Failed to download main media item %s: %v", modelName, accountMedia.ID, err)
             return fmt.Errorf("error downloading main media: %v", err)
@@ -284,7 +288,7 @@ func (d *Downloader) downloadMediaItem(ctx context.Context, accountMedia posts.A
 
     // Check if there's a preview with valid locations and download it
     if accountMedia.Preview != nil && hasValidLocations(*accountMedia.Preview) {
-        err := d.downloadSingleItem(ctx, *accountMedia.Preview, baseDir, post, modelName, true)
+        err := d.downloadSingleItem(ctx, *accountMedia.Preview, baseDir, post.ID, modelName, true)
         if err != nil {
             logger.Logger.Printf("[ERROR] [%s] Failed to download preview item for media item %s : %v", modelName, accountMedia.ID, err)
             return fmt.Errorf("error downloading preview: %v", err)
@@ -300,7 +304,7 @@ func (d *Downloader) downloadMediaItem(ctx context.Context, accountMedia posts.A
     return nil
 }
 
-func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaItem, baseDir string, post posts.Post, modelName string, isPreview bool) error {
+func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaItem, baseDir string, identifier string, modelName string, isPreview bool) error {
     var bestMedia *posts.MediaItem
     var bestHeight int
     var bestMetadata map[string]string
@@ -379,7 +383,7 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
     if isPreview {
         previewSuffix = "_preview"
     }
-    fileName := fmt.Sprintf("%s_%s%s%s", post.ID, bestMedia.ID, previewSuffix, ext)
+    fileName := fmt.Sprintf("%s_%s%s%s", identifier, bestMedia.ID, previewSuffix, ext)
     filePath := filepath.Join(baseDir, subDir, fileName)
     //log.Printf("[INFO] [DLSingleItem] FILENAME: %v", fileName)  
 
