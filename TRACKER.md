@@ -11,6 +11,7 @@
 - [x] Ensure proper timeline access permissions (want to test more)
 - [x] Download Model Timeline (partial)
 - [x] Timeline post (un)liking (probably want to add the appropriate fansly-* headers)
+- [x] Update command argument to get new binary releases
 
 ## ToDo:
 
@@ -29,3 +30,4 @@
 - [ ] Implement All selection to go through each download option
 - [ ] Rethink about live monitoring (already have [this](https://github.com/agnosto/fansly-recorder) for recording lives, but might want to have this project use [services](https://github.com/kardianos/service) for managing lives? not really sure)
 - [ ] I guess also save a version of models pfp & banner
+- [ ] Add arguments to handle downloading model content (something like fansly-scraper -u {model username} -d [all|timeline|messages])
