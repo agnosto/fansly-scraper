@@ -42,7 +42,7 @@ go install github.com/agnosto/fansly-scraper
 
 ## Updating
 
-As this is a wip tool, new versions may be made available sporadically, I've avoided having the program "phone home" and check for updates automatically. However, there is a built-in update arguement that will check for new releases and update the binary, simply run:
+As this is a wip tool, new versions may be made available sporadically, I've avoided having the program "phone home" and check for updates automatically. However, there is a built-in update argument/command that will check for new releases and update the binary, simply run:
 
 ```bash
 ./fansly-scraper update
