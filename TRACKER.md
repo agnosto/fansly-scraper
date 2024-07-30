@@ -14,7 +14,10 @@
 - [x] Update command argument to get new binary releases
 - [x] Handle getting messages with a selected model 
 - [x] Handle content downloading from messages
-- [x] Add arguments to handle downloading model content (something like fansly-scraper -u {model username} -d [all|timeline|messages])
+- [x] Add arguments to handle downloading model content (something like fansly-scraper -u {model username} -d [all|timeline|messages|stories])
+- [x] Handle getting model stories if available and saving
+- [x] Implement All selection to go through each download option
+
 
 ## ToDo:
 
@@ -27,8 +30,6 @@
 - [ ] Properly handle going back to main menu once finished (downloading/interactions)
 - [ ] More testing for timeline scraping (not subbed to any models atm)
 - [ ] Implement message post (un)liking (ig if I really want it to be all-in-one)
-- [ ] Handle getting model stories if available and saving
-- [ ] Implement All selection to go through each download option
 - [ ] Rethink about live monitoring (already have [this](https://github.com/agnosto/fansly-recorder) for recording lives, but might want to have this project use [services](https://github.com/kardianos/service) for managing lives? not really sure)
 - [ ] I guess also save a version of models pfp & banner
 - [ ] Add option to download purchases directly and save to model folder (default to creating purchases/{model id} if account is deleted)
