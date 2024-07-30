@@ -95,11 +95,15 @@ func (m *MainModel) startDownload(option string) tea.Cmd {
                 if err := m.downloader.DownloadMessages(ctx, m.selectedModelId, m.selectedModel); err != nil {
                     logger.Logger.Printf("Error downloading messages: %v", err)
                 }
+                if err := m.downloader.DownloadStories(ctx, m.selectedModelId, m.selectedModel); err != nil {
+                    logger.Logger.Printf("Error downloading messages: %v", err)
+                }
             case "Timeline":
                 err = m.downloader.DownloadTimeline(ctx, m.selectedModelId, m.selectedModel)
-            // ... (add cases for other download options)
             case "Messages":
                 err = m.downloader.DownloadMessages(ctx, m.selectedModelId, m.selectedModel)
+            case "Stories":
+                err = m.downloader.DownloadStories(ctx, m.selectedModelId, m.selectedModel)
             }
             if err != nil {
                 if err.Error() == "not subscribed or followed: unable to get timeline feed" {

@@ -13,8 +13,8 @@ type Flags struct {
 func ParseFlags() (Flags, string) {
 	username := flag.String("u", "", "Model username to download")
 	flag.StringVar(username, "username", "", "Model username to download")
-	downloadType := flag.String("d", "", "Download type: all, timeline, or messages")
-	flag.StringVar(downloadType, "download", "", "Download type: all, timeline, or messages")
+	downloadType := flag.String("d", "", "Download type: all, timeline, messages, or stories")
+	flag.StringVar(downloadType, "download", "", "Download type: all, timeline, messages, or stories")
 
 	flag.Parse()
     args := flag.Args()

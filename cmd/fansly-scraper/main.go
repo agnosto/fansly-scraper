@@ -19,7 +19,7 @@ import (
 )
 
 var ffmpegAvailable bool
-const version = "v0.1.3"
+const version = "v0.1.4"
 
 func main() {
     flags, subcommand := cmd.ParseFlags()
@@ -96,6 +96,10 @@ func runCLIMode(username string, downloadType string, downloader *download.Downl
         if err := downloader.DownloadMessages(ctx, modelID, username); err != nil {
             logger.Logger.Printf("Error downloading messages: %v", err)
         }
+    case "stories":
+        if err := downloader.DownloadStories(ctx, modelID, username); err != nil {
+            logger.Logger.Printf("Error downloading timeline: %v", err)
+        } 
     default:
         logger.Logger.Printf("Invalid download type. Use 'all', 'timeline', or 'messages'")
         os.Exit(1)
