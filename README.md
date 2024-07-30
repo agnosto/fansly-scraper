@@ -11,7 +11,7 @@
 
 The program will automatically move/download an example config into the config path from either the current directory or the github repo respectively, you will need to edit the config to run the program.
 
-[ffmpeg](https://ffmpeg.org/) is not needed, but for potentially saving higher quality videos it is required.
+⚠ [ffmpeg](https://ffmpeg.org/) is not needed for content saving, but for livestream recording and potentially saving higher quality videos, it is required.
 
 ## Installing the program
 
