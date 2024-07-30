@@ -76,6 +76,12 @@ func NewFanslyHeaders(cfg *config.Config) (*FanslyHeaders, error) {
         }
     }
 
+    if time.Since(cfg.SecurityHeaders.LastUpdated) > 7*24*time.Hour {
+        if err := headers.RefreshSecurityHeaders(); err != nil {
+            return nil, err
+        }
+    }
+
     return headers, nil
 }
 
@@ -311,4 +317,37 @@ func GuessCheckKey(mainJSPattern, checkKeyPattern, userAgent string) (string, er
     //checkKey := reversedPart + "-bubayf"
 
     return checkKey, nil
+}
+
+func (f *FanslyHeaders) RefreshSecurityHeaders() error {
+    var err error
+
+    f.DeviceID, err = GetDeviceID()
+    if err != nil {
+        return err
+    }
+
+    f.SessionID, err = GetSessionID(f.AuthToken)
+    if err != nil {
+        return err
+    }
+
+    err = f.SetCheckKey()
+    if err != nil {
+        return err
+    }
+
+    // Update the config
+    f.Config.SecurityHeaders.DeviceID = f.DeviceID
+    f.Config.SecurityHeaders.SessionID = f.SessionID
+    f.Config.SecurityHeaders.CheckKey = f.CheckKey
+    f.Config.SecurityHeaders.LastUpdated = time.Now()
+
+    // Save the updated config
+    err = config.SaveConfig(f.Config)
+    if err != nil {
+        return err
+    }
+
+    return nil
 }

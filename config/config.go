@@ -10,6 +10,7 @@ import (
 	"path/filepath"
     "log"
     "runtime"
+    "time"
 
     "github.com/BurntSushi/toml"
 )
@@ -36,6 +37,7 @@ type SecurityHeadersConfig struct {
     DeviceID  string `toml:"device_id"`
     SessionID string `toml:"session_id"`
     CheckKey  string `toml:"check_key"`
+    LastUpdated  time.Time `toml:"last_updated"`
 }
 
 
@@ -189,6 +191,10 @@ func LoadConfig(configPath string) (*Config, error) {
     }
     if config.Options.SaveLocation == "" {
         return nil, fmt.Errorf("save_location is empty in $v", configPath)
+    }
+
+    if config.SecurityHeaders.LastUpdated.IsZero() {
+        config.SecurityHeaders.LastUpdated = time.Now()
     }
 
     return &config, nil
