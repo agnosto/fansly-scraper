@@ -25,7 +25,7 @@ Pre-compiled binaries can be downloaded from the [releases](https://github.com/a
 ```bash
 git clone https://github.com/agnosto/fansly-scraper && cd fansly-scraper 
 
-go build -v -o fansly-scraper 
+go build -o fansly-scraper ./cmd/fansly-scraper
 
 # run the binary
 ./fansly-scraper
@@ -33,10 +33,8 @@ go build -v -o fansly-scraper
 
 ### Install Via Go
 
-Need to change project directory structure before it can be used
-
 ```bash
-go install github.com/agnosto/fansly-scraper
+go install github.com/agnosto/fansly-scraper/cmd/fansly-scraper@latest
 ```
 
 ## Running the program 
