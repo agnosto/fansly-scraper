@@ -56,9 +56,9 @@ Simply run the program to launch the tui:
 ./fansly-scraper -u {creator name}
 
 # With Download Option 
-./fansly-scraper --username {creator name} --download [all|timeline|messages]
+./fansly-scraper --username {creator name} --download [all|timeline|messages|stories]
 # Or using short flags
-./fansly-scraper -u {creator name} -d [all|timeline|messages]
+./fansly-scraper -u {creator name} -d [all|timeline|messages|stories]
 ```
 
 ## Updating
