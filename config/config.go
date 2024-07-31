@@ -109,7 +109,7 @@ func CopyFile(srcPath string, dstPath string) error {
 }
 
 func DownloadConfig(url string, filePath string) error {
-    log.Printf("Downloading config from: %v to path: %v", url, filePath)
+    //log.Printf("Downloading config from: %v to path: %v", url, filePath)
 	// Get the current working directory
 	//rootDir, err := os.Getwd()
 	//if err != nil {
