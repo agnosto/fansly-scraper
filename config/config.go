@@ -109,37 +109,38 @@ func CopyFile(srcPath string, dstPath string) error {
 }
 
 func DownloadConfig(url string, filePath string) error {
+    log.Printf("Downloading config from: %v to path: %v", url, filePath)
 	// Get the current working directory
-	rootDir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
+	//rootDir, err := os.Getwd()
+	//if err != nil {
+	//	return err
+	//}
 
 	// Construct the path to the example-config.ini file in the root directory
-	exampleConfigPath := filepath.Join(rootDir, filePath)
+	//exampleConfigPath := filepath.Join(rootDir, filePath)
 
 	// Check if the file exists in the current directory
-	if _, err := os.Stat(exampleConfigPath); os.IsNotExist(err) {
+	//if _, err := os.Stat(exampleConfigPath); os.IsNotExist(err) {
 		// Send a GET request
-		resp, err := http.Get(url)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
+    resp, err := http.Get(url)
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
 
-		// Create the file
-		out, err := os.Create(filePath)
-		if err != nil {
-			return err
-		}
-		defer out.Close()
+    // Create the file
+    out, err := os.Create(filePath)
+    if err != nil {
+        return err
+    }
+    defer out.Close()
 
-		// Write the body to file
-		_, err = io.Copy(out, resp.Body)
-		return err
-	}
+    // Write the body to file
+    _, err = io.Copy(out, resp.Body)
+    return err
+	//}
 
-	return nil
+	//return nil
 }
 
 func EnsureConfigExists(configPath string) error {
@@ -155,7 +156,7 @@ func EnsureConfigExists(configPath string) error {
 		exampleConfig := filepath.Join("example-config.toml")
 		if _, err := os.Stat(exampleConfig); os.IsNotExist(err) {
 			// Example config doesn't exist, download default
-			err = DownloadConfig("https://raw.githubusercontent.com/agnosto/fansly-scraper/main/example-config.toml", configPath)
+			err = DownloadConfig("https://raw.githubusercontent.com/agnosto/fansly-scraper/main/example-config.toml", filepath.ToSlash(configPath))
 			if err != nil {
 				return err
 			}

@@ -19,7 +19,7 @@ import (
 )
 
 var ffmpegAvailable bool
-const version = "v0.1.8"
+const version = "v0.1.9"
 
 func main() {
     flags, subcommand := cmd.ParseFlags()
@@ -37,7 +37,10 @@ func main() {
         return
     } 
 
-    config.EnsureConfigExists(config.GetConfigPath())
+    err := config.EnsureConfigExists(config.GetConfigPath())
+    if err != nil {
+        log.Fatal(err)
+    }
     cfg, err := config.LoadConfig(config.GetConfigPath())
     //log.Printf("[Main Start] Loaded Config: %v", cfg)
     if err != nil {
