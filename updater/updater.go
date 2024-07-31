@@ -134,9 +134,9 @@ func updateBinary(release *GithubRelease) error {
                 }
                 
                 if runtime.GOOS == "windows" {
-                    // Create a batch script to perform the update
-                    updateScript := filepath.Join(tempDir, "update.bat")
-                    scriptContent := fmt.Sprintf(`@echo off
+        // Create a batch script to perform the update
+        updateScript := filepath.Join(tempDir, "update.bat")
+        scriptContent := fmt.Sprintf(`@echo off
 :loop
 tasklist /FI "IMAGENAME eq %s" 2>NUL | find /I /N "%s">NUL
 if "%%ERRORLEVEL%%"=="0" (
@@ -144,23 +144,26 @@ if "%%ERRORLEVEL%%"=="0" (
     goto loop
 )
 move /Y "%s" "%s"
+start "" "%s"
 del "%s"
-`, filepath.Base(execPath), filepath.Base(execPath), outPath, execPath, updateScript)
-                    
-                    err = os.WriteFile(updateScript, []byte(scriptContent), 0755)
-                    if err != nil {
-                        return err
-                    }
-                    
-                    // Start the update script
-                    cmd := exec.Command("cmd", "/C", updateScript)
-                    err = cmd.Start()
-                    if err != nil {
-                        return err
-                    }
-                    
-                    fmt.Println("Update downloaded. It will be applied when you exit the program.")
-                } else {
+`, filepath.Base(execPath), filepath.Base(execPath), outPath, execPath, execPath, updateScript)
+        
+        err = os.WriteFile(updateScript, []byte(scriptContent), 0755)
+        if err != nil {
+            return err
+        }
+        
+        // Start the update script
+        cmd := exec.Command("cmd", "/C", updateScript)
+        err = cmd.Start()
+        if err != nil {
+            return err
+        }
+        
+        fmt.Println("Update downloaded. Please exit the program for the update to be applied.")
+        fmt.Println("The updated version will start automatically after you exit.")
+        os.Exit(0)
+    } else {
                     // For non-Windows systems, perform the update directly
                     err = os.Rename(outPath, execPath)
                     if err != nil {
