@@ -17,11 +17,11 @@
 - [x] Add arguments to handle downloading model content (something like fansly-scraper -u {model username} -d [all|timeline|messages|stories])
 - [x] Handle getting model stories if available and saving
 - [x] Implement All selection to go through each download option
+- [x] Test windows pathing for save location is handled correctly
 
 
 ## ToDo:
 
-- [ ] Test windows pathing for save location is handled correctly
 - [ ] Fix editing config option (broke in refactor lol)
 - [ ] Fix m3u8 downloading for potential higher quality
 - [ ] Fix sometimes saving video extension to images and vice versa

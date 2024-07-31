@@ -3,7 +3,7 @@ auth_token = ""
 user_agent = ""
 
 [options]
-save_location = "/path/to/save/content/to"
+save_location = "/path/to/save/content/to" # On windows replace any \ with / 
 # If you have ffmpeg and want instances of it spawned to try to save higher quality
 # videos, set this to true
 m3u8_dl = false
