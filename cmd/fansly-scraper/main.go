@@ -19,10 +19,15 @@ import (
 )
 
 var ffmpegAvailable bool
-const version = "v0.1.7"
+const version = "v0.1.8"
 
 func main() {
     flags, subcommand := cmd.ParseFlags()
+
+    if flags.Version {
+        fmt.Printf("Fansly Scraper version %s\n", version)
+        return
+    }
 
     if subcommand == "update" {
         if err := updater.CheckForUpdate(version); err != nil {
