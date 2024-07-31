@@ -48,7 +48,7 @@ func (m *MainModel) handleMainMenuSelection() (tea.Model, tea.Cmd) {
 	case "Unlike all of a user's post":
 		m.actionChosen = "unlike"
 		return m, m.fetchAccountInfoCmd()
-	case "Edit config.json file":
+	case "Edit config.toml file":
 		return m, m.editConfigCmd()
 	case "Quit":
 		m.quit = true

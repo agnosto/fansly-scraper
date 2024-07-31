@@ -196,7 +196,7 @@ func (m *MainModel) View() string {
 func NewMainModel(downloader *download.Downloader, version string) *MainModel {
     return &MainModel{
         version: version,
-        options:         []string{"Download a user's post", "Monitor a user's livestreams", "Like all of a user's post", "Unlike all of a user's post", "Edit config.json file", "Quit"},
+        options:         []string{"Download a user's post", "Monitor a user's livestreams", "Like all of a user's post", "Unlike all of a user's post", "Edit config.toml file", "Quit"},
         downloadOptions: []string{"All", "Timeline", "Messages", "Stories"},
         cursorPos:       0,
         keys:            defaultKeyMap,

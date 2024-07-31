@@ -78,12 +78,21 @@ func SaveConfig(cfg *Config) error {
 }
 
 func OpenConfigInEditor(configPath string) error {
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "vim" // Default to vim if no EDITOR environment variable is set
-	}
+    var cmd *exec.Cmd
 
-	cmd := exec.Command(editor, configPath)
+	if runtime.GOOS == "windows" {
+        // On Windows, use the default program associated with .txt files
+        cmd = exec.Command("cmd", "/C", "start", "", configPath)
+    } else {
+        // For UNIX-like systems, use the EDITOR environment variable
+        editor := os.Getenv("EDITOR")
+        if editor == "" {
+            editor = "vim" // Default to vim if no EDITOR environment variable is set
+        }
+        cmd = exec.Command(editor, configPath)
+    }
+
+	//cmd := exec.Command(editor, configPath)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
