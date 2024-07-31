@@ -155,7 +155,7 @@ func EnsureConfigExists(configPath string) error {
 		exampleConfig := filepath.Join("example-config.toml")
 		if _, err := os.Stat(exampleConfig); os.IsNotExist(err) {
 			// Example config doesn't exist, download default
-			err = DownloadConfig("https://raw.githubusercontent.com/agnosto/fansly-scraper/blob/master/example-config.toml", configPath)
+			err = DownloadConfig("https://raw.githubusercontent.com/agnosto/fansly-scraper/main/example-config.toml", configPath)
 			if err != nil {
 				return err
 			}
