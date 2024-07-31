@@ -4,42 +4,40 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-    "log"
-    "runtime"
-    "time"
+	"runtime"
+	"time"
 
-    "github.com/BurntSushi/toml"
+	"github.com/BurntSushi/toml"
 )
 
 type Config struct {
-    Account         AccountConfig
-    Options         OptionsConfig
-    SecurityHeaders SecurityHeadersConfig
+	Account         AccountConfig
+	Options         OptionsConfig
+	SecurityHeaders SecurityHeadersConfig
 }
 
 type AccountConfig struct {
-    AuthToken string `toml:"auth_token"`
-    UserAgent string `toml:"user_agent"`
+	AuthToken string `toml:"auth_token"`
+	UserAgent string `toml:"user_agent"`
 }
 
 type OptionsConfig struct {
-    SaveLocation        string `toml:"save_location"`
-    M3U8Download        bool   `toml:"m3u8_dl"`
-    VODsFileExtension   string `toml:"vods_file_extension"`
+	SaveLocation      string `toml:"save_location"`
+	M3U8Download      bool   `toml:"m3u8_dl"`
+	VODsFileExtension string `toml:"vods_file_extension"`
 }
-
 
 type SecurityHeadersConfig struct {
-    DeviceID  string `toml:"device_id"`
-    SessionID string `toml:"session_id"`
-    CheckKey  string `toml:"check_key"`
-    LastUpdated  time.Time `toml:"last_updated"`
+	DeviceID    string    `toml:"device_id"`
+	SessionID   string    `toml:"session_id"`
+	CheckKey    string    `toml:"check_key"`
+	LastUpdated time.Time `toml:"last_updated"`
 }
-
 
 type Account struct {
 	ID          string `json:"id"`
@@ -49,34 +47,34 @@ type Account struct {
 
 func GetConfigPath() string {
 	var configDir string
-    var err error 
-    
-    if runtime.GOOS == "darwin" {
-        homeDir, err := os.UserHomeDir()
-        if err != nil {
-            log.Fatal(err)
-        }
-        configDir = filepath.Join(homeDir, ".config")
-    } else {
-        configDir, err = os.UserConfigDir()
-        if err != nil {
-            log.Fatal(err)
-        }
-    }
+	var err error
+
+	if runtime.GOOS == "darwin" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		configDir = filepath.Join(homeDir, ".config")
+	} else {
+		configDir, err = os.UserConfigDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 
 	return filepath.Join(configDir, "fansly-scraper", "config.toml")
 }
 
 func SaveConfig(cfg *Config) error {
-    configPath := GetConfigPath()
-    file, err := os.Create(configPath)
-    if err != nil {
-        return err
-    }
-    defer file.Close()
+	configPath := GetConfigPath()
+	file, err := os.Create(configPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
 
-    encoder := toml.NewEncoder(file)
-    return encoder.Encode(cfg)
+	encoder := toml.NewEncoder(file)
+	return encoder.Encode(cfg)
 }
 
 func OpenConfigInEditor(configPath string) error {
@@ -157,7 +155,7 @@ func EnsureConfigExists(configPath string) error {
 		exampleConfig := filepath.Join("example-config.toml")
 		if _, err := os.Stat(exampleConfig); os.IsNotExist(err) {
 			// Example config doesn't exist, download default
-			err = DownloadConfig("https://github.com/agnosto/fansly-scraper/blob/master/example-config.toml", configPath)
+			err = DownloadConfig("https://raw.githubusercontent.com/agnosto/fansly-scraper/blob/master/example-config.toml", configPath)
 			if err != nil {
 				return err
 			}
@@ -171,35 +169,37 @@ func EnsureConfigExists(configPath string) error {
 	}
 
 	// Open config file in editor
-	//return OpenConfigInEditor(configPath)
-    return nil
+	// return OpenConfigInEditor(configPath)
+	return nil
 }
 
 func LoadConfig(configPath string) (*Config, error) {
-    var config Config
-    _, err := toml.DecodeFile(configPath, &config)
-    if err != nil {
-        return nil, err
-    }
+	var config Config
+	_, err := toml.DecodeFile(configPath, &config)
+	if err != nil {
+		return nil, err
+	}
 
-    // Validate config values
-    if config.Account.UserAgent == "" {
-        return nil, fmt.Errorf("user_agent is empty in %v", configPath)
-    }
-    if config.Account.AuthToken == "" {
-        return nil, fmt.Errorf("auth_token is empty in %v", configPath)
-    }
-    if config.Options.SaveLocation == "" {
-        return nil, fmt.Errorf("save_location is empty in $v", configPath)
-    }
+	// Validate config values
+	if config.Account.UserAgent == "" {
+		return nil, fmt.Errorf("user_agent is empty in %v", configPath)
+	}
+	if config.Account.AuthToken == "" {
+		return nil, fmt.Errorf("auth_token is empty in %v", configPath)
+	}
+	if config.Options.SaveLocation == "" {
+		return nil, fmt.Errorf("save_location is empty in $v", configPath)
+	}
 
-    if config.SecurityHeaders.LastUpdated.IsZero() {
-        config.SecurityHeaders.LastUpdated = time.Now()
-    }
+	config.Options.SaveLocation = filepath.ToSlash(config.Options.SaveLocation)
 
-    return &config, nil
+	if config.SecurityHeaders.LastUpdated.IsZero() {
+		config.SecurityHeaders.LastUpdated = time.Now()
+	}
+
+	return &config, nil
 }
- 
+
 // TODO: get rid of the below functions
 
 func createHeaders(authToken string, userAgent string) map[string]string {
