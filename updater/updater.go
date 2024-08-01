@@ -8,7 +8,7 @@ import (
     "io"
     "net/http"
     "os"
-    "os/exec"
+    //"os/exec"
     "path/filepath"
     "runtime"
     "strings"
@@ -87,20 +87,99 @@ func updateBinary(release *GithubRelease) error {
     }
     defer resp.Body.Close()
     
-    tempDir, err := os.MkdirTemp("", "fansly-scraper-update")
+    // Create a temporary directory in the current working directory
+    currentDir, err := os.Getwd()
     if err != nil {
         return err
     }
-    defer os.RemoveAll(tempDir)
+    tempDir := filepath.Join(currentDir, "tmp_update")
+    err = os.MkdirAll(tempDir, 0755)
+    if err != nil {
+        return err
+    }
+    defer os.RemoveAll(tempDir) // Clean up the temporary directory when done
     
-    gzr, err := gzip.NewReader(resp.Body)
+    tempFile := filepath.Join(tempDir, "update.tar.gz")
+    outFile, err := os.Create(tempFile)
+    if err != nil {
+        return err
+    }
+    defer outFile.Close()
+    
+    _, err = io.Copy(outFile, resp.Body)
+    if err != nil {
+        return err
+    }
+    
+    // Extract the update
+    err = extractUpdate(tempFile, tempDir)
+    if err != nil {
+        return err
+    }
+    
+    // Find the new executable in the extracted files
+    var newExePath string
+    err = filepath.Walk(tempDir, func(path string, info os.FileInfo, err error) error {
+        if err != nil {
+            return err
+        }
+        if !info.IsDir() && strings.HasPrefix(info.Name(), "fansly-scraper") {
+            newExePath = path
+            return filepath.SkipAll
+        }
+        return nil
+    })
+    if err != nil {
+        return err
+    }
+    
+    if newExePath == "" {
+        return fmt.Errorf("new executable not found in the update package")
+    }
+    
+    // Get the current executable path
+    execPath, err := os.Executable()
+    if err != nil {
+        return err
+    }
+    
+    // Rename the current executable to .old
+    oldExePath := execPath + ".old"
+    err = os.Rename(execPath, oldExePath)
+    if err != nil {
+        return err
+    }
+    
+    // Move the new executable to replace the current one
+    err = os.Rename(newExePath, execPath)
+    if err != nil {
+        // If moving the new executable fails, try to restore the old one
+        os.Rename(oldExePath, execPath)
+        return err
+    }
+    
+    // Remove the old executable
+    os.Remove(oldExePath)
+    
+    fmt.Println("Update successful. Please restart the application.")
+    return nil
+}
+
+func extractUpdate(archivePath, destPath string) error {
+    file, err := os.Open(archivePath)
+    if err != nil {
+        return err
+    }
+    defer file.Close()
+
+    gzr, err := gzip.NewReader(file)
     if err != nil {
         return err
     }
     defer gzr.Close()
-    
+
     tr := tar.NewReader(gzr)
-    
+
     for {
         header, err := tr.Next()
         if err == io.EOF {
@@ -109,10 +188,16 @@ func updateBinary(release *GithubRelease) error {
         if err != nil {
             return err
         }
-        
-        if header.Typeflag == tar.TypeReg {
-            outPath := filepath.Join(tempDir, header.Name)
-            outFile, err := os.Create(outPath)
+
+        target := filepath.Join(destPath, header.Name)
+
+        switch header.Typeflag {
+        case tar.TypeDir:
+            if err := os.MkdirAll(target, 0755); err != nil {
+                return err
+            }
+        case tar.TypeReg:
+            outFile, err := os.Create(target)
             if err != nil {
                 return err
             }
@@ -121,60 +206,8 @@ func updateBinary(release *GithubRelease) error {
                 return err
             }
             outFile.Close()
-            
-            if strings.HasPrefix(header.Name, "fansly-scraper") {
-                execPath, err := os.Executable()
-                if err != nil {
-                    return err
-                }
-                
-                err = os.Chmod(outPath, 0755)
-                if err != nil {
-                    return err
-                }
-                
-                if runtime.GOOS == "windows" {
-        // Create a batch script to perform the update
-        updateScript := filepath.Join(tempDir, "update.bat")
-        scriptContent := fmt.Sprintf(`@echo off
-:loop
-tasklist /FI "IMAGENAME eq %s" 2>NUL | find /I /N "%s">NUL
-if "%%ERRORLEVEL%%"=="0" (
-    timeout /t 1 >nul
-    goto loop
-)
-move /Y "%s" "%s"
-start "" "%s"
-del "%s"
-`, filepath.Base(execPath), filepath.Base(execPath), outPath, execPath, execPath, updateScript)
-        
-        err = os.WriteFile(updateScript, []byte(scriptContent), 0755)
-        if err != nil {
-            return err
-        }
-        
-        // Start the update script
-        cmd := exec.Command("cmd", "/C", updateScript)
-        err = cmd.Start()
-        if err != nil {
-            return err
-        }
-        
-        fmt.Println("Update downloaded. Please exit the program for the update to be applied.")
-        fmt.Println("The updated version will start automatically after you exit.")
-        os.Exit(0)
-    } else {
-                    // For non-Windows systems, perform the update directly
-                    err = os.Rename(outPath, execPath)
-                    if err != nil {
-                        return err
-                    }
-                    fmt.Println("Update successful. Please restart the application.")
-                }
-                return nil
-            }
         }
     }
-    
-    return fmt.Errorf("binary not found in the archive")
+
+    return nil
 }
