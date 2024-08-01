@@ -157,6 +157,12 @@ func updateBinary(release *GithubRelease) error {
         os.Rename(oldExePath, execPath)
         return err
     }
+
+    // Set the correct permissions for the new executable
+    err = os.Chmod(execPath, 0755)
+    if err != nil {
+        return err
+    }
     
     // Remove the old executable
     os.Remove(oldExePath)
