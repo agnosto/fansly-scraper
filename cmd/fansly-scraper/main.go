@@ -19,7 +19,7 @@ import (
 )
 
 var ffmpegAvailable bool
-const version = "v0.2.2"
+const version = "v0.2.3"
 
 func main() {
     flags, subcommand := cmd.ParseFlags()
