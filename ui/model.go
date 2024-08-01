@@ -13,7 +13,7 @@ import (
 	//"runtime"
 	//"strings"
 	//"time"
-	//"sync"
+	"sync"
 	"context"
 
 	"github.com/schollz/progressbar/v3"
@@ -67,6 +67,13 @@ type MainModel struct {
     progressBar         *progressbar.ProgressBar 
 	cancelDownload      context.CancelFunc
     message             string
+    monitoredModels      map[string]bool  // Map of model IDs to monitoring status
+    monitoringService    *MonitoringService
+}
+
+type MonitoringService struct {
+    activeMonitors map[string]context.CancelFunc
+    mu             sync.Mutex
 }
 
 type fetchAccountInfoMsg struct {
@@ -203,6 +210,8 @@ func NewMainModel(downloader *download.Downloader, version string) *MainModel {
         help:            help.New(),
         downloader:      downloader,
         state:           MainMenuState,
+        monitoredModels:   make(map[string]bool),
+        monitoringService: NewMonitoringService(),
     }
 }
 
