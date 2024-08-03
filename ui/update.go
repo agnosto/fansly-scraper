@@ -49,6 +49,8 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
                 return m.HandleLikeUnlikeUpdate(msg)
             case LiveMonitorState:
                 return m.HandleLivestreamMonitorUpdate(msg)
+            case LiveMonitorFilterState:
+                return m.HandleLiveMonitorFilterUpdate(msg)
             // Add cases for other states
             default:
                 logger.Logger.Printf("[DEBUG] Update: Unhandled state: %v", m.state)
@@ -60,11 +62,24 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
             m.followedModels = msg.AccountInfo.FollowedModels
             m.filteredModels = msg.AccountInfo.FollowedModels
             m.updateTable()
-            m.state = FollowedModelsState
-        } else {
-            // handle the error
-        }
+            if m.state != LiveMonitorState {
+                m.updateTable()
+            } else {
+                m.state = LiveMonitorState
+                m.initializeLivestreamMonitoringTable()
+                m.updateMonitoringTable()
+            }
+            if m.actionChosen != "monitor" {
+                m.state = FollowedModelsState
+            }
+            } else {
+                // Handle error
+            }
         return m, nil
+    case monitoringSelectedMsg:
+        m.state = LiveMonitorState
+        m.filteredLiveMonitorModels = m.followedModels
+        m.updateMonitoringTable()
     case editConfigMsg:
         if msg.Success {
             m.message = "Config edited successfully!"
@@ -94,6 +109,8 @@ func (m *MainModel) View() string {
         return m.RenderLikeUnlikeMenu()
     case LiveMonitorState:
         return m.RenderLivestreamMonitorMenu()
+    case LiveMonitorFilterState:
+        return m.RenderLiveMonitorFilterMenu()
 	default:
 		return "Unknown state"
 	}

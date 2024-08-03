@@ -7,9 +7,11 @@ save_location = "/path/to/save/content/to" # On windows replace any \ with /
 # If you have ffmpeg and want instances of it spawned to try to save higher quality
 # videos, set this to true
 m3u8_dl = false
-vods_file_extension = ".mp4" # this is going to play a role in livestreams
+vods_file_extension = ".ts" # ts files tend to better handle if recording crashes, can be watched directly via vlc or mpv or converted to an mp4.
+ffmpeg_convert = true 
+generate_contact_sheet = true
 
-[security_headers]
+[security_headers] # These get automatically added, no need to touch unless you want to.
 device_id = ""
 session_id = ""
 check_key = ""

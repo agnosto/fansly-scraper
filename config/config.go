@@ -27,9 +27,11 @@ type AccountConfig struct {
 }
 
 type OptionsConfig struct {
-	SaveLocation      string `toml:"save_location"`
-	M3U8Download      bool   `toml:"m3u8_dl"`
-	VODsFileExtension string `toml:"vods_file_extension"`
+	SaveLocation            string `toml:"save_location"`
+	M3U8Download            bool   `toml:"m3u8_dl"`
+	VODsFileExtension       string `toml:"vods_file_extension"`
+    FFmpegConvert           bool   `toml:"ffmpeg_convert"`
+    GenerateContactSheet    bool   `toml:generate_contact_sheet`
 }
 
 type SecurityHeadersConfig struct {
@@ -63,6 +65,26 @@ func GetConfigPath() string {
 	}
 
 	return filepath.Join(configDir, "fansly-scraper", "config.toml")
+}
+
+func GetConfigDir() string {
+	var configDir string
+	var err error
+
+	if runtime.GOOS == "darwin" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		configDir = filepath.Join(homeDir, ".config")
+	} else {
+		configDir, err = os.UserConfigDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	return filepath.Join(configDir, "fansly-scraper")
 }
 
 func SaveConfig(cfg *Config) error {

@@ -41,9 +41,13 @@ func (m *MainModel) handleMainMenuSelection() (tea.Model, tea.Cmd) {
 		return m, m.fetchAccountInfoCmd()
 	case "Monitor a user's livestreams":
 		m.actionChosen = "monitor"
-        m.state = LiveMonitorState
-        m.updateMonitoringTable()
-		return m, m.fetchAccountInfoCmd()
+        return m, tea.Batch(
+            m.fetchAccountInfoCmd(),
+            func() tea.Msg {
+                m.updateMonitoringTable()
+                return monitoringSelectedMsg{}
+            },
+        )
 	case "Like all of a user's post":
 		m.actionChosen = "like"
 		return m, m.fetchAccountInfoCmd()

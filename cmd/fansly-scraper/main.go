@@ -9,10 +9,13 @@ import (
     "github.com/agnosto/fansly-scraper/core"
     "github.com/agnosto/fansly-scraper/updater"
     "github.com/agnosto/fansly-scraper/logger"
+    "github.com/agnosto/fansly-scraper/service"
+    ksvc "github.com/kardianos/service"
 
 	"log"
 	"os"
     "context"
+    "path/filepath"
     //"flag"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -29,13 +32,80 @@ func main() {
         return
     }
 
-    if subcommand == "update" {
-        if err := updater.CheckForUpdate(version); err != nil {
-            fmt.Printf("Error updating: %v\n", err)
+    switch subcommand {
+	case "update":
+		if err := updater.CheckForUpdate(version); err != nil {
+			fmt.Printf("Error updating: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	case "service":
+		cmd.RunService()
+		return
+	} 
+
+    if flags.Service != "" {
+        prg := &cmd.Program{}
+        s, err := ksvc.New(prg, &ksvc.Config{
+            Name:        "FanslyScraper",
+            DisplayName: "Fansly Scraper Service",
+            Description: "This service monitors and records Fansly streams.",
+        })
+        if err != nil {
+            fmt.Printf("Error creating service: %v\n", err)
             os.Exit(1)
         }
-        return
-    } 
+
+		switch flags.Service {
+		case "install":
+			err = s.Install()
+            if err != nil {
+                fmt.Printf("Error installing service: %v\n", err)
+            } else {
+                fmt.Println("Service installed successfully")
+            }
+		case "uninstall":
+			err = s.Uninstall()
+            if err != nil {
+                fmt.Printf("Error uninstalling service: %v\n", err)
+            } else {
+                fmt.Println("Service uninstalled successfully")
+            }
+		case "start":
+			err = s.Start()
+            if err != nil {
+                fmt.Printf("Error starting service: %v\n", err)
+            } else {
+                fmt.Println("Service started successfully")
+            }
+		case "stop":
+			err = s.Stop()
+            if err != nil {
+                fmt.Printf("Error stopping service: %v\n", err)
+            } else {
+                fmt.Println("Service stopped successfully")
+            }
+
+		case "restart":
+			err = s.Restart()
+            if err != nil {
+                fmt.Printf("Error restarting service: %v\n", err)
+            } else {
+                fmt.Println("Service restarted successfully")
+            }
+        case "status":
+            status, err := s.Status()
+            if err != nil {
+                fmt.Printf("Error getting service status: %v\n", err)
+            } else {
+                fmt.Printf("Service status: %v\n", status)
+            }
+		default:
+			fmt.Printf("Unknown service command: %s\n", flags.Service)
+			os.Exit(1)
+		}
+		return
+	}
 
     err := config.EnsureConfigExists(config.GetConfigPath())
     if err != nil {
@@ -70,7 +140,20 @@ func main() {
         return
     }
 
-    model := ui.NewMainModel(downloader, version)
+    monitoringService := service.NewMonitoringService(filepath.Join(config.GetConfigDir(), "monitoring_state.json"))
+
+    if flags.Monitor != "" {
+        modelID, err := core.GetModelIDFromUsername(flags.Monitor)
+        if err != nil {
+            logger.Logger.Printf("Error getting model ID: %v", err)
+            os.Exit(1)
+        }
+        monitoringService.ToggleMonitoring(modelID, flags.Monitor)
+        fmt.Printf("Toggled monitoring for %s\n", flags.Monitor)
+        return
+    }
+
+    model := ui.NewMainModel(downloader, version, monitoringService)
     p := tea.NewProgram(model, tea.WithAltScreen())
     if _, err := p.Run(); err != nil {
         logger.Logger.Printf("Error: %v", err)

@@ -5,6 +5,7 @@ import (
 	//"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/core"
 	"github.com/agnosto/fansly-scraper/download"
+    "github.com/agnosto/fansly-scraper/service"
 
 	//"fmt"
 	//"log"
@@ -38,6 +39,7 @@ const (
     LikeUnlikeState 
     FilterState
     DownloadProgressState
+    LiveMonitorFilterState
 )
 
 type MainModel struct {
@@ -54,6 +56,9 @@ type MainModel struct {
     viewportSize        int
     welcome             string
     table               table.Model
+    monitoringTable     table.Model
+    liveMonitorFilterInput string
+    filteredLiveMonitorModels []auth.FollowedModel 
     keys                keyMap
     help                help.Model
     width               int
@@ -68,12 +73,16 @@ type MainModel struct {
 	cancelDownload      context.CancelFunc
     message             string
     monitoredModels      map[string]bool  // Map of model IDs to monitoring status
-    monitoringService    *MonitoringService
+    monitoringService    *service.MonitoringService
 }
+
+type monitoringSelectedMsg struct{}
 
 type MonitoringService struct {
     activeMonitors map[string]context.CancelFunc
     mu             sync.Mutex
+    ctx            context.Context
+    cancel         context.CancelFunc
 }
 
 type fetchAccountInfoMsg struct {
@@ -162,45 +171,7 @@ func (m *MainModel) Init() tea.Cmd {
 	// panic("unimplemented")
 }
 
-/*
-func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch m.state {
-	case MainMenuState:
-		return m.HandleMainMenuUpdate(msg)
-    case FollowedModelsState:
-        return m.HandleFollowedModelsMenuUpdate(msg)
-    case FilterState:
-        return m.HandleFilterModelsMenuUpdate(msg)
-    case DownloadActionsState:
-        return m.HandleDownloadActionsMenuUpdate(msg)
-    case DownloadProgressState:
-        return m.HandleDownloadProgressMenuUpdate(msg)
-	// Add cases for other states
-	default:
-		return m, nil
-	}
-}
-
-func (m *MainModel) View() string {
-	switch m.state {
-	case MainMenuState:
-		return m.RenderMainMenu()
-	// Add cases for other states
-    case FollowedModelsState:
-        return m.RenderFollowedModelsMenu()
-    case FilterState:
-        return m.RenderFilterModelsMenu()
-    case DownloadActionsState:
-        return m.RenderDownloadActionsMenu()
-    case DownloadProgressState:
-        return m.RenderDownloadProgressMenu()
-	default:
-		return "Unknown state"
-	}
-}
-*/
-
-func NewMainModel(downloader *download.Downloader, version string) *MainModel {
+func NewMainModel(downloader *download.Downloader, version string, monitoringService *service.MonitoringService) *MainModel {
     return &MainModel{
         version: version,
         options:         []string{"Download a user's post", "Monitor a user's livestreams", "Like all of a user's post", "Unlike all of a user's post", "Edit config.toml file", "Quit"},
@@ -211,7 +182,7 @@ func NewMainModel(downloader *download.Downloader, version string) *MainModel {
         downloader:      downloader,
         state:           MainMenuState,
         monitoredModels:   make(map[string]bool),
-        monitoringService: NewMonitoringService(),
+        monitoringService: monitoringService,
     }
 }
 
