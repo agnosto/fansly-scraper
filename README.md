@@ -1,17 +1,17 @@
 # Fansly Scraper 
 
-### ⚠ This is currently under development, everything is still being planned out and tested. Feel free to create issues/pr's to assist in the creation of this project.
-
-### [Tracker](./TRACKER.md) will hold a list of things to do for the project, as well as act as a kind of roadmap.
-
-### I also recommend reading [Program Status](https://github.com/agnosto/fansly-scraper?tab=readme-ov-file#program-status) for more info.
+> [!NOTE] 
+> This is currently under development, everything is still being planned out and tested. Feel free to create issues/pr's to assist in the creation of this project.
+> [Tracker](./TRACKER.md) will hold a list of things to do for the project, as well as act as a kind of roadmap.
+> I also recommend reading [Program Status](https://github.com/agnosto/fansly-scraper?tab=readme-ov-file#program-status) for more info and currently known issues before running.
 
 
 ## A simple all in one fansly interaction tool.
 
 The program will automatically move/download an example config into the config path from either the current directory or the github repo respectively, you will need to edit the config to run the program.
 
-⚠ [ffmpeg](https://ffmpeg.org/) is not needed for content saving, but for livestream recording and potentially saving higher quality videos, it is required.
+> [!IMPORTANT]
+> [ffmpeg](https://ffmpeg.org/) is not needed for content saving, but for livestream recording and potentially saving higher quality videos, it is required.
 
 ## Installing the program
 
