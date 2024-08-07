@@ -296,8 +296,6 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 	}
 
 	logger.Logger.Printf("Recording complete for %s", username)
-	ms.activeRecordings[modelID] = true
-
 }
 
 func (ms *MonitoringService) convertToMP4(tsFilename, mp4Filename string) error {
