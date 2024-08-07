@@ -59,6 +59,11 @@ Simply run the program to launch the tui:
 ./fansly-scraper --username {creator name} --download [all|timeline|messages|stories]
 # Or using short flags
 ./fansly-scraper -u {creator name} -d [all|timeline|messages|stories]
+
+# Live Monitoring 
+./fansly-scraper --monitor {creator name}
+#Or with short flags
+./fansly-scraper -m {creator name}
 ```
 
 ## Updating
@@ -90,6 +95,8 @@ As this is a wip tool, new versions may be made available sporadically, I've avo
 For the time being:
 - It's recommended to leave m3u8_dl in the config set to false.
 - Press `ESC` once done downloading/(un)liking to be able to go back.
+
+Currently live monitoring is in development, if you use it, when a model goes live you'll have to start the program to start recording, you can then quit and it will keep recording. I'm planning on having it be a background service for monitoring and recording but that might be a while before it really comes to light.
 
 ### "Duplicate Files"
 

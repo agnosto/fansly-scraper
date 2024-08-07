@@ -91,19 +91,23 @@ func (ms *MonitoringService) saveState() {
 	}
 }
 
-func (ms *MonitoringService) ToggleMonitoring(modelID, username string) {
+func (ms *MonitoringService) ToggleMonitoring(modelID, username string) bool {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
 	if _, exists := ms.activeMonitors[modelID]; exists {
 		delete(ms.activeMonitors, modelID)
 		logger.Logger.Printf("Stopped monitoring %s", username)
+		ms.saveState()
+		return false
 	} else {
 		ms.activeMonitors[modelID] = username
 		logger.Logger.Printf("Started monitoring %s", username)
 		go ms.monitorModel(modelID, username)
+		ms.saveState()
+		return true
 	}
-	ms.saveState()
+	//ms.saveState()
 }
 
 func (ms *MonitoringService) monitorModel(modelID, username string) {
