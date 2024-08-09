@@ -2,8 +2,10 @@ package service
 
 import (
 	//"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	//"io"
@@ -12,6 +14,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	_ "modernc.org/sqlite"
 
 	"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/core"
@@ -37,6 +41,23 @@ func NewMonitoringService(storagePath string) *MonitoringService {
 	ms.loadActiveRecordings()
 	//go ms.runMonitoring()
 	return ms
+}
+
+func (ms *MonitoringService) saveLiveRecording(modelName, filename, streamID string) error {
+	cfg, err := config.LoadConfig(config.GetConfigPath())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	db, err := sql.Open("sqlite", filepath.Join(cfg.Options.SaveLocation, "downloads.db"))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = db.Exec(`INSERT INTO files (model, hash, path, file_type) VALUES (?, ?, ?, ?)`,
+		modelName, streamID, filename, "livestream")
+	return err
 }
 
 func (ms *MonitoringService) loadActiveRecordings() {
@@ -293,6 +314,10 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 		if err := ms.generateContactSheet(mp4Filename); err != nil {
 			logger.Logger.Printf("Error generating contact sheet for %s: %v", username, err)
 		}
+	}
+
+	if err := ms.saveLiveRecording(username, recordedFilename, streamData.StreamID); err != nil {
+		logger.Logger.Printf("Error saving live recording info for %s: %v", username, err)
 	}
 
 	logger.Logger.Printf("Recording complete for %s", username)

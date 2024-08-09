@@ -2,20 +2,20 @@ package download
 
 import (
 	//"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"log"
-    "bytes"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
-    "strconv"
 
-    "context"
-    "golang.org/x/sync/semaphore"
+	"context"
+	"golang.org/x/sync/semaphore"
 	//"github.com/grafov/m3u8"
 
 	//"github.com/agnosto/fansly-scraper/config"
@@ -25,76 +25,78 @@ import (
 var m3u8Semaphore = semaphore.NewWeighted(2) // Limit to 2 concurrent M3U8 downloads, shitop programming
 
 func GetM3U8Cookies(m3u8URL string) map[string]string {
-    return map[string]string{
-        "CloudFront-Key-Pair-Id": utils.GetQSValue(m3u8URL, "Key-Pair-Id"),
-        "CloudFront-Policy":      utils.GetQSValue(m3u8URL, "Policy"),
-        "CloudFront-Signature":   utils.GetQSValue(m3u8URL, "Signature"),
-    }
+	return map[string]string{
+		"CloudFront-Key-Pair-Id": utils.GetQSValue(m3u8URL, "Key-Pair-Id"),
+		"CloudFront-Policy":      utils.GetQSValue(m3u8URL, "Policy"),
+		"CloudFront-Signature":   utils.GetQSValue(m3u8URL, "Signature"),
+	}
 }
 
 func (d *Downloader) DownloadM3U8(ctx context.Context, modelName string, m3u8URL string, savePath string) error {
-    if err := m3u8Semaphore.Acquire(ctx, 1); err != nil {
-        return err
-    }
-    defer m3u8Semaphore.Release(1)
-    cookies := GetM3U8Cookies(m3u8URL)
-    baseURL, _ := utils.SplitURL(m3u8URL)
+	fileType := "video"
 
-    // Fetch M3U8 playlist
-    //log.Printf("Downloading M3U8 from URL: %s", m3u8URL)
-    playlistContent, err := fetchM3U8Playlist(m3u8URL, cookies)
-    //log.Printf("[DOWNLOAD M3U8] PlayList: %v", playlist)
-    if err != nil {
-        return err
-    }
+	if err := m3u8Semaphore.Acquire(ctx, 1); err != nil {
+		return err
+	}
+	defer m3u8Semaphore.Release(1)
+	cookies := GetM3U8Cookies(m3u8URL)
+	baseURL, _ := utils.SplitURL(m3u8URL)
 
-    //log.Printf("Playlist content:\n%s", playlistContent)
-    segmentURLs, err := parseM3U8Playlist(playlistContent, baseURL, cookies)
-    if err != nil {
-        return err
-    }
+	// Fetch M3U8 playlist
+	//log.Printf("Downloading M3U8 from URL: %s", m3u8URL)
+	playlistContent, err := fetchM3U8Playlist(m3u8URL, cookies)
+	//log.Printf("[DOWNLOAD M3U8] PlayList: %v", playlist)
+	if err != nil {
+		return err
+	}
 
-    // Download segments
-    //log.Printf("Extracted segment URLs: %v", segmentURLs)
-    segmentFiles, err := downloadSegments(ctx, segmentURLs, filepath.Dir(savePath), cookies)
-    //log.Printf("[DOWNLOAD M3U8] SegmentedFiles: %v", segmentFiles)
-    if err != nil {
-        return err
-    }
+	//log.Printf("Playlist content:\n%s", playlistContent)
+	segmentURLs, err := parseM3U8Playlist(playlistContent, baseURL, cookies)
+	if err != nil {
+		return err
+	}
 
-    // Combine segments using ffmpeg
-    outputFile := filepath.Join(filepath.Dir(savePath), filepath.Base(savePath))
-    err = combineSegments(segmentFiles, outputFile)
-    //log.Printf("[DOWNLOAD M3U8] OutputFile: %v, or Error: %v", outputFile, err)
-    if err != nil {
-        return err
-    }
+	// Download segments
+	//log.Printf("Extracted segment URLs: %v", segmentURLs)
+	segmentFiles, err := downloadSegments(ctx, segmentURLs, filepath.Dir(savePath), cookies)
+	//log.Printf("[DOWNLOAD M3U8] SegmentedFiles: %v", segmentFiles)
+	if err != nil {
+		return err
+	}
 
-    hashString, err := d.hashExistingFile(outputFile)
-    if err != nil {
-        return fmt.Errorf("error hashing M3U8 file: %w", err)
-    }
+	// Combine segments using ffmpeg
+	outputFile := filepath.Join(filepath.Dir(savePath), filepath.Base(savePath))
+	err = combineSegments(segmentFiles, outputFile)
+	//log.Printf("[DOWNLOAD M3U8] OutputFile: %v, or Error: %v", outputFile, err)
+	if err != nil {
+		return err
+	}
 
-    if err := d.saveFileHash(modelName, hashString, outputFile); err != nil {
-        return fmt.Errorf("error saving hash for M3U8 file: %w", err)
-    }
+	hashString, err := d.hashExistingFile(outputFile)
+	if err != nil {
+		return fmt.Errorf("error hashing M3U8 file: %w", err)
+	}
 
-    // Clean up segment files
-    for _, file := range segmentFiles {
-        os.Remove(file)
-    }
+	if err := d.saveFileHash(modelName, hashString, outputFile, fileType); err != nil {
+		return fmt.Errorf("error saving hash for M3U8 file: %w", err)
+	}
 
-    return nil
+	// Clean up segment files
+	for _, file := range segmentFiles {
+		os.Remove(file)
+	}
+
+	return nil
 }
 
 func fetchM3U8Playlist(m3u8URL string, cookies map[string]string) (string, error) {
-    req, err := http.NewRequest("GET", m3u8URL, nil)
+	req, err := http.NewRequest("GET", m3u8URL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Add cookies to the request
-    for name, value := range cookies {
+	for name, value := range cookies {
 		req.AddCookie(&http.Cookie{Name: name, Value: value})
 	}
 
@@ -123,11 +125,10 @@ func fetchM3U8Playlist(m3u8URL string, cookies map[string]string) (string, error
 	//	segmentURLs = append(segmentURLs, line)
 	//}
 
-    bodyBytes, err := io.ReadAll(resp.Body)
-    if err != nil {
-        return "", fmt.Errorf("error reading M3U8 playlist: %w", err)
-    }
-
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("error reading M3U8 playlist: %w", err)
+	}
 
 	// Check for errors during scanning
 	//if err := scanner.Err(); err != nil {
@@ -135,200 +136,200 @@ func fetchM3U8Playlist(m3u8URL string, cookies map[string]string) (string, error
 	//}
 
 	content := string(bodyBytes)
-    //log.Printf("Raw M3U8 content:\n%s", content)
+	//log.Printf("Raw M3U8 content:\n%s", content)
 
-    return content, nil
+	return content, nil
 }
 
 func parseM3U8Playlist(content, baseURL string, cookies map[string]string) ([]string, error) {
-    //var segmentURLs []string
-    lines := strings.Split(content, "\n")
-    var highestQualityURL string
-    var highestBandwidth int
+	//var segmentURLs []string
+	lines := strings.Split(content, "\n")
+	var highestQualityURL string
+	var highestBandwidth int
 
-    for i, line := range lines {
-        line = strings.TrimSpace(line)
-        if strings.HasPrefix(line, "#EXT-X-STREAM-INF:") {
-            bandwidthStr := strings.Split(strings.Split(line, "BANDWIDTH=")[1], ",")[0]
-            bandwidth, _ := strconv.Atoi(bandwidthStr)
-            if bandwidth > highestBandwidth {
-                highestBandwidth = bandwidth
-                highestQualityURL = strings.TrimSpace(lines[i+1])
-            }
-        }
-    }
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "#EXT-X-STREAM-INF:") {
+			bandwidthStr := strings.Split(strings.Split(line, "BANDWIDTH=")[1], ",")[0]
+			bandwidth, _ := strconv.Atoi(bandwidthStr)
+			if bandwidth > highestBandwidth {
+				highestBandwidth = bandwidth
+				highestQualityURL = strings.TrimSpace(lines[i+1])
+			}
+		}
+	}
 
-    if highestQualityURL != "" {
-        fullURL := baseURL + "/" + highestQualityURL
-        nestedContent, err := fetchM3U8Playlist(fullURL, cookies)
-        if err != nil {
-            return nil, err
-        }
-        return parseSegments(nestedContent, baseURL)
-    }
+	if highestQualityURL != "" {
+		fullURL := baseURL + "/" + highestQualityURL
+		nestedContent, err := fetchM3U8Playlist(fullURL, cookies)
+		if err != nil {
+			return nil, err
+		}
+		return parseSegments(nestedContent, baseURL)
+	}
 
-    return parseSegments(content, baseURL)
+	return parseSegments(content, baseURL)
 }
 
 func parseSegments(content, baseURL string) ([]string, error) {
-    var segmentURLs []string
-    lines := strings.Split(content, "\n")
-    for _, line := range lines {
-        line = strings.TrimSpace(line)
-        if !strings.HasPrefix(line, "#") && strings.HasSuffix(line, ".ts") {
-            if strings.HasPrefix(line, "http") {
-                segmentURLs = append(segmentURLs, line)
-            } else {
-                segmentURLs = append(segmentURLs, baseURL+"/"+line)
-            }
-        }
-    }
-    return segmentURLs, nil
+	var segmentURLs []string
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "#") && strings.HasSuffix(line, ".ts") {
+			if strings.HasPrefix(line, "http") {
+				segmentURLs = append(segmentURLs, line)
+			} else {
+				segmentURLs = append(segmentURLs, baseURL+"/"+line)
+			}
+		}
+	}
+	return segmentURLs, nil
 }
 
 func downloadSegments(ctx context.Context, segmentURLs []string, savePath string, cookies map[string]string) ([]string, error) {
-    var wg sync.WaitGroup
-    segmentFiles := make([]string, len(segmentURLs))
-    errors := make(chan error, len(segmentURLs))
+	var wg sync.WaitGroup
+	segmentFiles := make([]string, len(segmentURLs))
+	errors := make(chan error, len(segmentURLs))
 
-    sem := semaphore.NewWeighted(3)
+	sem := semaphore.NewWeighted(3)
 
-    for i, segmentURL := range segmentURLs {
-        wg.Add(1)
-        go func(i int, segmentURL string) {
-            defer wg.Done()
-            if err := sem.Acquire(ctx, 1); err != nil {
-                errors <- fmt.Errorf("failed to acquire semaphore: %w", err)
-                return
-            }
-            defer sem.Release(1)
+	for i, segmentURL := range segmentURLs {
+		wg.Add(1)
+		go func(i int, segmentURL string) {
+			defer wg.Done()
+			if err := sem.Acquire(ctx, 1); err != nil {
+				errors <- fmt.Errorf("failed to acquire semaphore: %w", err)
+				return
+			}
+			defer sem.Release(1)
 
-            fileName := filepath.Join(savePath, fmt.Sprintf("segment_%d.ts", i))
-            
-            err := downloadFile(ctx, segmentURL, fileName, cookies)
-            if err != nil {
-                log.Printf("Error downloading segment %d: %v", i, err)
-                errors <- err
-                return
-            }
-            
-            // Verify file size
-            fileInfo, err := os.Stat(fileName)
-            if err != nil {
-                log.Printf("Error checking file size for segment %d: %v", i, err)
-                errors <- err
-                return
-            }
-            if fileInfo.Size() == 0 {
-                log.Printf("Warning: Segment %d has zero size", i)
-                errors <- fmt.Errorf("segment %d has zero size", i)
-                return
-            }
-            
-            segmentFiles[i] = fileName
-            //log.Printf("Successfully downloaded segment %d", i)
-        }(i, segmentURL)
-    }
+			fileName := filepath.Join(savePath, fmt.Sprintf("segment_%d.ts", i))
 
-    wg.Wait()
-    close(errors)
+			err := downloadFile(ctx, segmentURL, fileName, cookies)
+			if err != nil {
+				log.Printf("Error downloading segment %d: %v", i, err)
+				errors <- err
+				return
+			}
 
-    var errs []error 
-    for err := range errors {
-        if err != nil {
-            errs = append(errs, err)
-        }
-    }
+			// Verify file size
+			fileInfo, err := os.Stat(fileName)
+			if err != nil {
+				log.Printf("Error checking file size for segment %d: %v", i, err)
+				errors <- err
+				return
+			}
+			if fileInfo.Size() == 0 {
+				log.Printf("Warning: Segment %d has zero size", i)
+				errors <- fmt.Errorf("segment %d has zero size", i)
+				return
+			}
 
-    // Check if all segments were downloaded successfully
-    for i, file := range segmentFiles {
-        if file == "" {
-            errs = append(errs, fmt.Errorf("segment %d failed to download", i))
-        }
-    }
+			segmentFiles[i] = fileName
+			//log.Printf("Successfully downloaded segment %d", i)
+		}(i, segmentURL)
+	}
 
-    if len(errs) > 0 {
-        return nil, fmt.Errorf("multiple errors occurred: %v", errs)
-    }
+	wg.Wait()
+	close(errors)
 
-    return segmentFiles, nil
+	var errs []error
+	for err := range errors {
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	// Check if all segments were downloaded successfully
+	for i, file := range segmentFiles {
+		if file == "" {
+			errs = append(errs, fmt.Errorf("segment %d failed to download", i))
+		}
+	}
+
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("multiple errors occurred: %v", errs)
+	}
+
+	return segmentFiles, nil
 }
 
 func downloadFile(ctx context.Context, url string, fileName string, cookies map[string]string) error {
-    client := &http.Client{}
-    req, err := http.NewRequest("GET", url, nil)
-    if err != nil {
-        return err
-    }
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return err
+	}
 
-    req = req.WithContext(ctx)
+	req = req.WithContext(ctx)
 
-    for k, v := range cookies {
-        req.AddCookie(&http.Cookie{Name: k, Value: v})
-    }
+	for k, v := range cookies {
+		req.AddCookie(&http.Cookie{Name: k, Value: v})
+	}
 
-    resp, err := client.Do(req)
-    if err != nil {
-        return err
-    }
-    defer resp.Body.Close()
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
 
-    out, err := os.Create(fileName)
-    if err != nil {
-        return err
-    }
-    defer out.Close()
+	out, err := os.Create(fileName)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
 
-    _, err = io.Copy(out, resp.Body)
-    return err
+	_, err = io.Copy(out, resp.Body)
+	return err
 }
 
 func combineSegments(segmentFiles []string, outputFile string) error {
-    tempFile, err := os.CreateTemp("", fmt.Sprintf("segments_list_%s_*.txt", filepath.Base(outputFile)))
-    if err != nil {
-        return fmt.Errorf("failed to create temporary file: %w", err)
-    }
-    defer os.Remove(tempFile.Name())
+	tempFile, err := os.CreateTemp("", fmt.Sprintf("segments_list_%s_*.txt", filepath.Base(outputFile)))
+	if err != nil {
+		return fmt.Errorf("failed to create temporary file: %w", err)
+	}
+	defer os.Remove(tempFile.Name())
 
-    _, err = fmt.Fprint(tempFile, "ffconcat version 1.0\n")
-    if err != nil {
-        return fmt.Errorf("failed to write to temporary file: %w", err)
-    }
+	_, err = fmt.Fprint(tempFile, "ffconcat version 1.0\n")
+	if err != nil {
+		return fmt.Errorf("failed to write to temporary file: %w", err)
+	}
 
-    for _, file := range segmentFiles {
-        // Use filepath.ToSlash to ensure consistent path separators
-        _, err := fmt.Fprintf(tempFile, "file '%s'\n", filepath.ToSlash(file))
-        if err != nil {
-            return fmt.Errorf("failed to write to temporary file: %w", err)
-        }
-    }
-    tempFile.Close()
+	for _, file := range segmentFiles {
+		// Use filepath.ToSlash to ensure consistent path separators
+		_, err := fmt.Fprintf(tempFile, "file '%s'\n", filepath.ToSlash(file))
+		if err != nil {
+			return fmt.Errorf("failed to write to temporary file: %w", err)
+		}
+	}
+	tempFile.Close()
 
-    // Log the content of the temporary file
-    //content, _ := os.ReadFile(tempFile.Name())
-    //log.Printf("FFmpeg input file content:\n%s", string(content))
+	// Log the content of the temporary file
+	//content, _ := os.ReadFile(tempFile.Name())
+	//log.Printf("FFmpeg input file content:\n%s", string(content))
 
-    args := []string{
-        "-f", "concat",
-        "-safe", "0",
-        "-i", tempFile.Name(),
-        "-c", "copy",
-        "-f", "mpegts",  // Explicitly specify input format
-        "-i", "pipe:0",  // Read from stdin
-        outputFile,
-    }
-    cmd := exec.Command("ffmpeg", args...)
-    var stdout, stderr bytes.Buffer
-    cmd.Stdout = &stdout
-    cmd.Stderr = &stderr
+	args := []string{
+		"-f", "concat",
+		"-safe", "0",
+		"-i", tempFile.Name(),
+		"-c", "copy",
+		"-f", "mpegts", // Explicitly specify input format
+		"-i", "pipe:0", // Read from stdin
+		outputFile,
+	}
+	cmd := exec.Command("ffmpeg", args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
-    err = cmd.Run()
-    if err != nil {
-        log.Printf("FFmpeg stdout: %s", stdout.String())
-        log.Printf("FFmpeg stderr: %s", stderr.String())
-        return fmt.Errorf("ffmpeg error: %v", err)
-    }
+	err = cmd.Run()
+	if err != nil {
+		log.Printf("FFmpeg stdout: %s", stdout.String())
+		log.Printf("FFmpeg stderr: %s", stderr.String())
+		return fmt.Errorf("ffmpeg error: %v", err)
+	}
 
-    //log.Printf("FFmpeg command: %v", cmd.Args)
-    return nil
+	//log.Printf("FFmpeg command: %v", cmd.Args)
+	return nil
 }

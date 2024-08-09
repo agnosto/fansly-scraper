@@ -33,3 +33,4 @@
 - [ ] Rethink about live monitoring (already have [this](https://github.com/agnosto/fansly-recorder) for recording lives, but might want to have this project use [services](https://github.com/kardianos/service) for managing lives? not really sure)
 - [ ] I guess also save a version of models pfp & banner
 - [ ] Add option to download purchases directly and save to model folder (default to creating purchases/{model id} if account is deleted)
+- [ ] Add simple web dashboard to view images and watch videos/lives (was contemplating on adding but maybe down the line)
