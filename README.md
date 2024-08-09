@@ -93,7 +93,7 @@ As this is a wip tool, new versions may be made available sporadically, I've avo
 <small>Maybe also a faq of sorts</small>
 
 For the time being:
-- It's recommended to leave m3u8_dl in the config set to false.
+- It's recommended to leave m3u8_dl in the config set to false while being tested. Do feel free to enable to give input/issues with it if you want.
 - Press `ESC` once done downloading/(un)liking to be able to go back.
 
 Currently live monitoring is in development, if you use it, when a model goes live you'll have to start the program to start recording, you can then quit and it will keep recording. I'm planning on having it be a background service for monitoring and recording but that might be a while before it really comes to light.
