@@ -3,7 +3,10 @@ layout {
         plugin location="tab-bar"
     } 
     pane split_direction="vertical" {
-        pane edit="fansly-scraper.go"
+        //pane edit="./cmd/fansly-scraper/main.go"
+        pane command="nvim" {
+            args "./cmd/fansly-scraper/main.go"
+        }
         pane command="go" {
             args "run" "main.go"
             start_suspended true
