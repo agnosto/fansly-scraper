@@ -60,11 +60,17 @@ Simply run the program to launch the tui:
 # Or using short flags
 ./fansly-scraper -u {creator name} -d [all|timeline|messages|stories]
 
-# Live Monitoring 
+# Add Models to Live Monitoring 
 ./fansly-scraper --monitor {creator name}
 #Or with short flags
 ./fansly-scraper -m {creator name}
+
+# Live Monitoring Control
+./fansly-scraper monitor [start|stop]
 ```
+> [!NOTE]
+> Live monitoring requires an active running shell/terminal session, you can use something like [zellij](https://github.com/zellij-org/zellij)/[tmux](https://github.com/tmux/tmux/wiki). I may go back to the idea of having it be a background service, but for the time being just implemented as a go version of my [fansly-recorder](https://github.com/agnosto/fansly-recorder) script.
+
 
 ## Updating
 
@@ -81,10 +87,21 @@ As this is a wip tool, new versions may be made available sporadically, I've avo
 2. In network request, type `method:GET api` and click one of the requests
 3. Look under `Request Headers` and look for `Authorization` and copy the value
 
-### Method 2 (Recommended) :
+### Method 2:
 1. Go to [fansly](https://fansly.com) and login and open devtools (ctrl+shift+i / F12)
 2. Click on `Storage` and then `Local Storage`
 3. Look for `session_active_session` and copy the `token` value
+
+### Method 3 (Recommended) special thanks to [prof79](https://github.com/prof79/)'s wiki for this:
+1. Go to [fansly](https://fansly.com) and login and open devtools (ctrl+shift+i / F12)
+2. In devtools, go to the Console Tab and Paste the following: 
+```javascript
+console.clear(); // cleanup console
+const activeSession = localStorage.getItem("session_active_session"); // get required key
+const { token } = JSON.parse(activeSession); // parse the json data
+console.log('%c➡️ Authorization_Token =', 'font-size: 12px; color: limegreen; font-weight: bold;', token); // show token
+console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weight: bold;', navigator.userAgent); // show user-agent
+```
 
 (images at a later date)
 
@@ -95,8 +112,6 @@ As this is a wip tool, new versions may be made available sporadically, I've avo
 For the time being:
 - It's recommended to leave m3u8_dl in the config set to false while being tested. Do feel free to enable to give input/issues with it if you want.
 - Press `ESC` once done downloading/(un)liking to be able to go back.
-
-Currently live monitoring is in development, if you use it, when a model goes live you'll have to start the program to start recording, you can then quit and it will keep recording. I'm planning on having it be a background service for monitoring and recording but that might be a while before it really comes to light.
 
 ### "Duplicate Files"
 

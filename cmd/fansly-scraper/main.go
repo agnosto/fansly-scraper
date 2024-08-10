@@ -10,12 +10,15 @@ import (
 	"github.com/agnosto/fansly-scraper/service"
 	"github.com/agnosto/fansly-scraper/ui"
 	"github.com/agnosto/fansly-scraper/updater"
-	ksvc "github.com/kardianos/service"
+	//ksvc "github.com/kardianos/service"
 
 	"context"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"strconv"
+	"syscall"
 	//"flag"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -23,7 +26,7 @@ import (
 
 var ffmpegAvailable bool
 
-const version = "v0.2.4"
+const version = "v0.2.6"
 
 func main() {
 	flags, subcommand := cmd.ParseFlags()
@@ -43,70 +46,92 @@ func main() {
 	case "service":
 		cmd.RunService()
 		return
-	}
-
-	if flags.Service != "" {
-		prg := &cmd.Program{}
-		s, err := ksvc.New(prg, &ksvc.Config{
-			Name:        "FanslyScraper",
-			DisplayName: "Fansly Scraper Service",
-			Description: "This service monitors and records Fansly streams.",
-		})
-		if err != nil {
-			fmt.Printf("Error creating service: %v\n", err)
-			os.Exit(1)
-		}
-
-		switch flags.Service {
-		case "install":
-			err = s.Install()
-			if err != nil {
-				fmt.Printf("Error installing service: %v\n", err)
-			} else {
-				fmt.Println("Service installed successfully")
-			}
-		case "uninstall":
-			err = s.Uninstall()
-			if err != nil {
-				fmt.Printf("Error uninstalling service: %v\n", err)
-			} else {
-				fmt.Println("Service uninstalled successfully")
-			}
+	case "monitor":
+		switch flags.MonitorCommand {
 		case "start":
-			err = s.Start()
-			if err != nil {
-				fmt.Printf("Error starting service: %v\n", err)
-			} else {
-				fmt.Println("Service started successfully")
-			}
+			startMonitoring()
 		case "stop":
-			err = s.Stop()
-			if err != nil {
-				fmt.Printf("Error stopping service: %v\n", err)
-			} else {
-				fmt.Println("Service stopped successfully")
-			}
-
-		case "restart":
-			err = s.Restart()
-			if err != nil {
-				fmt.Printf("Error restarting service: %v\n", err)
-			} else {
-				fmt.Println("Service restarted successfully")
-			}
-		case "status":
-			status, err := s.Status()
-			if err != nil {
-				fmt.Printf("Error getting service status: %v\n", err)
-			} else {
-				fmt.Printf("Service status: %v\n", status)
-			}
+			stopMonitoring()
 		default:
-			fmt.Printf("Unknown service command: %s\n", flags.Service)
-			os.Exit(1)
+			fmt.Println("Usage: ./fansly-scraper monitor [start|stop]")
 		}
 		return
 	}
+
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-signalChan
+		fmt.Println("Received interrupt signal. Shutting down...")
+		stopMonitoring()
+		cleanupRecordings()
+		os.Exit(0)
+	}()
+
+	/*
+		if flags.Service != "" {
+			prg := &cmd.Program{}
+			s, err := ksvc.New(prg, &ksvc.Config{
+				Name:        "FanslyScraper",
+				DisplayName: "Fansly Scraper Service",
+				Description: "This service monitors and records Fansly streams.",
+			})
+			if err != nil {
+				fmt.Printf("Error creating service: %v\n", err)
+				os.Exit(1)
+			}
+
+			switch flags.Service {
+			case "install":
+				err = s.Install()
+				if err != nil {
+					fmt.Printf("Error installing service: %v\n", err)
+				} else {
+					fmt.Println("Service installed successfully")
+				}
+			case "uninstall":
+				err = s.Uninstall()
+				if err != nil {
+					fmt.Printf("Error uninstalling service: %v\n", err)
+				} else {
+					fmt.Println("Service uninstalled successfully")
+				}
+			case "start":
+				err = s.Start()
+				if err != nil {
+					fmt.Printf("Error starting service: %v\n", err)
+				} else {
+					fmt.Println("Service started successfully")
+				}
+			case "stop":
+				err = s.Stop()
+				if err != nil {
+					fmt.Printf("Error stopping service: %v\n", err)
+				} else {
+					fmt.Println("Service stopped successfully")
+				}
+
+			case "restart":
+				err = s.Restart()
+				if err != nil {
+					fmt.Printf("Error restarting service: %v\n", err)
+				} else {
+					fmt.Println("Service restarted successfully")
+				}
+			case "status":
+				status, err := s.Status()
+				if err != nil {
+					fmt.Printf("Error getting service status: %v\n", err)
+				} else {
+					fmt.Printf("Service status: %v\n", status)
+				}
+			default:
+				fmt.Printf("Unknown service command: %s\n", flags.Service)
+				os.Exit(1)
+			}
+			return
+		}
+	*/
 
 	err := config.EnsureConfigExists(config.GetConfigPath())
 	if err != nil {
@@ -141,7 +166,10 @@ func main() {
 		return
 	}
 
-	monitoringService := service.NewMonitoringService(filepath.Join(config.GetConfigDir(), "monitoring_state.json"))
+	monitoringService := service.NewMonitoringService(
+		filepath.Join(config.GetConfigDir(), "monitoring_state.json"),
+		logger.Logger,
+	)
 
 	if flags.Monitor != "" {
 		modelID, err := core.GetModelIDFromUsername(flags.Monitor)
@@ -199,5 +227,87 @@ func runCLIMode(username string, downloadType string, downloader *download.Downl
 	default:
 		logger.Logger.Printf("Invalid download type. Use 'all', 'timeline', or 'messages'")
 		os.Exit(1)
+	}
+}
+
+func startMonitoring() {
+	pidFile := filepath.Join(config.GetConfigDir(), "monitor.pid")
+	if _, err := os.Stat(pidFile); err == nil {
+		fmt.Println("Monitoring process is already running.")
+		return
+	}
+
+	pid := os.Getpid()
+	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", pid)), 0644); err != nil {
+		fmt.Printf("Error writing PID file: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Started monitoring process with PID %d\n", pid)
+
+	monitoringService := service.NewMonitoringService(
+		filepath.Join(config.GetConfigDir(), "monitoring_state.json"),
+		logger.Logger,
+	)
+	go monitoringService.Run() // Run in a goroutine to allow the main process to continue
+
+	// Keep the main process running
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
+	<-signalChan
+
+	stopMonitoring()
+}
+
+func stopMonitoring() {
+	pidFile := filepath.Join(config.GetConfigDir(), "monitor.pid")
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		fmt.Println("No monitoring process is running.")
+		return
+	}
+
+	pid, err := strconv.Atoi(string(data))
+	if err != nil {
+		fmt.Printf("Error reading PID: %v\n", err)
+		return
+	}
+
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		fmt.Printf("Error finding process: %v\n", err)
+		return
+	}
+
+	if err := process.Signal(os.Interrupt); err != nil {
+		fmt.Printf("Error stopping process: %v\n", err)
+		return
+	}
+
+	if err := os.Remove(pidFile); err != nil {
+		fmt.Printf("Error removing PID file: %v\n", err)
+		return
+	}
+
+	fmt.Println("Monitoring process stopped.")
+}
+
+func cleanupRecordings() {
+	recordingsPath := filepath.Join(config.GetConfigDir(), "recordings")
+	files, err := os.ReadDir(recordingsPath)
+	if err != nil {
+		fmt.Printf("Error reading recordings directory: %v\n", err)
+		return
+	}
+
+	for _, file := range files {
+		if filepath.Ext(file.Name()) == ".lock" {
+			lockFile := filepath.Join(recordingsPath, file.Name())
+			if err := os.Remove(lockFile); err != nil {
+				fmt.Printf("Error removing lock file %s: %v\n", lockFile, err)
+			} else {
+				fmt.Printf("Removed lock file: %s\n", lockFile)
+			}
+		}
 	}
 }

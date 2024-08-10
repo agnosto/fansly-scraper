@@ -40,7 +40,10 @@ func RunService() {
 		return
 	}
 
-	monitoringService := service.NewMonitoringService(filepath.Join(config.GetConfigDir(), "monitoring_state.json"))
+	monitoringService := service.NewMonitoringService(
+		filepath.Join(config.GetConfigDir(), "monitoring_state.json"),
+		logger.Logger,
+	)
 
 	prg := &Program{
 		monitoringService: monitoringService,

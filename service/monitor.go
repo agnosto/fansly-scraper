@@ -6,15 +6,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 
 	//"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
+	"github.com/fatih/color"
 	_ "modernc.org/sqlite"
 
 	"github.com/agnosto/fansly-scraper/config"
@@ -28,17 +31,22 @@ type MonitoringService struct {
 	activeRecordings map[string]bool
 	storagePath      string
 	recordingsPath   string
+	stopChan         chan struct{}
+	logger           *log.Logger
 }
 
-func NewMonitoringService(storagePath string) *MonitoringService {
+func NewMonitoringService(storagePath string, logger *log.Logger) *MonitoringService {
 	ms := &MonitoringService{
 		activeMonitors:   make(map[string]string),
 		activeRecordings: make(map[string]bool),
 		storagePath:      storagePath,
-		recordingsPath:   filepath.Join(filepath.Dir(storagePath), "active_recordings.json"),
+		//recordingsPath:   storagePath,
+		recordingsPath: filepath.Join(filepath.Dir(storagePath), "active_recordings"),
+		stopChan:       make(chan struct{}),
+		logger:         logger,
 	}
 	ms.loadState()
-	ms.loadActiveRecordings()
+	//ms.loadActiveRecordings()
 	//go ms.runMonitoring()
 	return ms
 }
@@ -132,27 +140,37 @@ func (ms *MonitoringService) ToggleMonitoring(modelID, username string) bool {
 }
 
 func (ms *MonitoringService) monitorModel(modelID, username string) {
-	logger.Logger.Printf("Starting to monitor %s (%s)", username, modelID)
+	fmt.Printf("Starting to monitor %s (%s)\n", username, modelID)
 	for ms.IsMonitoring(modelID) {
 		isLive, playbackUrl, err := core.CheckIfModelIsLive(modelID)
 		if err != nil {
-			logger.Logger.Printf("Error checking if %s is live: %v", username, err)
+			//logger.Logger.Printf("Error checking if %s is live: %v", username, err)
+			fmt.Printf("Error checking if %s is live: %v\n", username, err)
 		} else if isLive {
-			logger.Logger.Printf("%s is live. Attempting to start recording.", username)
-			ms.mu.Lock()
-			isRecording := ms.activeRecordings[modelID]
-			ms.mu.Unlock()
-			if !isRecording {
+			//logger.Logger.Printf("%s is live. Attempting to start recording.", username)
+			printColoredMessage(fmt.Sprintf("%s is live. Attempting to start recording.", username), true)
+			lockFile := filepath.Join(ms.recordingsPath, modelID+".lock")
+			err = os.MkdirAll(ms.recordingsPath, 0755)
+			if err != nil {
+				return
+			}
+			//ms.mu.Lock()
+			//isRecording := ms.activeRecordings[modelID]
+			//ms.mu.Unlock()
+			if _, err := os.Stat(lockFile); os.IsNotExist(err) {
 				go ms.startRecording(modelID, username, playbackUrl)
 			} else {
-				logger.Logger.Printf("%s is already being recorded", username)
+				//logger.Logger.Printf("%s is already being recorded", username)
+				fmt.Printf("%s is already being recorded\n", username)
 			}
 		} else {
-			logger.Logger.Printf("%s is not live. Checking again in 2 minutes.", username)
+			//logger.Logger.Printf("%s is not live. Checking again in 2 minutes.", username)
+			printColoredMessage(fmt.Sprintf("%s is not live. Checking again in 2 minutes.", username), false)
 		}
 		time.Sleep(2 * time.Minute)
 	}
-	logger.Logger.Printf("Stopped monitoring %s (%s)", username, modelID)
+	//logger.Logger.Printf("Stopped monitoring %s (%s)", username, modelID)
+	fmt.Printf("Stopped monitoring %s (%s)\n", username, modelID)
 }
 
 func isProcessRunning(name string) bool {
@@ -192,27 +210,52 @@ func (ms *MonitoringService) runMonitoring(username) {
 */
 
 func (ms *MonitoringService) startRecording(modelID, username, playbackUrl string) {
-	ms.mu.Lock()
-	if ms.activeRecordings[modelID] {
-		ms.mu.Unlock()
-		logger.Logger.Printf("%s is already being recorded", username)
+	lockFile := filepath.Join(ms.recordingsPath, modelID+".lock")
+
+	// Check if a lock file exists
+	if _, err := os.Stat(lockFile); err == nil {
+		//ms.logger.Printf("%s is already being recorded", username)
+		fmt.Printf("%s is already being recorded", username)
 		return
 	}
-	ms.activeRecordings[modelID] = true
-	ms.saveActiveRecordings()
-	ms.mu.Unlock()
 
-	defer func() {
+	// Create a lock file
+	if err := os.WriteFile(lockFile, []byte(strconv.Itoa(os.Getpid())), 0644); err != nil {
+		//ms.logger.Printf("Error creating lock file for %s: %v", username, err)
+		fmt.Printf("Error creating lock file for %s: %v", username, err)
+		return
+	}
+
+	/*
 		ms.mu.Lock()
-		delete(ms.activeRecordings, modelID)
+		if ms.activeRecordings[modelID] {
+			ms.mu.Unlock()
+			//logger.Logger.Printf("%s is already being recorded", username)
+			fmt.Printf("%s is already being recorded\n", username)
+			return
+		}
+		ms.activeRecordings[modelID] = true
 		ms.saveActiveRecordings()
 		ms.mu.Unlock()
-		logger.Logger.Printf("Finished recording for %s", username)
+	*/
+
+	defer func() {
+		if err := os.Remove(lockFile); err != nil {
+			ms.logger.Printf("Error removing lock file for %s: %v", username, err)
+		}
+		/*
+			ms.mu.Lock()
+			delete(ms.activeRecordings, modelID)
+			ms.saveActiveRecordings()
+			ms.mu.Unlock()
+		*/
+		//logger.Logger.Printf("Finished recording for %s", username)
+		fmt.Printf("Finished recording for %s\n", username)
 	}()
 
 	// Fetch stream data
 	streamData, err := core.GetStreamData(modelID)
-	logger.Logger.Printf("STREAM DATA: %v", streamData)
+	//logger.Logger.Printf("STREAM DATA: %v", streamData)
 	if err != nil {
 		logger.Logger.Printf("Error fetching stream data for %s: %v", modelID, err)
 		return
@@ -239,7 +282,8 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 	recordedFilename := filepath.Join(dir, filename+cfg.Options.VODsFileExtension)
 	cmd := exec.Command("ffmpeg", "-i", playbackUrl, "-c", "copy", "-movflags", "use_metadata_tags", "-map_metadata", "0", "-timeout", "300", "-reconnect", "300", "-reconnect_at_eof", "300", "-reconnect_streamed", "300", "-reconnect_delay_max", "300", "-rtmp_live", "live", recordedFilename)
 
-	logger.Logger.Printf("Starting recording for %s", username)
+	//logger.Logger.Printf("Starting recording for %s", username)
+	fmt.Printf("Starting recording for %s", username)
 	err = cmd.Start()
 	if err != nil {
 		logger.Logger.Printf("Error starting ffmpeg for %s: %v", username, err)
@@ -292,7 +336,8 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 	if err != nil {
 		logger.Logger.Printf("Error during ffmpeg recording for %s: %v", username, err)
 	} else {
-		logger.Logger.Printf("Recording process completed for %s", username)
+		//logger.Logger.Printf("Recording process completed for %s", username)
+		fmt.Printf("Recording process completed for %s\n", username)
 	}
 
 	// Convert to MP4 if needed
@@ -320,7 +365,8 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 		logger.Logger.Printf("Error saving live recording info for %s: %v", username, err)
 	}
 
-	logger.Logger.Printf("Recording complete for %s", username)
+	//logger.Logger.Printf("Recording complete for %s", username)
+	fmt.Printf("Recording complete for %s\n", username)
 }
 
 func (ms *MonitoringService) convertToMP4(tsFilename, mp4Filename string) error {
@@ -342,37 +388,59 @@ func (ms *MonitoringService) generateContactSheet(mp4Filename string) error {
 }
 
 func (ms *MonitoringService) Run() {
+	fmt.Printf("Starting monitoring service\n")
 	ms.loadState()
-	ms.loadActiveRecordings()
+	//ms.loadActiveRecordings()
 
-	if isProcessRunning("ffmpeg") {
-		logger.Logger.Println("Existing ffmpeg processes detected. Assuming recordings are in progress.")
-	}
-
-	sem := make(chan struct{}, 5)
+	ticker := time.NewTicker(2 * time.Minute)
+	defer ticker.Stop()
 
 	for {
-		ms.mu.Lock()
-		models := make([]struct{ id, username string }, 0, len(ms.activeMonitors))
-		for modelID, username := range ms.activeMonitors {
-			models = append(models, struct{ id, username string }{modelID, username})
+		select {
+		case <-ticker.C:
+			clearTerminal()
+			ms.checkModels()
+		case <-ms.stopChan:
+			return
 		}
-		ms.mu.Unlock()
+	}
+}
 
-		for _, model := range models {
-			sem <- struct{}{}
-			go func(id, username string) {
-				defer func() { <-sem }()
-				ms.monitorModel(id, username)
-			}(model.id, model.username)
-		}
+func (ms *MonitoringService) checkModels() {
+	ms.mu.Lock()
+	models := make([]struct{ id, username string }, 0, len(ms.activeMonitors))
+	for modelID, username := range ms.activeMonitors {
+		models = append(models, struct{ id, username string }{modelID, username})
+	}
+	ms.mu.Unlock()
 
-		time.Sleep(2 * time.Minute)
+	for _, model := range models {
+		go ms.monitorModel(model.id, model.username)
 	}
 }
 
 func (ms *MonitoringService) Shutdown() {
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
-	ms.saveState()
+	close(ms.stopChan)
+	//ms.mu.Lock()
+	//defer ms.mu.Unlock()
+	//ms.saveState()
+}
+
+func clearTerminal() {
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("cmd", "/c", "cls")
+	} else {
+		cmd = exec.Command("clear")
+	}
+	cmd.Stdout = os.Stdout
+	cmd.Run()
+}
+
+func printColoredMessage(message string, isLive bool) {
+	if isLive {
+		color.Green(message)
+	} else {
+		color.Red(message)
+	}
 }
