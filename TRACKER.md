@@ -34,3 +34,4 @@
 - [ ] I guess also save a version of models pfp & banner
 - [ ] Add option to download purchases directly and save to model folder (default to creating purchases/{model id} if account is deleted)
 - [ ] Add simple web dashboard to view images and watch videos/lives (was contemplating on adding but maybe down the line)
+- [ ] Fix livestream recording as a service to save/convert in background (i might just make it a go version of my python script but allow multiple models eg ./fansly-scraper -m user1 user2 user3 user4 instead of a service)
