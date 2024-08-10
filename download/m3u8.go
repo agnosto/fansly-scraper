@@ -7,8 +7,10 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	//"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -19,6 +21,7 @@ import (
 	//"github.com/grafov/m3u8"
 
 	//"github.com/agnosto/fansly-scraper/config"
+	"github.com/agnosto/fansly-scraper/logger"
 	"github.com/agnosto/fansly-scraper/utils"
 )
 
@@ -40,7 +43,7 @@ func (d *Downloader) DownloadM3U8(ctx context.Context, modelName string, m3u8URL
 	}
 	defer m3u8Semaphore.Release(1)
 	cookies := GetM3U8Cookies(m3u8URL)
-	baseURL, _ := utils.SplitURL(m3u8URL)
+	//baseURL, _ := utils.SplitURL(m3u8URL)
 
 	// Fetch M3U8 playlist
 	//log.Printf("Downloading M3U8 from URL: %s", m3u8URL)
@@ -51,7 +54,7 @@ func (d *Downloader) DownloadM3U8(ctx context.Context, modelName string, m3u8URL
 	}
 
 	//log.Printf("Playlist content:\n%s", playlistContent)
-	segmentURLs, err := parseM3U8Playlist(playlistContent, baseURL, cookies)
+	segmentURLs, err := parseM3U8Playlist(playlistContent, m3u8URL, cookies)
 	if err != nil {
 		return err
 	}
@@ -141,49 +144,107 @@ func fetchM3U8Playlist(m3u8URL string, cookies map[string]string) (string, error
 	return content, nil
 }
 
-func parseM3U8Playlist(content, baseURL string, cookies map[string]string) ([]string, error) {
-	//var segmentURLs []string
+func parseM3U8Playlist(content, m3u8URL string, cookies map[string]string) ([]string, error) {
+	baseURL, err := url.Parse(m3u8URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse m3u8 URL: %w", err)
+	}
+
 	lines := strings.Split(content, "\n")
 	var highestQualityURL string
 	var highestBandwidth int
 
-	for i, line := range lines {
-		line = strings.TrimSpace(line)
+	// Check if this is a master playlist
+	isMasterPlaylist := false
+	for _, line := range lines {
 		if strings.HasPrefix(line, "#EXT-X-STREAM-INF:") {
-			bandwidthStr := strings.Split(strings.Split(line, "BANDWIDTH=")[1], ",")[0]
-			bandwidth, _ := strconv.Atoi(bandwidthStr)
-			if bandwidth > highestBandwidth {
-				highestBandwidth = bandwidth
-				highestQualityURL = strings.TrimSpace(lines[i+1])
+			isMasterPlaylist = true
+			break
+		}
+	}
+
+	//log.Printf("Is master playlist: %v", isMasterPlaylist)
+
+	if isMasterPlaylist {
+		for i, line := range lines {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "#EXT-X-STREAM-INF:") {
+				bandwidthStr := strings.Split(strings.Split(line, "BANDWIDTH=")[1], ",")[0]
+				bandwidth, _ := strconv.Atoi(bandwidthStr)
+				if bandwidth > highestBandwidth {
+					highestBandwidth = bandwidth
+					highestQualityURL = strings.TrimSpace(lines[i+1])
+				}
 			}
 		}
-	}
 
-	if highestQualityURL != "" {
-		fullURL := baseURL + "/" + highestQualityURL
-		nestedContent, err := fetchM3U8Playlist(fullURL, cookies)
-		if err != nil {
-			return nil, err
+		logger.Logger.Printf("Highest quality URL: %s", highestQualityURL)
+
+		if highestQualityURL != "" {
+			// Construct the full URL for the highest quality stream
+			newURL, err := url.Parse(highestQualityURL)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse highest quality URL: %w", err)
+			}
+			newURL = baseURL.ResolveReference(newURL)
+
+			// Preserve query parameters
+			newURL.RawQuery = baseURL.RawQuery
+
+			logger.Logger.Printf("Fetching media playlist from: %s", newURL.String())
+
+			// Fetch the media playlist
+			nestedContent, err := fetchM3U8Playlist(newURL.String(), cookies)
+			if err != nil {
+				return nil, fmt.Errorf("failed to fetch media playlist: %w", err)
+			}
+
+			//logger.Logger.Printf("Media playlist content:\n%s", nestedContent)
+
+			return parseM3U8Playlist(nestedContent, newURL.String(), cookies)
 		}
-		return parseSegments(nestedContent, baseURL)
 	}
 
-	return parseSegments(content, baseURL)
+	// If it's not a master playlist or we couldn't find a higher quality stream,
+	// parse the segments directly
+	//log.Printf("Parsing segments directly")
+	return parseSegments(content, m3u8URL)
 }
 
 func parseSegments(content, baseURL string) ([]string, error) {
+	baseURLParsed, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse base URL: %w", err)
+	}
+
 	var segmentURLs []string
 	lines := strings.Split(content, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "#") && strings.HasSuffix(line, ".ts") {
-			if strings.HasPrefix(line, "http") {
-				segmentURLs = append(segmentURLs, line)
-			} else {
-				segmentURLs = append(segmentURLs, baseURL+"/"+line)
+		if !strings.HasPrefix(line, "#") && (strings.HasSuffix(line, ".ts") || strings.HasSuffix(line, ".m3u8") || strings.HasSuffix(line, ".m4s")) {
+			segmentURL, err := url.Parse(line)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse segment URL: %w", err)
 			}
+
+			if !segmentURL.IsAbs() {
+				segmentURL = baseURLParsed.ResolveReference(segmentURL)
+			}
+
+			// Preserve query parameters
+			if segmentURL.RawQuery == "" {
+				segmentURL.RawQuery = baseURLParsed.RawQuery
+			}
+
+			segmentURLs = append(segmentURLs, segmentURL.String())
 		}
 	}
+
+	//log.Printf("Found %d segment URLs", len(segmentURLs))
+	for i, url := range segmentURLs {
+		logger.Logger.Printf("Segment %d: %s", i, url)
+	}
+
 	return segmentURLs, nil
 }
 
@@ -193,6 +254,8 @@ func downloadSegments(ctx context.Context, segmentURLs []string, savePath string
 	errors := make(chan error, len(segmentURLs))
 
 	sem := semaphore.NewWeighted(3)
+
+	//log.Printf("Attempting to download %d segments", len(segmentURLs))
 
 	for i, segmentURL := range segmentURLs {
 		wg.Add(1)
@@ -227,7 +290,7 @@ func downloadSegments(ctx context.Context, segmentURLs []string, savePath string
 			}
 
 			segmentFiles[i] = fileName
-			//log.Printf("Successfully downloaded segment %d", i)
+			//log.Printf("Successfully downloaded segment %d: %s", i, fileName)
 		}(i, segmentURL)
 	}
 
@@ -242,11 +305,16 @@ func downloadSegments(ctx context.Context, segmentURLs []string, savePath string
 	}
 
 	// Check if all segments were downloaded successfully
+	successfulDownloads := 0
 	for i, file := range segmentFiles {
 		if file == "" {
 			errs = append(errs, fmt.Errorf("segment %d failed to download", i))
+		} else {
+			successfulDownloads++
 		}
 	}
+
+	//log.Printf("Successfully downloaded %d out of %d segments", successfulDownloads, len(segmentURLs))
 
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("multiple errors occurred: %v", errs)
@@ -256,6 +324,7 @@ func downloadSegments(ctx context.Context, segmentURLs []string, savePath string
 }
 
 func downloadFile(ctx context.Context, url string, fileName string, cookies map[string]string) error {
+	logger.Logger.Printf("Downloading file: %s to %s", url, fileName)
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -280,8 +349,13 @@ func downloadFile(ctx context.Context, url string, fileName string, cookies map[
 	}
 	defer out.Close()
 
-	_, err = io.Copy(out, resp.Body)
-	return err
+	written, err := io.Copy(out, resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+
+	logger.Logger.Printf("Successfully downloaded %s (%d bytes)", fileName, written)
+	return nil
 }
 
 func combineSegments(segmentFiles []string, outputFile string) error {
@@ -297,8 +371,12 @@ func combineSegments(segmentFiles []string, outputFile string) error {
 	}
 
 	for _, file := range segmentFiles {
+		absPath, err := filepath.Abs(file)
+		if err != nil {
+			return fmt.Errorf("failed to get absolute path: %w", err)
+		}
 		// Use filepath.ToSlash to ensure consistent path separators
-		_, err := fmt.Fprintf(tempFile, "file '%s'\n", filepath.ToSlash(file))
+		_, err = fmt.Fprintf(tempFile, "file '%s'\n", filepath.ToSlash(absPath))
 		if err != nil {
 			return fmt.Errorf("failed to write to temporary file: %w", err)
 		}

@@ -433,19 +433,22 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 		}
 		// Check if it's a master M3U8
 		//log.Printf("[M3U8 CHECK] URL: %v", fullUrl)
-		isMaster, err := d.isMasterM3U8(fullUrl)
-		if err != nil {
-			return fmt.Errorf("error checking M3U8 type: %v", err)
-		}
+		/*
+			isMaster, err := d.isMasterM3U8(fullUrl)
+			if err != nil {
+				return fmt.Errorf("error checking M3U8 type: %v", err)
+			}
 
-		if isMaster {
-			// If it's a master M3U8, use the original media URL
-			d.progressBar.Describe(fmt.Sprintf("[yellow]Master M3U8 detected[reset], using original URL for %s", fileName))
-			return d.downloadRegularFile(item.Locations[0].Location, filePath, modelName, fileType)
-		} else {
-			// If it's a media M3U8, proceed with M3U8 download
-			return d.DownloadM3U8(ctx, modelName, fullUrl, filePath)
-		}
+			if isMaster {
+				// If it's a master M3U8, use the original media URL
+				d.progressBar.Describe(fmt.Sprintf("[yellow]Master M3U8 detected[reset], using original URL for %s", fileName))
+				return d.downloadRegularFile(item.Locations[0].Location, filePath, modelName, fileType)
+			} else {
+				// If it's a media M3U8, proceed with M3U8 download
+				return d.DownloadM3U8(ctx, modelName, fullUrl, filePath)
+			}
+		*/
+		return d.DownloadM3U8(ctx, modelName, fullUrl, filePath)
 	}
 
 	d.downloadRegularFile(mediaUrl, filePath, modelName, fileType)
@@ -499,13 +502,14 @@ func (d *Downloader) downloadWithRetry(url string) (*http.Response, error) {
 
 func (d *Downloader) isMasterM3U8(url string) (bool, error) {
 	//log.Printf("[M3U8 URL FOR DL] URL: %v\n", url)
+	logger.Logger.Printf("[DEBUG] M3U8 URL: %v", url)
 	content, err := fetchM3U8Playlist(url, GetM3U8Cookies(url))
 	if err != nil {
 		return false, err
 	}
 
 	//log.Printf("[Master M3U8 Check] M3U8 Content: %v", content)
-	//logger.Logger.Printf("[DEBUG] M3U8 Content: %v", content)
+	logger.Logger.Printf("[DEBUG] M3U8 Content: %v", content)
 	return strings.Contains(content, "#EXT-X-I-FRAME-STREAM-INF:"), nil
 }
 
