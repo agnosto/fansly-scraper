@@ -22,6 +22,7 @@
 
 ## ToDo:
 
+- [ ] Fix monitoring service starting on app launch 
 - [ ] Fix editing config option (broke in refactor lol)
 - [ ] Fix m3u8 downloading for potential higher quality
 - [ ] Fix sometimes saving video extension to images and vice versa
