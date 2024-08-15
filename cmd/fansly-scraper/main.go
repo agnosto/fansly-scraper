@@ -26,7 +26,7 @@ import (
 
 var ffmpegAvailable bool
 
-const version = "v0.2.6"
+const version = "v0.2.7"
 
 func main() {
 	flags, subcommand := cmd.ParseFlags()
@@ -67,71 +67,6 @@ func main() {
 		cleanupRecordings()
 		os.Exit(0)
 	}()
-
-	/*
-		if flags.Service != "" {
-			prg := &cmd.Program{}
-			s, err := ksvc.New(prg, &ksvc.Config{
-				Name:        "FanslyScraper",
-				DisplayName: "Fansly Scraper Service",
-				Description: "This service monitors and records Fansly streams.",
-			})
-			if err != nil {
-				fmt.Printf("Error creating service: %v\n", err)
-				os.Exit(1)
-			}
-
-			switch flags.Service {
-			case "install":
-				err = s.Install()
-				if err != nil {
-					fmt.Printf("Error installing service: %v\n", err)
-				} else {
-					fmt.Println("Service installed successfully")
-				}
-			case "uninstall":
-				err = s.Uninstall()
-				if err != nil {
-					fmt.Printf("Error uninstalling service: %v\n", err)
-				} else {
-					fmt.Println("Service uninstalled successfully")
-				}
-			case "start":
-				err = s.Start()
-				if err != nil {
-					fmt.Printf("Error starting service: %v\n", err)
-				} else {
-					fmt.Println("Service started successfully")
-				}
-			case "stop":
-				err = s.Stop()
-				if err != nil {
-					fmt.Printf("Error stopping service: %v\n", err)
-				} else {
-					fmt.Println("Service stopped successfully")
-				}
-
-			case "restart":
-				err = s.Restart()
-				if err != nil {
-					fmt.Printf("Error restarting service: %v\n", err)
-				} else {
-					fmt.Println("Service restarted successfully")
-				}
-			case "status":
-				status, err := s.Status()
-				if err != nil {
-					fmt.Printf("Error getting service status: %v\n", err)
-				} else {
-					fmt.Printf("Service status: %v\n", status)
-				}
-			default:
-				fmt.Printf("Unknown service command: %s\n", flags.Service)
-				os.Exit(1)
-			}
-			return
-		}
-	*/
 
 	err := config.EnsureConfigExists(config.GetConfigPath())
 	if err != nil {
@@ -183,6 +118,11 @@ func main() {
 		} else {
 			fmt.Printf("Stopped monitoring for %s\n", flags.Monitor)
 		}
+		return
+	}
+
+	if subcommand == "monitor" && flags.MonitorCommand == "start" {
+		startMonitoring()
 		return
 	}
 
@@ -243,20 +183,29 @@ func startMonitoring() {
 		return
 	}
 
+	defer os.Remove(pidFile)
+
 	fmt.Printf("Started monitoring process with PID %d\n", pid)
 
 	monitoringService := service.NewMonitoringService(
 		filepath.Join(config.GetConfigDir(), "monitoring_state.json"),
 		logger.Logger,
 	)
+	monitoringService.StartMonitoring()
 	go monitoringService.Run() // Run in a goroutine to allow the main process to continue
 
 	// Keep the main process running
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
-	<-signalChan
+	go func() {
+		<-signalChan
+		fmt.Println("Received interrupt signal. Shutting down monitoring...")
+		stopMonitoring()
+		os.Exit(0)
+	}()
 
-	stopMonitoring()
+	// Keep the main process running
+	select {}
 }
 
 func stopMonitoring() {
