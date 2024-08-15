@@ -109,12 +109,16 @@ func (ms *MonitoringService) loadState() {
 		}
 		return
 	}
-	if err := json.Unmarshal(data, &ms.activeMonitors); err != nil {
+
+	var loadedMonitors map[string]string
+	if err := json.Unmarshal(data, &loadedMonitors); err != nil {
 		logger.Logger.Printf("Error unmarshaling monitoring state: %v", err)
+		return
 	}
 
-	for modelID, username := range ms.activeMonitors {
-		go ms.monitorModel(modelID, username)
+	// Merge the loaded state with the existing state
+	for modelID, username := range loadedMonitors {
+		ms.activeMonitors[modelID] = username
 	}
 }
 
@@ -132,6 +136,8 @@ func (ms *MonitoringService) saveState() {
 func (ms *MonitoringService) ToggleMonitoring(modelID, username string) bool {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
+
+	ms.loadState()
 
 	if _, exists := ms.activeMonitors[modelID]; exists {
 		delete(ms.activeMonitors, modelID)
