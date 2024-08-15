@@ -26,7 +26,7 @@ import (
 
 var ffmpegAvailable bool
 
-const version = "v0.2.8"
+const version = "v0.2.9"
 
 func main() {
 	flags, subcommand := cmd.ParseFlags()
@@ -64,7 +64,7 @@ func main() {
 		<-signalChan
 		fmt.Println("Received interrupt signal. Shutting down...")
 		stopMonitoring()
-		cleanupRecordings()
+		cleanupLockFiles()
 		os.Exit(0)
 	}()
 
@@ -201,6 +201,7 @@ func startMonitoring() {
 		<-signalChan
 		fmt.Println("Received interrupt signal. Shutting down monitoring...")
 		stopMonitoring()
+		cleanupLockFiles()
 		os.Exit(0)
 	}()
 
@@ -241,8 +242,8 @@ func stopMonitoring() {
 	fmt.Println("Monitoring process stopped.")
 }
 
-func cleanupRecordings() {
-	recordingsPath := filepath.Join(config.GetConfigDir(), "recordings")
+func cleanupLockFiles() {
+	recordingsPath := filepath.Join(config.GetConfigDir(), "active_recordings")
 	files, err := os.ReadDir(recordingsPath)
 	if err != nil {
 		fmt.Printf("Error reading recordings directory: %v\n", err)
