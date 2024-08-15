@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"flag"
+	"fmt"
+	"os"
 	"os/exec"
 )
 
@@ -17,21 +19,22 @@ type Flags struct {
 func ParseFlags() (Flags, string) {
 	flags := Flags{}
 
+	flag.Usage = customUsage
+
 	flag.StringVar(&flags.Username, "u", "", "Model username to download")
 	flag.StringVar(&flags.Username, "username", "", "Model username to download")
 	flag.StringVar(&flags.DownloadType, "d", "", "Download type: all, timeline, messages, or stories")
 	flag.StringVar(&flags.DownloadType, "download", "", "Download type: all, timeline, messages, or stories")
 	flag.BoolVar(&flags.Version, "v", false, "Display version information")
 	flag.BoolVar(&flags.Version, "version", false, "Display version information")
+	flag.StringVar(&flags.Monitor, "m", "", "Toggle monitoring for a model")
 	flag.StringVar(&flags.Monitor, "monitor", "", "Toggle monitoring for a model")
-	flag.StringVar(&flags.Monitor, "m", "", "Toggle monitoring for a model (shorthand)")
 	flag.StringVar(&flags.Service, "service", "", "Control the service: install, uninstall, start, stop, restart")
 
 	flag.Parse()
 
 	args := flag.Args()
 	var subcommand string
-
 	if len(args) > 0 {
 		subcommand = args[0]
 		if subcommand == "monitor" && len(args) > 1 {
@@ -39,18 +42,28 @@ func ParseFlags() (Flags, string) {
 		}
 	}
 
-	/*return Flags{
-		Username:       *username,
-		DownloadType:   *downloadType,
-		Version:        *version,
-		Monitor:        *monitor,
-		Service:        *service,
-		MonitorCommand: monitorCommand,
-	}, ""*/
 	return flags, subcommand
+}
+
+func customUsage() {
+	fmt.Fprintf(os.Stderr, "Usage: fansly-scraper [options] [command]\n\n")
+	fmt.Fprintf(os.Stderr, "Options:\n")
+	fmt.Fprintf(os.Stderr, "  -h, --help                Show this help message\n")
+	fmt.Fprintf(os.Stderr, "  -u, --username=USERNAME   Model username to download\n")
+	fmt.Fprintf(os.Stderr, "  -d, --download=TYPE       Download type: all, timeline, messages, or stories\n")
+	fmt.Fprintf(os.Stderr, "  -v, --version             Display version information\n")
+	fmt.Fprintf(os.Stderr, "  -m, --monitor=USERNAME    Toggle monitoring for a model\n")
+	fmt.Fprintf(os.Stderr, "      --service=ACTION      Control the service: install, uninstall, start, stop, restart\n\n")
+	fmt.Fprintf(os.Stderr, "Commands:\n")
+	fmt.Fprintf(os.Stderr, "  update                    Check for and perform updates\n")
+	fmt.Fprintf(os.Stderr, "  monitor [start|stop]      Start or stop the monitoring process\n")
 }
 
 func IsFFmpegAvailable() bool {
 	_, err := exec.LookPath("ffmpeg")
 	return err == nil
+}
+
+func PrintUsage() {
+	customUsage()
 }

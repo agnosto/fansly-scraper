@@ -26,10 +26,15 @@ import (
 
 var ffmpegAvailable bool
 
-const version = "v0.2.9"
+const version = "v0.3.0"
 
 func main() {
 	flags, subcommand := cmd.ParseFlags()
+
+	if len(os.Args) == 1 || (len(os.Args) == 2 && (os.Args[1] == "-h" || os.Args[1] == "--help")) {
+		cmd.PrintUsage()
+		return
+	}
 
 	if flags.Version {
 		fmt.Printf("Fansly Scraper version %s\n", version)
