@@ -1,6 +1,6 @@
 # Scraper Tracker
 
-## Currently Working:
+## Currently Working/Done:
 
 - [x] Tui dispaly
 - [x] Tui navigation
@@ -19,20 +19,23 @@
 - [x] Implement All selection to go through each download option
 - [x] Test windows pathing for save location is handled correctly
 - [x] Fix livestream recording as a service to save/convert in background (I just made it a go version of my python script which uses models you've enabled to monitor)
+- [x] Fix monitoring service starting on app launch 
+- [x] Fix models being output twice in monitoring 
+- [x] Fix sometimes saving video extension to images and vice versa(haven't seen happen in a while)
 
 ## ToDo:
 
-- [ ] Fix monitoring service starting on app launch 
 - [ ] Fix editing config option (broke in refactor lol)
 - [ ] Fix m3u8 downloading for potential higher quality
-- [ ] Fix sometimes saving video extension to images and vice versa
-- [ ] Fix occasional <Access Denied> file download (rarely appears mostly from one model from short test, most likely rate limit issue)
+- [ ] Fix occasional `<Access Denied>` file download (most likely rate limit issue)
 - [ ] Properly handle going back during post fetching to cancel
 - [ ] Properly handle going back to main menu once finished (downloading/interactions)
 - [ ] More testing for timeline scraping (not subbed to any models atm)
-- [ ] Implement message post (un)liking (ig if I really want it to be all-in-one)
-- [ ] Rethink about live monitoring (already have [this](https://github.com/agnosto/fansly-recorder) for recording lives, but might want to have this project use [services](https://github.com/kardianos/service) for managing lives? not really sure)
 - [ ] I guess also save a version of models pfp & banner
 - [ ] Add option to download purchases directly and save to model folder (default to creating purchases/{model id} if account is deleted)
 - [ ] Add simple web dashboard to view images and watch videos/lives (was contemplating on adding but maybe down the line)
 
+## Limbo:
+
+- [ ] Rethink about live monitoring (already have [this](https://github.com/agnosto/fansly-recorder) for recording lives, but might want to have this project use [services](https://github.com/kardianos/service) for managing lives? not really sure)
+- [ ] Implement message post (un)liking (ig if I really want it to be all-in-one)
