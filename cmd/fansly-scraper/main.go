@@ -239,6 +239,10 @@ func stopMonitoring() {
 		return
 	}
 
+	// I don't even think this function would really be used
+	// startMonitoring isn't a background process
+	cleanupLockFiles()
+
 	fmt.Println("Monitoring process stopped.")
 }
 

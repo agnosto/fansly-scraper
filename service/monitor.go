@@ -270,7 +270,7 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 	cmd := exec.Command("ffmpeg", "-i", playbackUrl, "-c", "copy", "-movflags", "use_metadata_tags", "-map_metadata", "0", "-timeout", "300", "-reconnect", "300", "-reconnect_at_eof", "300", "-reconnect_streamed", "300", "-reconnect_delay_max", "300", "-rtmp_live", "live", recordedFilename)
 
 	//logger.Logger.Printf("Starting recording for %s", username)
-	fmt.Printf("Starting recording for %s", username)
+	fmt.Printf("Starting recording for %s\n", username)
 	err = cmd.Start()
 	if err != nil {
 		logger.Logger.Printf("Error starting ffmpeg for %s: %v", username, err)
