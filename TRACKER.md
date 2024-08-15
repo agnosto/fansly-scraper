@@ -22,6 +22,7 @@
 - [x] Fix monitoring service starting on app launch 
 - [x] Fix models being output twice in monitoring 
 - [x] Fix sometimes saving video extension to images and vice versa(haven't seen happen in a while)
+- [x] Better CLI help output
 
 ## ToDo:
 

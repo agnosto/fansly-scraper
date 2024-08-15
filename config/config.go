@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -27,11 +26,11 @@ type AccountConfig struct {
 }
 
 type OptionsConfig struct {
-	SaveLocation            string `toml:"save_location"`
-	M3U8Download            bool   `toml:"m3u8_dl"`
-	VODsFileExtension       string `toml:"vods_file_extension"`
-    FFmpegConvert           bool   `toml:"ffmpeg_convert"`
-    GenerateContactSheet    bool   `toml:generate_contact_sheet`
+	SaveLocation         string `toml:"save_location"`
+	M3U8Download         bool   `toml:"m3u8_dl"`
+	VODsFileExtension    string `toml:"vods_file_extension"`
+	FFmpegConvert        bool   `toml:"ffmpeg_convert"`
+	GenerateContactSheet bool   `toml:"generate_contact_sheet"`
 }
 
 type SecurityHeadersConfig struct {
@@ -100,19 +99,19 @@ func SaveConfig(cfg *Config) error {
 }
 
 func OpenConfigInEditor(configPath string) error {
-    var cmd *exec.Cmd
+	var cmd *exec.Cmd
 
 	if runtime.GOOS == "windows" {
-        // On Windows, use the default program associated with .txt files
-        cmd = exec.Command("cmd", "/C", "start", "", configPath)
-    } else {
-        // For UNIX-like systems, use the EDITOR environment variable
-        editor := os.Getenv("EDITOR")
-        if editor == "" {
-            editor = "vim" // Default to vim if no EDITOR environment variable is set
-        }
-        cmd = exec.Command(editor, configPath)
-    }
+		// On Windows, use the default program associated with .txt files
+		cmd = exec.Command("cmd", "/C", "start", "", configPath)
+	} else {
+		// For UNIX-like systems, use the EDITOR environment variable
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			editor = "vim" // Default to vim if no EDITOR environment variable is set
+		}
+		cmd = exec.Command(editor, configPath)
+	}
 
 	//cmd := exec.Command(editor, configPath)
 	cmd.Stdin = os.Stdin
@@ -140,7 +139,7 @@ func CopyFile(srcPath string, dstPath string) error {
 }
 
 func DownloadConfig(url string, filePath string) error {
-    //log.Printf("Downloading config from: %v to path: %v", url, filePath)
+	//log.Printf("Downloading config from: %v to path: %v", url, filePath)
 	// Get the current working directory
 	//rootDir, err := os.Getwd()
 	//if err != nil {
@@ -152,23 +151,23 @@ func DownloadConfig(url string, filePath string) error {
 
 	// Check if the file exists in the current directory
 	//if _, err := os.Stat(exampleConfigPath); os.IsNotExist(err) {
-		// Send a GET request
-    resp, err := http.Get(url)
-    if err != nil {
-        return err
-    }
-    defer resp.Body.Close()
+	// Send a GET request
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
 
-    // Create the file
-    out, err := os.Create(filePath)
-    if err != nil {
-        return err
-    }
-    defer out.Close()
+	// Create the file
+	out, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
 
-    // Write the body to file
-    _, err = io.Copy(out, resp.Body)
-    return err
+	// Write the body to file
+	_, err = io.Copy(out, resp.Body)
+	return err
 	//}
 
 	//return nil
@@ -181,27 +180,41 @@ func EnsureConfigExists(configPath string) error {
 			return err
 		}
 	}
+
 	// Check if config file exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		// Config doesn't exist, check for example config
 		exampleConfig := filepath.Join("example-config.toml")
-		if _, err := os.Stat(exampleConfig); os.IsNotExist(err) {
-			// Example config doesn't exist, download default
-			err = DownloadConfig("https://raw.githubusercontent.com/agnosto/fansly-scraper/main/example-config.toml", filepath.ToSlash(configPath))
-			if err != nil {
-				return err
-			}
-		} else {
-			// Copy example config
+		if _, err := os.Stat(exampleConfig); err == nil {
+			// Example config exists, copy it
 			err = CopyFile(exampleConfig, configPath)
 			if err != nil {
-				return err
+				log.Printf("Failed to copy example config: %v", err)
+				// Fall through to try creating default config
+			} else {
+				return nil // Successfully copied example config
 			}
+		}
+
+		// If we're here, either example config doesn't exist or copying failed
+		// Try to create default config
+		defaultConfig := CreateDefaultConfig()
+		err = SaveConfig(defaultConfig)
+		if err != nil {
+			log.Printf("Failed to create default config: %v", err)
+			// Fall through to try downloading config
+		} else {
+			return nil // Successfully created default config
+		}
+
+		// If we're here, creating default config failed
+		// Try to download config
+		err = DownloadConfig("https://raw.githubusercontent.com/agnosto/fansly-scraper/main/example-config.toml", filepath.ToSlash(configPath))
+		if err != nil {
+			return fmt.Errorf("failed to ensure config exists: %v", err)
 		}
 	}
 
-	// Open config file in editor
-	// return OpenConfigInEditor(configPath)
 	return nil
 }
 
@@ -220,7 +233,7 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("auth_token is empty in %v", configPath)
 	}
 	if config.Options.SaveLocation == "" {
-		return nil, fmt.Errorf("save_location is empty in $v", configPath)
+		return nil, fmt.Errorf("save_location is empty in %v", configPath)
 	}
 
 	config.Options.SaveLocation = filepath.ToSlash(config.Options.SaveLocation)
@@ -232,59 +245,24 @@ func LoadConfig(configPath string) (*Config, error) {
 	return &config, nil
 }
 
-// TODO: get rid of the below functions
-
-func createHeaders(authToken string, userAgent string) map[string]string {
-	headers := map[string]string{
-		"authority":          "apiv3.fansly.com",
-		"accept":             "application/json, text/plain, */*",
-		"accept-language":    "en;q=0.8,en-US;q=0.7",
-		"authorization":      authToken,
-		"origin":             "https://fansly.com",
-		"referer":            "https://fansly.com/",
-		"sec-ch-ua":          "\"Not.A/Brand\";v=\"8\", \"Chromium\";v=\"114\", \"Google Chrome\";v=\"114\"",
-		"sec-ch-ua-mobile":   "?0",
-		"sec-ch-ua-platform": "\"Windows\"",
-		"sec-fetch-dest":     "empty",
-		"sec-fetch-mode":     "cors",
-		"sec-fetch-site":     "same-site",
-		"user-agent":         userAgent,
+func CreateDefaultConfig() *Config {
+	return &Config{
+		Account: AccountConfig{
+			AuthToken: "",
+			UserAgent: "",
+		},
+		Options: OptionsConfig{
+			SaveLocation:         "/path/to/save/content/to",
+			M3U8Download:         false,
+			VODsFileExtension:    ".ts",
+			FFmpegConvert:        true,
+			GenerateContactSheet: true,
+		},
+		SecurityHeaders: SecurityHeadersConfig{
+			DeviceID:    "",
+			SessionID:   "",
+			CheckKey:    "",
+			LastUpdated: time.Now(),
+		},
 	}
-
-	return headers
-}
-
-func getAccountInfo(authToken string, userAgent string) (*Account, error) {
-	// Create the headers
-	headers := createHeaders(authToken, userAgent)
-
-	// Create a new HTTP client
-	client := &http.Client{}
-
-	// Create a new HTTP request
-	req, err := http.NewRequest("GET", "https://apiv3.fansly.com/api/v1/account/me?ngsw-bypass=true", nil)
-	if err != nil {
-		return nil, err
-	}
-
-	// Set the headers
-	for key, value := range headers {
-		req.Header.Set(key, value)
-	}
-
-	// Send the HTTP request and get the response
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	// Decode the JSON response
-	var account Account
-	err = json.NewDecoder(resp.Body).Decode(&account)
-	if err != nil {
-		return nil, err
-	}
-
-	return &account, nil
 }

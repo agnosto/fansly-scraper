@@ -3,6 +3,7 @@ package cmd
 import (
 	"flag"
 	"fmt"
+	"github.com/agnosto/fansly-scraper/config"
 	"os"
 	"os/exec"
 )
@@ -46,7 +47,10 @@ func ParseFlags() (Flags, string) {
 }
 
 func customUsage() {
-	fmt.Fprintf(os.Stderr, "Usage: fansly-scraper [options] [command]\n\n")
+	configPath := config.GetConfigPath()
+
+	fmt.Fprintf(os.Stderr, "CLI Usage: fansly-scraper [options] [command]\n")
+	fmt.Fprintf(os.Stderr, "Edit config located at %s to launch TUI\n\n", configPath)
 	fmt.Fprintf(os.Stderr, "Options:\n")
 	fmt.Fprintf(os.Stderr, "  -h, --help                Show this help message\n")
 	fmt.Fprintf(os.Stderr, "  -u, --username=USERNAME   Model username to download\n")

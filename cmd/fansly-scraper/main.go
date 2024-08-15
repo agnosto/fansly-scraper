@@ -31,6 +31,11 @@ const version = "v0.3.0"
 func main() {
 	flags, subcommand := cmd.ParseFlags()
 
+	err := config.EnsureConfigExists(config.GetConfigPath())
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	if len(os.Args) == 1 || (len(os.Args) == 2 && (os.Args[1] == "-h" || os.Args[1] == "--help")) {
 		cmd.PrintUsage()
 		return
@@ -73,10 +78,6 @@ func main() {
 		os.Exit(0)
 	}()
 
-	err := config.EnsureConfigExists(config.GetConfigPath())
-	if err != nil {
-		log.Fatal(err)
-	}
 	cfg, err := config.LoadConfig(config.GetConfigPath())
 	//log.Printf("[Main Start] Loaded Config: %v", cfg)
 	if err != nil {

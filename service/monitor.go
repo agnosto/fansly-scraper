@@ -47,9 +47,6 @@ func NewMonitoringService(storagePath string, logger *log.Logger) *MonitoringSer
 		stopChan:       make(chan struct{}),
 		logger:         logger,
 	}
-	//ms.loadState()
-	//ms.loadActiveRecordings()
-	//go ms.runMonitoring()
 	return ms
 }
 
@@ -230,12 +227,6 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 		if err := os.Remove(lockFile); err != nil {
 			ms.logger.Printf("Error removing lock file for %s: %v", username, err)
 		}
-		/*
-			ms.mu.Lock()
-			delete(ms.activeRecordings, modelID)
-			ms.saveActiveRecordings()
-			ms.mu.Unlock()
-		*/
 		//logger.Logger.Printf("Finished recording for %s", username)
 		fmt.Printf("Finished recording for %s\n", username)
 	}()
@@ -274,9 +265,6 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 	err = cmd.Start()
 	if err != nil {
 		logger.Logger.Printf("Error starting ffmpeg for %s: %v", username, err)
-		//ms.mu.Lock()
-		//delete(ms.activeRecordings, modelID)
-		//ms.mu.Unlock()
 		return
 	}
 

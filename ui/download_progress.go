@@ -1,16 +1,15 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
-    "fmt"
-    //"github.com/agnosto/fansly-scraper/config"
-    //"github.com/agnosto/fansly-scraper/core"
-    
+	//"github.com/agnosto/fansly-scraper/config"
+	//"github.com/agnosto/fansly-scraper/core"
 
 	tea "github.com/charmbracelet/bubbletea"
 	//"github.com/charmbracelet/lipgloss"
-    "github.com/charmbracelet/bubbles/key"
-    //"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/key"
+	//"github.com/charmbracelet/bubbles/table"
 )
 
 // HandleMainMenuUpdate handles updates when in the MainMenuState
@@ -18,14 +17,14 @@ func (m *MainModel) HandleDownloadProgressMenuUpdate(msg tea.Msg) (tea.Model, te
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
-        case key.Matches(msg, m.keys.Back):
-            m.state = FollowedModelsState
-            m.cursorPos = 0
-            return m, nil
-        case key.Matches(msg, m.keys.Quit):
-            m.quit = true
-            return m, tea.Quit
-        }
+		case key.Matches(msg, m.keys.Back):
+			m.state = FollowedModelsState
+			m.cursorPos = 0
+			return m, nil
+		case key.Matches(msg, m.keys.Quit):
+			m.quit = true
+			return m, tea.Quit
+		}
 	}
 	return m, nil
 }
@@ -51,7 +50,6 @@ func (m *MainModel) RenderDownloadProgressMenu() string {
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("Downloading %s content for %s...\n\n", m.selectedOption, m.selectedModel))
-
 
 	return sb.String()
 }

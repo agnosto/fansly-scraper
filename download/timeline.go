@@ -7,11 +7,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -19,7 +17,6 @@ import (
 
 	//"strconv"
 
-	"github.com/grafov/m3u8"
 	"github.com/schollz/progressbar/v3"
 	"golang.org/x/time/rate"
 
@@ -74,29 +71,6 @@ func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error
 		logger.Logger.Printf("Error: %v", err)
 		return nil, err
 	}
-
-	/*
-	   deviceID, err := headers.GetDeviceID()
-	   if err != nil {
-	       return nil, err
-	   }
-
-	   fanslyHeaders := &headers.FanslyHeaders{
-	       AuthToken: cfg.Account.AuthToken,
-	       UserAgent: cfg.Account.UserAgent,
-	       DeviceID:  deviceID,
-	   }
-
-	   err = fanslyHeaders.SetCheckKey()
-	   if err != nil {
-	       return nil, err
-	   }
-
-	   // Set the session ID
-	   err = fanslyHeaders.SetSessionID()
-	   if err != nil {
-	       return nil, fmt.Errorf("failed to set session ID: %v", err)
-	   }*/
 
 	fanslyHeaders, err := headers.NewFanslyHeaders(cfg)
 	if err != nil {
@@ -389,11 +363,6 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 	filePath := filepath.Join(baseDir, subDir, fileName)
 	//log.Printf("[INFO] [DLSingleItem] FILENAME: %v", fileName)
 
-	//if strings.HasSuffix(mediaUrl, ".m3u8") {
-	//    log.Printf("[INFO] M3U8 URL: %v",mediaUrl )
-	//    return d.downloadM3U8(mediaUrl, filePath, metadata)
-	//}
-
 	if d.fileExists(filePath) {
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
 			d.progressBar.Describe(fmt.Sprintf("[yellow]File missing[reset], Redownloading %s", fileName))
@@ -431,23 +400,6 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 				url.QueryEscape(bestMetadata["Key-Pair-Id"]),
 				url.QueryEscape(bestMetadata["Signature"]))
 		}
-		// Check if it's a master M3U8
-		//log.Printf("[M3U8 CHECK] URL: %v", fullUrl)
-		/*
-			isMaster, err := d.isMasterM3U8(fullUrl)
-			if err != nil {
-				return fmt.Errorf("error checking M3U8 type: %v", err)
-			}
-
-			if isMaster {
-				// If it's a master M3U8, use the original media URL
-				d.progressBar.Describe(fmt.Sprintf("[yellow]Master M3U8 detected[reset], using original URL for %s", fileName))
-				return d.downloadRegularFile(item.Locations[0].Location, filePath, modelName, fileType)
-			} else {
-				// If it's a media M3U8, proceed with M3U8 download
-				return d.DownloadM3U8(ctx, modelName, fullUrl, filePath)
-			}
-		*/
 		return d.DownloadM3U8(ctx, modelName, fullUrl, filePath)
 	}
 
@@ -498,19 +450,6 @@ func (d *Downloader) downloadWithRetry(url string) (*http.Response, error) {
 	}
 
 	return nil, fmt.Errorf("failed to download %s after %d retries", url, maxRetries)
-}
-
-func (d *Downloader) isMasterM3U8(url string) (bool, error) {
-	//log.Printf("[M3U8 URL FOR DL] URL: %v\n", url)
-	logger.Logger.Printf("[DEBUG] M3U8 URL: %v", url)
-	content, err := fetchM3U8Playlist(url, GetM3U8Cookies(url))
-	if err != nil {
-		return false, err
-	}
-
-	//log.Printf("[Master M3U8 Check] M3U8 Content: %v", content)
-	logger.Logger.Printf("[DEBUG] M3U8 Content: %v", content)
-	return strings.Contains(content, "#EXT-X-I-FRAME-STREAM-INF:"), nil
 }
 
 func (d *Downloader) downloadRegularFile(url, filePath string, modelName string, fileType string) error {
@@ -587,77 +526,4 @@ func (d *Downloader) saveFileHash(modelName string, hash, path, fileType string)
 
 func (d *Downloader) Close() error {
 	return d.db.Close()
-}
-
-func (d *Downloader) downloadM3U8(mediaUrl, filePath string, metadata map[string]string) error {
-	// Construct the full URL with query parameters
-	fullUrl := mediaUrl
-	if metadata != nil {
-		fullUrl += fmt.Sprintf("?ngsw-bypass=true&Policy=%s&Key-Pair-Id=%s&Signature=%s",
-			url.QueryEscape(metadata["Policy"]),
-			url.QueryEscape(metadata["Key-Pair-Id"]),
-			url.QueryEscape(metadata["Signature"]))
-	}
-	//log.Printf("[M3U8 DOWNLOAD] URL: %v", fullUrl)
-
-	d.downloadMediaPlaylist(fullUrl, filePath)
-
-	/*
-	   // Download the M3U8 file
-	   resp, err := d.downloadWithRetry(fullUrl)
-	   if err != nil {
-	       return err
-	   }
-	   defer resp.Body.Close()
-
-	   // Parse the M3U8 playlist
-	   playlist, listType, err := m3u8.DecodeFrom(resp.Body, false)
-	   log.Printf("[M3U8 DOWNLOAD] Playlist: %v \nListType: %v", playlist, listType)
-	   if err != nil {
-	       return err
-	   }
-
-	   if listType == m3u8.MEDIA {
-	       return d.downloadMediaPlaylist(fullUrl, filePath)
-	   } else if listType == m3u8.MASTER {
-	       masterpl := playlist.(*m3u8.MasterPlaylist)
-	       return d.downloadHighestQualityStream(masterpl, fullUrl, filePath)
-	   }
-
-	   return fmt.Errorf("unknown playlist type")
-	*/
-	return nil
-}
-
-func (d *Downloader) downloadMediaPlaylist(playlistUrl, outputPath string) error {
-	// Use FFmpeg to download and convert the stream
-	log.Printf("[M3U8 DOWNLAOD] Downloading %v", playlistUrl)
-	cmd := exec.Command("ffmpeg", "-i", playlistUrl, "-c", "copy", outputPath)
-	return cmd.Run()
-}
-
-func (d *Downloader) downloadHighestQualityStream(playlist *m3u8.MasterPlaylist, baseUrl, outputPath string) error {
-	var highestBandwidth uint32
-	var selectedVariant *m3u8.Variant
-
-	for _, variant := range playlist.Variants {
-		if variant.Bandwidth > highestBandwidth {
-			highestBandwidth = variant.Bandwidth
-			selectedVariant = variant
-		}
-	}
-
-	if selectedVariant == nil {
-		return fmt.Errorf("no valid variants found in master playlist")
-	}
-
-	// Resolve the URL of the highest quality variant
-	variantUrl, err := url.Parse(selectedVariant.URI)
-	if err != nil {
-		return err
-	}
-	fullVariantUrl := baseUrl[:strings.LastIndex(baseUrl, "/")+1] + variantUrl.String()
-
-	// Download the highest quality variant
-	return d.downloadMediaPlaylist(fullVariantUrl, outputPath)
 }

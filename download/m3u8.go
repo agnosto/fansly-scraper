@@ -116,18 +116,6 @@ func fetchM3U8Playlist(m3u8URL string, cookies map[string]string) (string, error
 		return "", fmt.Errorf("received non-200 response code: %d", resp.StatusCode)
 	}
 
-	// Parse the M3U8 playlist
-	//var segmentURLs []string
-	//scanner := bufio.NewScanner(resp.Body)
-	//for scanner.Scan() {
-	//	line := strings.TrimSpace(scanner.Text())
-	//	// Skip comments and empty lines
-	//	if line == "" || strings.HasPrefix(line, "#") {
-	//		continue
-	//	}
-	//	segmentURLs = append(segmentURLs, line)
-	//}
-
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("error reading M3U8 playlist: %w", err)

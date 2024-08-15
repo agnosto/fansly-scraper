@@ -1,12 +1,12 @@
 package ui
 
 import (
-    "strings"
-    "time"
-    //"log"
+	"strings"
+	"time"
+	//"log"
 	"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/core"
-    "github.com/agnosto/fansly-scraper/logger"
+	"github.com/agnosto/fansly-scraper/logger"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -41,13 +41,13 @@ func (m *MainModel) handleMainMenuSelection() (tea.Model, tea.Cmd) {
 		return m, m.fetchAccountInfoCmd()
 	case "Monitor a user's livestreams":
 		m.actionChosen = "monitor"
-        return m, tea.Batch(
-            m.fetchAccountInfoCmd(),
-            func() tea.Msg {
-                m.updateMonitoringTable()
-                return monitoringSelectedMsg{}
-            },
-        )
+		return m, tea.Batch(
+			m.fetchAccountInfoCmd(),
+			func() tea.Msg {
+				m.updateMonitoringTable()
+				return monitoringSelectedMsg{}
+			},
+		)
 	case "Like all of a user's post":
 		m.actionChosen = "like"
 		return m, m.fetchAccountInfoCmd()
@@ -94,35 +94,34 @@ func (m *MainModel) RenderMainMenu() string {
 
 // fetchAccountInfoCmd is a command that fetches account info
 func (m *MainModel) fetchAccountInfoCmd() tea.Cmd {
-    return func() tea.Msg {
-        accountInfo, err := core.FetchAccountInfo(config.GetConfigPath())
-        if err != nil {
-            logger.Logger.Printf("Error fetching account info: %v", err)
-            return fetchAccountInfoMsg{Success: false, Error: err}
-        }
-        return fetchAccountInfoMsg{Success: true, AccountInfo: accountInfo}
-    }
+	return func() tea.Msg {
+		accountInfo, err := core.FetchAccountInfo(config.GetConfigPath())
+		if err != nil {
+			logger.Logger.Printf("Error fetching account info: %v", err)
+			return fetchAccountInfoMsg{Success: false, Error: err}
+		}
+		return fetchAccountInfoMsg{Success: true, AccountInfo: accountInfo}
+	}
 }
 
 // editConfigCmd is a command that initiates config editing
 func (m *MainModel) editConfigCmd() tea.Cmd {
-    return func() tea.Msg {
-        configPath := config.GetConfigPath()
-        err := config.EnsureConfigExists(configPath)
-        if err != nil {
-            logger.Logger.Printf("Error check config %v", err)
-            return editConfigMsg{Success: false, Error: err}
-        }
+	return func() tea.Msg {
+		configPath := config.GetConfigPath()
+		err := config.EnsureConfigExists(configPath)
+		if err != nil {
+			logger.Logger.Printf("Error check config %v", err)
+			return editConfigMsg{Success: false, Error: err}
+		}
 
-        err = config.OpenConfigInEditor(configPath)
-        if err != nil {
-            logger.Logger.Printf("Error opening config %v", err)
-            return editConfigMsg{Success: false, Error: err}
-        }
+		err = config.OpenConfigInEditor(configPath)
+		if err != nil {
+			logger.Logger.Printf("Error opening config %v", err)
+			return editConfigMsg{Success: false, Error: err}
+		}
 
-        return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
-            return tickMsg{}
-        })
-    }
+		return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
+			return tickMsg{}
+		})
+	}
 }
-

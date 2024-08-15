@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-    //"github.com/agnosto/fansly-scraper/headers"
+	//"github.com/agnosto/fansly-scraper/headers"
 )
 
 type Config struct {
@@ -40,12 +40,12 @@ type AccountID struct {
 }
 
 type TimelineStats struct {
-    AccountId       string  `json:"accountId"`
-    ImageCount      int     `json:"imageCount"`
-    VideoCount      int     `json:"videoCount"`
-    BundleCount     int     `json:"bundleCount"`
-    BundleImgCount  int     `json:"bundleImageCount"`
-    BundleVidCount  int     `json:"bundleVideoCount"`
+	AccountId      string `json:"accountId"`
+	ImageCount     int    `json:"imageCount"`
+	VideoCount     int    `json:"videoCount"`
+	BundleCount    int    `json:"bundleCount"`
+	BundleImgCount int    `json:"bundleImageCount"`
+	BundleVidCount int    `json:"bundleVideoCount"`
 }
 
 type FollowedModel struct {
@@ -54,7 +54,6 @@ type FollowedModel struct {
 	DisplayName   string        `json:"displayName"`
 	TimelineStats TimelineStats `json:"timelineStats"`
 }
-
 
 // Login retrieves the user's account information using the provided auth token and user agent.
 func Login(authToken string, userAgent string) (*AccountInfo, error) {
@@ -141,7 +140,7 @@ func GetFollowedUsers(userId string, authToken string, userAgent string) ([]Foll
 	// Concatenate all account IDs with commas
 	accountIDs := make([]string, len(followingResponse.Response))
 	for i, accountId := range followingResponse.Response {
-			accountIDs[i] = accountId.AccountId
+		accountIDs[i] = accountId.AccountId
 	}
 	idsParam := strings.Join(accountIDs, ",")
 
@@ -149,7 +148,7 @@ func GetFollowedUsers(userId string, authToken string, userAgent string) ([]Foll
 	modelsURL := fmt.Sprintf("https://apiv3.fansly.com/api/v1/account?ids=%s&ngsw-bypass=true", idsParam)
 	req, err = http.NewRequest("GET", modelsURL, nil)
 	if err != nil {
-			return nil, err
+		return nil, err
 	}
 
 	for key, value := range headerMap {
@@ -158,24 +157,23 @@ func GetFollowedUsers(userId string, authToken string, userAgent string) ([]Foll
 
 	resp, err = client.Do(req)
 	if err != nil {
-			return nil, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("failed to fetch models information with status code %d", resp.StatusCode)
+		return nil, fmt.Errorf("failed to fetch models information with status code %d", resp.StatusCode)
 	}
 
 	var modelsResponse struct {
-			Success  bool            `json:"success"`
-			Response []FollowedModel `json:"response"`
+		Success  bool            `json:"success"`
+		Response []FollowedModel `json:"response"`
 	}
 	err = json.NewDecoder(resp.Body).Decode(&modelsResponse)
 	if err != nil {
-			return nil, err
+		return nil, err
 	}
 
 	return modelsResponse.Response, nil
-
 
 }
