@@ -23,11 +23,10 @@
 - [x] Fix models being output twice in monitoring 
 - [x] Fix sometimes saving video extension to images and vice versa(haven't seen happen in a while)
 - [x] Better CLI help output
+- [x] Fix m3u8 downloading for potential higher quality
 
 ## ToDo:
 
-- [ ] Fix editing config option (broke in refactor lol)
-- [ ] Fix m3u8 downloading for potential higher quality
 - [ ] Fix occasional `<Access Denied>` file download (most likely rate limit issue)
 - [ ] Properly handle going back during post fetching to cancel
 - [ ] Properly handle going back to main menu once finished (downloading/interactions)
@@ -38,5 +37,6 @@
 
 ## Limbo:
 
+- [ ] Fix editing config option (broke in refactor lol)
 - [ ] Rethink about live monitoring (already have [this](https://github.com/agnosto/fansly-recorder) for recording lives, but might want to have this project use [services](https://github.com/kardianos/service) for managing lives? not really sure)
 - [ ] Implement message post (un)liking (ig if I really want it to be all-in-one)
