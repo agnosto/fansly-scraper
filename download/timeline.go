@@ -400,7 +400,7 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 				url.QueryEscape(bestMetadata["Key-Pair-Id"]),
 				url.QueryEscape(bestMetadata["Signature"]))
 		}
-		return d.DownloadM3U8(ctx, modelName, fullUrl, filePath)
+		return d.DownloadM3U8(ctx, modelName, fullUrl, filePath, identifier)
 	}
 
 	d.downloadRegularFile(mediaUrl, filePath, modelName, fileType)

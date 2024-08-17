@@ -35,7 +35,7 @@ func GetM3U8Cookies(m3u8URL string) map[string]string {
 	}
 }
 
-func (d *Downloader) DownloadM3U8(ctx context.Context, modelName string, m3u8URL string, savePath string) error {
+func (d *Downloader) DownloadM3U8(ctx context.Context, modelName string, m3u8URL string, savePath string, postID string) error {
 	fileType := "video"
 
 	if err := m3u8Semaphore.Acquire(ctx, 1); err != nil {
@@ -59,9 +59,14 @@ func (d *Downloader) DownloadM3U8(ctx context.Context, modelName string, m3u8URL
 		return err
 	}
 
+	segmentDir := filepath.Join(filepath.Dir(savePath), "segments_"+postID)
+	if err := os.MkdirAll(segmentDir, os.ModePerm); err != nil {
+		return fmt.Errorf("failed to create segment directory: %w", err)
+	}
+
 	// Download segments
 	//log.Printf("Extracted segment URLs: %v", segmentURLs)
-	segmentFiles, err := downloadSegments(ctx, segmentURLs, filepath.Dir(savePath), cookies)
+	segmentFiles, err := downloadSegments(ctx, segmentURLs, segmentDir, cookies)
 	//log.Printf("[DOWNLOAD M3U8] SegmentedFiles: %v", segmentFiles)
 	if err != nil {
 		return err
@@ -69,7 +74,7 @@ func (d *Downloader) DownloadM3U8(ctx context.Context, modelName string, m3u8URL
 
 	// Combine segments using ffmpeg
 	outputFile := filepath.Join(filepath.Dir(savePath), filepath.Base(savePath))
-	err = combineSegments(segmentFiles, outputFile)
+	err = combineSegments(segmentFiles, outputFile, segmentDir)
 	//log.Printf("[DOWNLOAD M3U8] OutputFile: %v, or Error: %v", outputFile, err)
 	if err != nil {
 		return err
@@ -346,8 +351,8 @@ func downloadFile(ctx context.Context, url string, fileName string, cookies map[
 	return nil
 }
 
-func combineSegments(segmentFiles []string, outputFile string) error {
-	tempFile, err := os.CreateTemp("", fmt.Sprintf("segments_list_%s_*.txt", filepath.Base(outputFile)))
+func combineSegments(segmentFiles []string, outputFile string, segmentDir string) error {
+	tempFile, err := os.CreateTemp(segmentDir, "segments_list_*.txt")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary file: %w", err)
 	}
@@ -363,7 +368,6 @@ func combineSegments(segmentFiles []string, outputFile string) error {
 		if err != nil {
 			return fmt.Errorf("failed to get absolute path: %w", err)
 		}
-		// Use filepath.ToSlash to ensure consistent path separators
 		_, err = fmt.Fprintf(tempFile, "file '%s'\n", filepath.ToSlash(absPath))
 		if err != nil {
 			return fmt.Errorf("failed to write to temporary file: %w", err)
@@ -371,17 +375,13 @@ func combineSegments(segmentFiles []string, outputFile string) error {
 	}
 	tempFile.Close()
 
-	// Log the content of the temporary file
-	//content, _ := os.ReadFile(tempFile.Name())
-	//log.Printf("FFmpeg input file content:\n%s", string(content))
-
 	args := []string{
 		"-f", "concat",
 		"-safe", "0",
 		"-i", tempFile.Name(),
 		"-c", "copy",
-		"-f", "mpegts", // Explicitly specify input format
-		"-i", "pipe:0", // Read from stdin
+		"-f", "mpegts",
+		"-i", "pipe:0",
 		outputFile,
 	}
 	cmd := exec.Command("ffmpeg", args...)
@@ -391,11 +391,22 @@ func combineSegments(segmentFiles []string, outputFile string) error {
 
 	err = cmd.Run()
 	if err != nil {
-		log.Printf("FFmpeg stdout: %s", stdout.String())
-		log.Printf("FFmpeg stderr: %s", stderr.String())
+		logger.Logger.Printf("FFmpeg stdout: %s", stdout.String())
+		logger.Logger.Printf("FFmpeg stderr: %s", stderr.String())
 		return fmt.Errorf("ffmpeg error: %v", err)
 	}
 
-	//log.Printf("FFmpeg command: %v", cmd.Args)
+	// Clean up segment files
+	for _, file := range segmentFiles {
+		if err := os.Remove(file); err != nil {
+			logger.Logger.Printf("Failed to remove segment file %s: %v", file, err)
+		}
+	}
+
+	// Remove the segment directory
+	if err := os.RemoveAll(segmentDir); err != nil {
+		logger.Logger.Printf("Failed to remove segment directory %s: %v", segmentDir, err)
+	}
+
 	return nil
 }
