@@ -51,6 +51,8 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.HandleLivestreamMonitorUpdate(msg)
 		case LiveMonitorFilterState:
 			return m.HandleLiveMonitorFilterUpdate(msg)
+		case DownloadPurchasedState:
+			return m.HandlePurchaseProgressMenuUpdate(msg)
 		// Add cases for other states
 		default:
 			logger.Logger.Printf("[DEBUG] Update: Unhandled state: %v", m.state)
@@ -115,6 +117,8 @@ func (m *MainModel) View() string {
 		return m.RenderLivestreamMonitorMenu()
 	case LiveMonitorFilterState:
 		return m.RenderLiveMonitorFilterMenu()
+	case DownloadPurchasedState:
+		return m.RenderPurchaseProgressMenu()
 	default:
 		return "Unknown state"
 	}

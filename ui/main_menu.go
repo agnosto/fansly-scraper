@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"runtime"
@@ -42,6 +43,18 @@ func (m *MainModel) handleMainMenuSelection() (tea.Model, tea.Cmd) {
 	case "Download a user's post":
 		m.actionChosen = "download"
 		return m, m.fetchAccountInfoCmd()
+	case "Download purchased content":
+		m.actionChosen = "download_purchases"
+		m.state = DownloadPurchasedState
+		return m, func() tea.Msg {
+			err := m.downloader.DownloadPurchasedContent(context.Background())
+			if err != nil {
+				logger.Logger.Printf("Error downloading purchased content: %v", err)
+				return downloadErrorMsg{Error: err}
+			}
+			return downloadCompleteMsg{}
+		}
+		//return m, m.fetchAccountInfoCmd()
 	case "Monitor a user's livestreams":
 		m.actionChosen = "monitor"
 		return m, tea.Batch(

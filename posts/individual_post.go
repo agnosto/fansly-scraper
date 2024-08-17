@@ -47,9 +47,10 @@ type MediaItem struct {
 }
 
 type AccountMedia struct {
-	ID      string     `json:"id"`
-	Media   MediaItem  `json:"media"`
-	Preview *MediaItem `json:"preview,omitempty"` // Added to handle optional preview
+	ID        string     `json:"id"`
+	AccountId string     `json:"accountId"`
+	Media     MediaItem  `json:"media"`
+	Preview   *MediaItem `json:"preview,omitempty"` // Added to handle optional preview
 }
 
 type PostResponse struct {

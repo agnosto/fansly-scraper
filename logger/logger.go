@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	maxLogSize    = 10 * 1024 * 1024 // 10MB
+	maxLogSize    = 5 * 1024 * 1024 // 5MB
 	maxLogBackups = 5
 )
 
