@@ -25,6 +25,7 @@
 - [x] Better CLI help output
 - [x] Fix m3u8 downloading for potential higher quality (want to do more testing on different hardware, but should be fine for the most part)
 - [x] Fix editing config option (broke in refactor lol)
+- [x] Add option to download purchases directly and save to model folder (default to creating {model id}/purchases if account is deleted)
 
 ## ToDo:
 
@@ -33,7 +34,6 @@
 - [ ] Properly handle going back to main menu once finished (downloading/interactions)
 - [ ] More testing for timeline scraping (not subbed to any models atm)
 - [ ] I guess also save a version of models pfp & banner
-- [ ] Add option to download purchases directly and save to model folder (default to creating purchases/{model id} if account is deleted)
 - [ ] Add simple web dashboard to view images and watch videos/lives (was contemplating on adding but maybe down the line)
 
 ## Limbo:
