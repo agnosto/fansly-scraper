@@ -23,7 +23,7 @@
 - [x] Fix models being output twice in monitoring 
 - [x] Fix sometimes saving video extension to images and vice versa(haven't seen happen in a while)
 - [x] Better CLI help output
-- [x] Fix m3u8 downloading for potential higher quality (do want to do more testing but should be fine for the most part)
+- [x] Fix m3u8 downloading for potential higher quality (want to do more testing on different hardware, but should be fine for the most part)
 - [x] Fix editing config option (broke in refactor lol)
 
 ## ToDo:
