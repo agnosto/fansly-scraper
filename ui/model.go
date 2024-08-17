@@ -96,6 +96,8 @@ type editConfigMsg struct {
 	Error   error
 }
 
+type editConfigFinishedMsg struct{}
+
 type tickMsg struct{}
 
 type downloadCompleteMsg struct{}

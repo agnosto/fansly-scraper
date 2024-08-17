@@ -80,6 +80,9 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = LiveMonitorState
 		m.filteredLiveMonitorModels = m.followedModels
 		m.updateMonitoringTable()
+	case editConfigFinishedMsg:
+		// Config editing is finished, refresh the UI
+		return m, tea.ClearScreen
 	case editConfigMsg:
 		if msg.Success {
 			m.message = "Config edited successfully!"

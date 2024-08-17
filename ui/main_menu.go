@@ -1,6 +1,9 @@
 package ui
 
 import (
+	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 	//"log"
@@ -55,7 +58,18 @@ func (m *MainModel) handleMainMenuSelection() (tea.Model, tea.Cmd) {
 		m.actionChosen = "unlike"
 		return m, m.fetchAccountInfoCmd()
 	case "Edit config.toml file":
-		return m, m.editConfigCmd()
+		configPath := config.GetConfigPath()
+		err := config.EnsureConfigExists(configPath)
+		if err != nil {
+			logger.Logger.Printf("Error ensuring config exists: %v", err)
+			return m, nil
+		}
+		return m, tea.ExecProcess(exec.Command(m.getEditor(), configPath), func(err error) tea.Msg {
+			if err != nil {
+				logger.Logger.Printf("Error editing config: %v", err)
+			}
+			return editConfigFinishedMsg{}
+		})
 	case "Quit":
 		m.quit = true
 		return m, tea.Quit
@@ -90,6 +104,18 @@ func (m *MainModel) RenderMainMenu() string {
 	}
 
 	return sb.String()
+}
+
+func (m *MainModel) getEditor() string {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		if runtime.GOOS == "windows" {
+			editor = "notepad"
+		} else {
+			editor = "vim"
+		}
+	}
+	return editor
 }
 
 // fetchAccountInfoCmd is a command that fetches account info
