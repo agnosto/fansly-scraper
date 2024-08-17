@@ -83,6 +83,7 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editConfigMsg:
 		if msg.Success {
 			m.message = "Config edited successfully!"
+			//return m, tea.ClearScreen
 		} else {
 			m.message = "Error editing config: " + msg.Error.Error()
 		}
