@@ -110,7 +110,7 @@ console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weigh
 <small>Maybe also a faq of sorts</small>
 
 For the time being:
-- It's recommended to leave m3u8_dl in the config set to false while being tested. Do feel free to enable to give input/issues with it if you want.
+- It's recommended to leave m3u8_dl in the config set to false if you want things to download fast. Do feel free to enable to give input/issues with it if you want.
 - Press `ESC` once done downloading/(un)liking to be able to go back.
 
 ### "Duplicate Files"
