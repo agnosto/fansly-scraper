@@ -292,6 +292,25 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 			//log.Printf("\n[Main Media Height] H: %v", bestHeight)
 			//log.Printf("\n[MAIN Media URL] %v\n", mediaUrl)
 		}
+
+		// Process variants if main location is empty
+		if mediaUrl == "" {
+			for _, variant := range mediaItem.Variants {
+				if len(variant.Locations) > 0 && variant.Height > bestHeight {
+					bestMedia = &posts.MediaItem{
+						ID:        variant.ID,
+						Type:      variant.Type,
+						Height:    variant.Height,
+						Mimetype:  variant.Mimetype,
+						Locations: variant.Locations,
+					}
+					bestHeight = variant.Height
+					bestMetadata = variant.Locations[0].Metadata
+					mediaUrl = variant.Locations[0].Location
+				}
+			}
+		}
+
 		if d.M3U8Download && d.ffmpegAvailable {
 			//log.Printf("[FFMPEG] Status: %v", d.ffmpegAvailable)
 			for _, variant := range mediaItem.Variants {

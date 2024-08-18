@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 type AccountInfo struct {
@@ -64,7 +65,7 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 	mediaBar := progressbar.NewOptions(len(accountMediaItems),
 		progressbar.OptionSetWriter(os.Stderr),
 		progressbar.OptionEnableColorCodes(true),
-		progressbar.OptionShowBytes(false),
+		//progressbar.OptionShowBytes(false),
 		progressbar.OptionSetWidth(40),
 		progressbar.OptionSetDescription("[cyan]Downloading Purchased Content[reset]"),
 		progressbar.OptionSetTheme(progressbar.Theme{
@@ -74,6 +75,8 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 			BarStart:      "[",
 			BarEnd:        "]",
 		}),
+		progressbar.OptionThrottle(15*time.Millisecond),
+		progressbar.OptionShowIts(),
 		progressbar.OptionShowCount(),
 	)
 
