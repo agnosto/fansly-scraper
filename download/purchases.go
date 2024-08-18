@@ -86,7 +86,7 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 		}
 
 		// Create subdirectories for images and videos
-		for _, subDir := range []string{"images", "videos"} {
+		for _, subDir := range []string{"images", "videos", "audios"} {
 			err = os.MkdirAll(filepath.Join(baseDir, subDir), os.ModePerm)
 			if err != nil {
 				logger.Logger.Printf("Error creating directory %s: %v", filepath.Join(baseDir, subDir), err)
