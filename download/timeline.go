@@ -283,20 +283,61 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 	var mediaUrl string
 	var fileType string
 
+	getMediaType := func(mimetype string) string {
+		switch {
+		case strings.HasPrefix(mimetype, "image/"):
+			return "image"
+		case strings.HasPrefix(mimetype, "video/") || mimetype == "application/vnd.apple.mpegurl":
+			return "video"
+		case strings.HasPrefix(mimetype, "audio/"):
+			return "audio"
+		default:
+			return "unknown"
+		}
+	}
+
+	mainType := getMediaType(item.Mimetype)
+
 	processMediaItem := func(mediaItem posts.MediaItem) {
-		if len(mediaItem.Locations) > 0 && mediaItem.Height > bestHeight {
+		// First, try to use the main media item if it has a location
+		if len(mediaItem.Locations) > 0 {
 			bestMedia = &mediaItem
 			bestHeight = mediaItem.Height
 			bestMetadata = mediaItem.Locations[0].Metadata
 			mediaUrl = mediaItem.Locations[0].Location
-			//log.Printf("\n[Main Media Height] H: %v", bestHeight)
-			//log.Printf("\n[MAIN Media URL] %v\n", mediaUrl)
 		}
-		if d.M3U8Download && d.ffmpegAvailable {
-			//log.Printf("[FFMPEG] Status: %v", d.ffmpegAvailable)
+
+		// Process all variants
+		for _, variant := range mediaItem.Variants {
+			variantType := getMediaType(variant.Mimetype)
+
+			// Skip M3U8 files if M3U8Download is false
+			if variant.Mimetype == "application/vnd.apple.mpegurl" && !d.M3U8Download {
+				continue
+			}
+
+			// Only consider variants of the same type as the main item
+			if variantType == mainType && len(variant.Locations) > 0 {
+				if bestMedia == nil || variant.Height > bestHeight {
+					bestMedia = &posts.MediaItem{
+						ID:        variant.ID,
+						Type:      variant.Type,
+						Height:    variant.Height,
+						Mimetype:  variant.Mimetype,
+						Locations: variant.Locations,
+					}
+					bestHeight = variant.Height
+					bestMetadata = variant.Locations[0].Metadata
+					mediaUrl = variant.Locations[0].Location
+				}
+			}
+		}
+
+		// Special handling for M3U8 files if enabled
+		if d.M3U8Download && d.ffmpegAvailable && mainType == "video" {
 			for _, variant := range mediaItem.Variants {
-				if variant.Mimetype == "application/vnd.apple.mpegurl" && variant.Height > bestHeight {
-					if len(variant.Locations) > 0 {
+				if variant.Mimetype == "application/vnd.apple.mpegurl" && len(variant.Locations) > 0 {
+					if bestMedia == nil || variant.Height > bestHeight {
 						bestMedia = &posts.MediaItem{
 							ID:        variant.ID,
 							Type:      variant.Type,
@@ -307,8 +348,6 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 						bestHeight = variant.Height
 						bestMetadata = variant.Locations[0].Metadata
 						mediaUrl = variant.Locations[0].Location
-						//log.Printf("\n[Variant Media Height] %v", bestHeight)
-						//log.Printf("\n[Variant Media URL] %v\n", mediaUrl)
 					}
 				}
 			}
@@ -473,8 +512,8 @@ func (d *Downloader) downloadRegularFile(url, filePath string, modelName string,
 	hash := sha256.New()
 	tee := io.TeeReader(resp.Body, hash)
 
-	//_, err = io.Copy(io.MultiWriter(out, d.progressBar), tee)
-	_, err = io.Copy(out, tee)
+	_, err = io.Copy(io.MultiWriter(out, d.progressBar), tee)
+	//_, err = io.Copy(out, tee)
 	if err != nil {
 		return err
 	}
