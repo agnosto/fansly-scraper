@@ -26,9 +26,12 @@
 - [x] Fix m3u8 downloading for potential higher quality (want to do more testing on different hardware, but should be fine for the most part)
 - [x] Fix editing config option (broke in refactor lol)
 - [x] Add option to download purchases directly and save to model folder (default to creating {model id}/purchases if account is deleted)
+- [x] Handle pid removal on windows when using cli monitoring 
 
 ## ToDo:
 
+- [ ] Properly handle monitoring in TUI
+- [ ] Configurable filename for lives and separate save path
 - [ ] Fix occasional `<Access Denied>` file download (most likely rate limit issue)
 - [ ] Properly handle going back during post fetching to cancel
 - [ ] Properly handle going back to main menu once finished (downloading/interactions)

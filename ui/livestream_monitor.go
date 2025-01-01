@@ -2,14 +2,21 @@ package ui
 
 import (
 	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+
 	//"fmt"
 	//"sync"
 	"strings"
 	"time"
 
 	"github.com/agnosto/fansly-scraper/auth"
+	"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/core"
 	"github.com/agnosto/fansly-scraper/logger"
+
 	//"github.com/agnosto/fansly-scraper/service"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -82,8 +89,9 @@ func (m *MainModel) HandleLivestreamMonitorUpdate(msg tea.Msg) (tea.Model, tea.C
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(msg, m.keys.Quit):
+		case key.Matches(msg, m.keys.Quit), msg.String() == "ctrl+c":
 			m.quit = true
+			m.Cleanup()
 			return m, tea.Quit
 		case key.Matches(msg, m.keys.Up):
 			m.monitoringTable.MoveUp(1)
@@ -235,4 +243,48 @@ func (m *MainModel) applyLiveMonitorFilter() {
 	}
 	m.filteredLiveMonitorModels = filtered
 	m.updateMonitoringTable()
+}
+
+func (m *MainModel) Cleanup() {
+	// Stop all monitoring first
+	m.monitoringService.Shutdown()
+
+	// Kill FFmpeg processes with proper error handling
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("taskkill", "/F", "/IM", "ffmpeg.exe")
+	} else {
+		cmd = exec.Command("pkill", "ffmpeg")
+	}
+	cmd.Run() // Execute the command synchronously
+
+	// Clean up lock files with verification
+	recordingsPath := filepath.Join(config.GetConfigDir(), "active_recordings")
+	files, err := os.ReadDir(recordingsPath)
+	if err == nil {
+		for _, file := range files {
+			if filepath.Ext(file.Name()) == ".lock" {
+				lockFile := filepath.Join(recordingsPath, file.Name())
+				if err := os.Remove(lockFile); err != nil {
+					logger.Logger.Printf("Failed to remove lock file %s: %v", lockFile, err)
+				}
+			}
+		}
+	}
+}
+
+// Add a cleanup function that can be called from the TUI
+func cleanupLockFiles() {
+	recordingsPath := filepath.Join(config.GetConfigDir(), "active_recordings")
+	files, err := os.ReadDir(recordingsPath)
+	if err != nil {
+		return
+	}
+
+	for _, file := range files {
+		if filepath.Ext(file.Name()) == ".lock" {
+			lockFile := filepath.Join(recordingsPath, file.Name())
+			os.Remove(lockFile)
+		}
+	}
 }

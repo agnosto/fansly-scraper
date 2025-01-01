@@ -1,6 +1,10 @@
 package ui
 
 import (
+	"os"
+	"os/signal"
+	"syscall"
+
 	"github.com/agnosto/fansly-scraper/auth"
 	//"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/core"
@@ -174,8 +178,20 @@ var defaultKeyMap = keyMap{
 }
 
 func (m *MainModel) Init() tea.Cmd {
-	return nil
-	// panic("unimplemented")
+	// Add signal handling
+	return tea.Batch(
+		tea.EnterAltScreen,
+		func() tea.Msg {
+			c := make(chan os.Signal, 1)
+			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+			go func() {
+				<-c
+				m.Cleanup()
+				os.Exit(0)
+			}()
+			return nil
+		},
+	)
 }
 
 func NewMainModel(downloader *download.Downloader, version string, monitoringService *service.MonitoringService) *MainModel {

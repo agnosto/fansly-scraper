@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"runtime"
+
 	"github.com/agnosto/fansly-scraper/cmd"
 	"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/core"
@@ -10,6 +12,7 @@ import (
 	"github.com/agnosto/fansly-scraper/service"
 	"github.com/agnosto/fansly-scraper/ui"
 	"github.com/agnosto/fansly-scraper/updater"
+
 	//ksvc "github.com/kardianos/service"
 
 	"context"
@@ -19,6 +22,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"syscall"
+
 	//"flag"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -134,6 +138,12 @@ func main() {
 
 	model := ui.NewMainModel(downloader, version, monitoringService)
 	p := tea.NewProgram(model, tea.WithAltScreen())
+
+	// Add cleanup on program exit
+	defer func() {
+		model.Cleanup()
+	}()
+
 	if _, err := p.Run(); err != nil {
 		logger.Logger.Printf("Error: %v", err)
 		os.Exit(1)
@@ -176,11 +186,37 @@ func runCLIMode(username string, downloadType string, downloader *download.Downl
 	}
 }
 
+func isProcessRunning(pid int) bool {
+	if runtime.GOOS == "windows" {
+		process, err := os.FindProcess(pid)
+		if err != nil {
+			return false
+		}
+		// On Windows, FindProcess always succeeds, so we need to try to get exit code
+		processState, err := process.Wait()
+		return err == nil && !processState.Exited()
+	}
+	// Unix-like systems (Linux, macOS)
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
+}
+
 func startMonitoring() {
 	pidFile := filepath.Join(config.GetConfigDir(), "monitor.pid")
-	if _, err := os.Stat(pidFile); err == nil {
-		fmt.Println("Monitoring process is already running.")
-		return
+
+	// Check existing process
+	if data, err := os.ReadFile(pidFile); err == nil {
+		pid, err := strconv.Atoi(string(data))
+		if err == nil && isProcessRunning(pid) {
+			fmt.Println("Monitoring process is already running.")
+			return
+		}
+		// Clean up stale PID file
+		os.Remove(pidFile)
 	}
 
 	pid := os.Getpid()
@@ -189,30 +225,39 @@ func startMonitoring() {
 		return
 	}
 
-	defer os.Remove(pidFile)
+	// Ensure cleanup on exit
+	defer func() {
+		cleanupLockFiles()
+		os.Remove(pidFile)
+	}()
 
 	fmt.Printf("Started monitoring process with PID %d\n", pid)
+
+	// Load config and handle potential error
+	cfg, err := config.LoadConfig(config.GetConfigPath())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Initialize logger with the loaded config
+	if err := logger.InitLogger(cfg); err != nil {
+		log.Fatal(err)
+	}
 
 	monitoringService := service.NewMonitoringService(
 		filepath.Join(config.GetConfigDir(), "monitoring_state.json"),
 		logger.Logger,
 	)
-	monitoringService.StartMonitoring()
-	go monitoringService.Run() // Run in a goroutine to allow the main process to continue
 
-	// Keep the main process running
+	monitoringService.StartMonitoring()
+	go monitoringService.Run()
+
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-signalChan
-		fmt.Println("Received interrupt signal. Shutting down monitoring...")
-		stopMonitoring()
-		cleanupLockFiles()
-		os.Exit(0)
-	}()
 
-	// Keep the main process running
-	select {}
+	<-signalChan
+	fmt.Println("Received interrupt signal. Shutting down monitoring...")
+	monitoringService.Shutdown()
 }
 
 func stopMonitoring() {
