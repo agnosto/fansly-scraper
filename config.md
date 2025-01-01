@@ -78,6 +78,10 @@ Common formats:
 - `2006-01-02_15:04:05`: 2024-02-15_13:45:30
 - `2006-01-02`: 2024-02-15
 - `15:04:05`: 13:45:30
+- `Jan 02 2006`: Feb 15 2024
+- `January 02 2006`: February 15 2024
+- `Mon Jan 02 2006`: Thu Feb 15 2024
+- `02-01-2006`: 15-02-2024
 
 ## Security Headers
 These are automatically managed by the application:
