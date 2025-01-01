@@ -4,12 +4,15 @@ user_agent = ""
 
 [options]
 save_location = "/path/to/save/content/to" # On windows replace any \ with / 
-# If you have ffmpeg and want instances of it spawned to try to save higher quality
-# videos, set this to true
-m3u8_dl = false
-vods_file_extension = ".ts" # ts files tend to better handle if recording crashes, can be watched directly via vlc or mpv or converted to an mp4.
-ffmpeg_convert = true 
-generate_contact_sheet = true
+m3u8_dl = false # set true if you have ffmpeg and want instances of it spawned to try to save higher quality videos
+
+[live_settings]
+save_location = "" # Optional: Set custom path for livestream recordings. If empty, uses default path
+vods_file_extension = ".ts" # ts files handle recording crashes better, can be watched via vlc/mpv or converted
+ffmpeg_convert = true # Convert to MP4 after recording
+generate_contact_sheet = true # Generate preview thumbnails
+filename_template = "{model_username}_{date}_{streamId}_{streamVersion}" # Available variables: model_username, date, streamId, streamVersion
+date_format = "20060102_150405" # Default format 
 
 [security_headers] # These get automatically added, no need to touch unless you want to.
 device_id = ""

@@ -9,15 +9,26 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
 )
 
 type Config struct {
-	Account         AccountConfig
-	Options         OptionsConfig
-	SecurityHeaders SecurityHeadersConfig
+	Account         AccountConfig         `toml:"account"`
+	Options         OptionsConfig         `toml:"options"`
+	LiveSettings    LiveSettingsConfig    `toml:"live_settings"`
+	SecurityHeaders SecurityHeadersConfig `toml:"security_headers"`
+}
+
+type LiveSettingsConfig struct {
+	SaveLocation         string `toml:"save_location"` // Optional, defaults to main save location if empty
+	VODsFileExtension    string `toml:"vods_file_extension"`
+	FFmpegConvert        bool   `toml:"ffmpeg_convert"`
+	GenerateContactSheet bool   `toml:"generate_contact_sheet"`
+	FilenameTemplate     string `toml:"filename_template"` // e.g. "{model_username}_{date}_{streamId}_{streamVersion}"
+	DateFormat           string `toml:"date_format"`
 }
 
 type AccountConfig struct {
@@ -26,11 +37,8 @@ type AccountConfig struct {
 }
 
 type OptionsConfig struct {
-	SaveLocation         string `toml:"save_location"`
-	M3U8Download         bool   `toml:"m3u8_dl"`
-	VODsFileExtension    string `toml:"vods_file_extension"`
-	FFmpegConvert        bool   `toml:"ffmpeg_convert"`
-	GenerateContactSheet bool   `toml:"generate_contact_sheet"`
+	SaveLocation string `toml:"save_location"`
+	M3U8Download bool   `toml:"m3u8_dl"`
 }
 
 type SecurityHeadersConfig struct {
@@ -87,6 +95,14 @@ func GetConfigDir() string {
 }
 
 func SaveConfig(cfg *Config) error {
+	// Read existing config
+	existingConfig, err := LoadConfig(GetConfigPath())
+	if err == nil {
+		// Preserve existing settings while updating security headers
+		cfg.LiveSettings = existingConfig.LiveSettings
+		cfg.Options = existingConfig.Options
+	}
+
 	configPath := GetConfigPath()
 	file, err := os.Create(configPath)
 	if err != nil {
@@ -252,11 +268,16 @@ func CreateDefaultConfig() *Config {
 			UserAgent: "",
 		},
 		Options: OptionsConfig{
-			SaveLocation:         "/path/to/save/content/to",
-			M3U8Download:         false,
+			SaveLocation: "/path/to/save/content/to",
+			M3U8Download: false,
+		},
+		LiveSettings: LiveSettingsConfig{
+			SaveLocation:         "", // Empty means use default path
 			VODsFileExtension:    ".ts",
 			FFmpegConvert:        true,
 			GenerateContactSheet: true,
+			FilenameTemplate:     "{model_username}_{date}_{streamId}_{streamVersion}",
+			DateFormat:           "20060102_150405",
 		},
 		SecurityHeaders: SecurityHeadersConfig{
 			DeviceID:    "",
@@ -265,4 +286,56 @@ func CreateDefaultConfig() *Config {
 			LastUpdated: time.Now(),
 		},
 	}
+}
+
+func FormatVODFilename(template string, data map[string]string) string {
+	result := template
+
+	// Add 'v' prefix to streamVersion if it exists
+	if version, exists := data["streamVersion"]; exists {
+		data["streamVersion"] = "v" + version
+	}
+
+	// Replace all placeholders with their values
+	for key, value := range data {
+		placeholder := fmt.Sprintf("{%s}", key)
+		result = strings.ReplaceAll(result, placeholder, value)
+	}
+
+	return result
+}
+
+func ResolveLiveSavePath(cfg *Config, username string) string {
+	// If LiveSettings.SaveLocation is set, use it directly
+	if cfg.LiveSettings.SaveLocation != "" {
+		return filepath.ToSlash(cfg.LiveSettings.SaveLocation)
+	}
+
+	// Otherwise use default path: SaveLocation/username/lives
+	return filepath.ToSlash(filepath.Join(cfg.Options.SaveLocation, strings.ToLower(username), "lives"))
+}
+
+func GetVODFilename(cfg *Config, data map[string]string) string {
+	// Use configured date format, fallback to default if empty
+	dateFormat := cfg.LiveSettings.DateFormat
+	if dateFormat == "" {
+		dateFormat = "20060102_150405"
+	}
+
+	data["date"] = time.Now().Format(dateFormat)
+
+	template := cfg.LiveSettings.FilenameTemplate
+	if template == "" {
+		template = "{model_username}_{date}_{streamId}"
+	}
+
+	filename := FormatVODFilename(template, data)
+	return filename + cfg.LiveSettings.VODsFileExtension
+}
+
+// Example usage in recording logic:
+func BuildVODPath(cfg *Config, username string, streamData map[string]string) string {
+	savePath := ResolveLiveSavePath(cfg, username)
+	filename := GetVODFilename(cfg, streamData)
+	return filepath.Join(savePath, filename)
 }

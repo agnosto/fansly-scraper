@@ -272,6 +272,23 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 		return
 	}
 
+	// Build filename based on config template
+	data := map[string]string{
+		"model_username": username,
+		"date":           time.Now().Format("20060102_150405"),
+		"streamId":       streamData.StreamID,
+		"streamVersion":  streamData.StreamVersion,
+	}
+
+	savePath := config.ResolveLiveSavePath(cfg, username)
+	if err := os.MkdirAll(savePath, 0755); err != nil {
+		ms.logger.Printf("Error creating directory: %v", err)
+		return
+	}
+
+	filename := config.GetVODFilename(cfg, data)
+	recordedFilename := filepath.Join(savePath, filename)
+
 	dir := filepath.Join(cfg.Options.SaveLocation, strings.ToLower(username), "lives")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		ms.logger.Printf("Error creating directory for %s: %v", username, err)
@@ -279,15 +296,15 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 	}
 
 	// Set up recording filename
-	currentTime := time.Now().Format("20060102_150405")
-	sanitizedUsername := strings.Map(func(r rune) rune {
-		if strings.ContainsRune(`<>:"/\|?*`, r) {
-			return '_'
-		}
-		return r
-	}, username)
-	filename := fmt.Sprintf("%s_%s_v%s", sanitizedUsername, currentTime, streamData.StreamID)
-	recordedFilename := filepath.Join(dir, filename+cfg.Options.VODsFileExtension)
+	//currentTime := time.Now().Format("20060102_150405")
+	//sanitizedUsername := strings.Map(func(r rune) rune {
+	//	if strings.ContainsRune(`<>:"/\|?*`, r) {
+	//		return '_'
+	//	}
+	//	return r
+	//}, username)
+	//filename := fmt.Sprintf("%s_%s_v%s", sanitizedUsername, currentTime, streamData.StreamID)
+	//recordedFilename := filepath.Join(dir, filename+cfg.Options.VODsFileExtension)
 
 	// Create FFmpeg command
 	cmd := exec.Command("ffmpeg", "-i", playbackUrl, "-c", "copy",
@@ -338,8 +355,8 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 	go func() {
 		defer wg.Done()
 
-		if cfg.Options.FFmpegConvert {
-			mp4Filename := filepath.Join(dir, filename+".mp4")
+		if cfg.LiveSettings.FFmpegConvert {
+			mp4Filename := strings.TrimSuffix(recordedFilename, cfg.LiveSettings.VODsFileExtension) + ".mp4"
 			ms.logger.Printf("Starting MP4 conversion for %s", username)
 
 			if err := ms.convertToMP4(recordedFilename, mp4Filename); err != nil {
@@ -349,17 +366,21 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 			ms.logger.Printf("MP4 conversion complete for %s", username)
 
 			if err := os.Remove(recordedFilename); err != nil && !os.IsNotExist(err) {
-				ms.logger.Printf("Error deleting TS file for %s: %v", username, err)
+				ms.logger.Printf("Error deleting original file for %s: %v", username, err)
 			}
 		}
 
-		if cfg.Options.GenerateContactSheet {
-			mp4Filename := filepath.Join(dir, filename+".mp4")
-			if err := ms.generateContactSheet(mp4Filename); err != nil {
+		if cfg.LiveSettings.GenerateContactSheet {
+			finalFilename := recordedFilename
+			if cfg.LiveSettings.FFmpegConvert {
+				finalFilename = strings.TrimSuffix(recordedFilename, cfg.LiveSettings.VODsFileExtension) + ".mp4"
+			}
+			if err := ms.generateContactSheet(finalFilename); err != nil {
 				ms.logger.Printf("Error generating contact sheet for %s: %v", username, err)
 			}
 		}
 
+		// Save recording info to database
 		if err := ms.saveLiveRecording(username, recordedFilename, streamData.StreamID); err != nil {
 			ms.logger.Printf("Error saving live recording info for %s: %v", username, err)
 		}

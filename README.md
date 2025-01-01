@@ -37,6 +37,10 @@ go build -o fansly-scraper ./cmd/fansly-scraper
 go install github.com/agnosto/fansly-scraper/cmd/fansly-scraper@latest
 ```
 
+## Config
+
+To learn about the different config options you have available, refer to [config](./config.md).
+
 ## Running the program 
 
 ### Interactive TUI 
@@ -80,30 +84,6 @@ As this is a wip tool, new versions may be made available sporadically, I've avo
 ./fansly-scraper update
 ```
 
-## Get fansly account token
-
-### Method 1:
-1. Go to [fansly](https://fansly.com) and login and open devtools (ctrl+shift+i / F12)
-2. In network request, type `method:GET api` and click one of the requests
-3. Look under `Request Headers` and look for `Authorization` and copy the value
-
-### Method 2:
-1. Go to [fansly](https://fansly.com) and login and open devtools (ctrl+shift+i / F12)
-2. Click on `Storage` and then `Local Storage`
-3. Look for `session_active_session` and copy the `token` value
-
-### Method 3 (Recommended) special thanks to [prof79](https://github.com/prof79/)'s wiki for this:
-1. Go to [fansly](https://fansly.com) and login and open devtools (ctrl+shift+i / F12)
-2. In devtools, go to the Console Tab and Paste the following: 
-```javascript
-console.clear(); // cleanup console
-const activeSession = localStorage.getItem("session_active_session"); // get required key
-const { token } = JSON.parse(activeSession); // parse the json data
-console.log('%c➡️ Authorization_Token =', 'font-size: 12px; color: limegreen; font-weight: bold;', token); // show token
-console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weight: bold;', navigator.userAgent); // show user-agent
-```
-
-(images at a later date)
 
 ## Program Status
 
