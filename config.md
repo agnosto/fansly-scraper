@@ -29,7 +29,7 @@ console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weigh
 1. Go to [fansly](https://fansly.com) and login and open devtools (ctrl+shift+i / F12)
 2. Click on `Storage` and then `Local Storage`
 3. Look for `session_active_session` and copy the `token` value
-
+</details>
 
 ## Options
 | Setting | Description | Default | Example |
