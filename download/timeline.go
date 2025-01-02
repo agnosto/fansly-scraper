@@ -17,6 +17,7 @@ import (
 
 	//"strconv"
 
+	"github.com/dustin/go-humanize"
 	"github.com/schollz/progressbar/v3"
 	"golang.org/x/time/rate"
 
@@ -231,8 +232,9 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 		}(post)
 	}
 	wg.Wait()
-	//d.progressBar.Finish()
+	d.progressBar.Finish()
 	d.progressBar.Clear()
+	fmt.Print("\033[2K\r")
 	//wg.Wait()
 	return nil
 }
@@ -503,6 +505,24 @@ func (d *Downloader) downloadRegularFile(url, filePath string, modelName string,
 	}
 	defer resp.Body.Close()
 
+	d.progressBar = progressbar.NewOptions(
+		-1,
+		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionEnableColorCodes(true),
+		progressbar.OptionUseANSICodes(true),
+		progressbar.OptionShowBytes(true),
+		//progressbar.OptionSetPredictTime(true),
+		progressbar.OptionSetDescription(fmt.Sprintf("[green]Downloading[reset] %s (%s)",
+			filepath.Base(filePath),
+			humanize.Bytes(uint64(resp.ContentLength)))),
+		progressbar.OptionSetWidth(40),
+		progressbar.OptionThrottle(15*time.Millisecond),
+		progressbar.OptionShowCount(),
+		progressbar.OptionShowIts(),
+		progressbar.OptionSpinnerType(14),
+		progressbar.OptionFullWidth(),
+	)
+
 	out, err := os.Create(filePath)
 	if err != nil {
 		return err
@@ -510,26 +530,13 @@ func (d *Downloader) downloadRegularFile(url, filePath string, modelName string,
 	defer out.Close()
 
 	hash := sha256.New()
-	tee := io.TeeReader(resp.Body, hash)
-
-	_, err = io.Copy(io.MultiWriter(out, d.progressBar), tee)
-	//_, err = io.Copy(out, tee)
+	_, err = io.Copy(io.MultiWriter(out, d.progressBar, hash), resp.Body)
 	if err != nil {
 		return err
 	}
 
 	hashString := hex.EncodeToString(hash.Sum(nil))
-	err = d.saveFileHash(modelName, hashString, filePath, fileType)
-	if err != nil {
-		return err
-	}
-
-	//_, err = io.Copy(out, resp.Body)
-	//if err != nil {
-	//    return err
-	//}
-
-	return nil
+	return d.saveFileHash(modelName, hashString, filePath, fileType)
 }
 
 func (d *Downloader) fileExists(filePath string) bool {

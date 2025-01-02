@@ -27,11 +27,12 @@
 - [x] Fix editing config option (broke in refactor lol)
 - [x] Add option to download purchases directly and save to model folder (default to creating {model id}/purchases if account is deleted)
 - [x] Handle pid removal on windows when using cli monitoring 
+- [x] Configurable filename for lives and separate save path
 
 ## ToDo:
 
+- [ ] Fix progress time during file download
 - [ ] Properly handle monitoring in TUI
-- [ ] Configurable filename for lives and separate save path
 - [ ] Fix occasional `<Access Denied>` file download (most likely rate limit issue)
 - [ ] Properly handle going back during post fetching to cancel
 - [ ] Properly handle going back to main menu once finished (downloading/interactions)
