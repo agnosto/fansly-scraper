@@ -3,7 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
-	"log"
+	//"log"
 	"strings"
 	"sync"
 	//"github.com/agnosto/fansly-scraper/auth"
@@ -82,11 +82,13 @@ func (m *MainModel) startDownload(option string) tea.Cmd {
 		//log.Println("startDownload function called")
 		var wg sync.WaitGroup
 		wg.Add(1)
+
 		go func() {
 			//log.Println("Starting download goroutine")
 			defer wg.Done()
 			var err error
 			ctx := context.Background()
+
 			switch option {
 			case "All":
 				if err := m.downloader.DownloadTimeline(ctx, m.selectedModelId, m.selectedModel); err != nil {
@@ -105,24 +107,17 @@ func (m *MainModel) startDownload(option string) tea.Cmd {
 			case "Stories":
 				err = m.downloader.DownloadStories(ctx, m.selectedModelId, m.selectedModel)
 			}
+
 			if err != nil {
-				if err.Error() == "not subscribed or followed: unable to get timeline feed" {
-					log.Printf("Unable to download timeline for %s: Not subscribed or followed", m.selectedModel)
-					// You might want to update the UI here to show this message
-				} else {
-					logger.Logger.Printf("Error downloading %v for %s: %v", option, m.selectedModel, err)
-					log.Printf("Error downloading %s for %s: %v", option, m.selectedModel, err)
-				}
+				logger.Logger.Printf("Error downloading %s for %s: %v", option, m.selectedModel, err)
 			}
 			//log.Println("Download goroutine finished")
 		}()
 
+		//return func() tea.Msg {
+		wg.Wait()
 		//m.state = MainMenuState
-		//return nil
-		return func() tea.Msg {
-			wg.Wait()
-			m.state = MainMenuState
-			return downloadCompleteMsg{}
-		}
+		return downloadCompleteMsg{}
+		//}
 	}
 }
