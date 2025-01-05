@@ -91,7 +91,6 @@ As this is a wip tool, new versions may be made available sporadically, I've avo
 
 For the time being:
 - It's recommended to leave m3u8_dl in the config set to false if you want things to download fast depending on your hardware. Do feel free to enable to give input/issues with it if you want.
-- Press `ESC` once done downloading/(un)liking to be able to go back.
 
 ### "Duplicate Files"
 

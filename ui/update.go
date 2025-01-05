@@ -89,6 +89,10 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = MainMenuState
 		m.cursorPos = 0
 		return m, nil
+	case likeUnlikeCompletedMsg:
+		m.state = MainMenuState
+		m.cursorPos = 0
+		return m, nil
 	case editConfigMsg:
 		if msg.Success {
 			m.message = "Config edited successfully!"

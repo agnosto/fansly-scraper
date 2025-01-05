@@ -28,14 +28,15 @@
 - [x] Add option to download purchases directly and save to model folder (default to creating {model id}/purchases if account is deleted)
 - [x] Handle pid removal on windows when using cli monitoring 
 - [x] Configurable filename for lives and separate save path
+- [x] Properly handle going back to main menu once finished (downloading/interactions)
+- [x] Fix progress time during file download
 
 ## ToDo:
 
-- [ ] Fix progress time during file download
+- [ ] Add new menu post download, asking to continue downloading someone else, quit, etc.
 - [ ] Properly handle monitoring in TUI
 - [ ] Fix occasional `<Access Denied>` file download (most likely rate limit issue)
 - [ ] Properly handle going back during post fetching to cancel
-- [ ] Properly handle going back to main menu once finished (downloading/interactions)
 - [ ] More testing for timeline scraping (not subbed to any models atm)
 - [ ] I guess also save a version of models pfp & banner
 - [ ] Add simple web dashboard to view images and watch videos/lives (was contemplating on adding but maybe down the line)

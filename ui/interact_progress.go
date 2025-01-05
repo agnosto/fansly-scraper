@@ -61,7 +61,7 @@ func (m *MainModel) InitiateLikeUnlike(action string) tea.Cmd {
 			logger.Logger.Printf("[ERROR] Failed to load config %v", err)
 		}
 
-		done := make(chan struct{})
+		//done := make(chan struct{})
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func() {
@@ -73,7 +73,7 @@ func (m *MainModel) InitiateLikeUnlike(action string) tea.Cmd {
 			timelinePosts, err := posts.GetAllTimelinePosts(m.selectedModelId, cfg.Account.AuthToken, cfg.Account.UserAgent)
 			if err != nil {
 				logger.Logger.Printf("Error fetching timeline posts for %s: %v", m.selectedModel, err)
-				close(done)
+				//close(done)
 				return
 			}
 
@@ -89,15 +89,15 @@ func (m *MainModel) InitiateLikeUnlike(action string) tea.Cmd {
 			if err != nil {
 				logger.Logger.Printf("Error %sing posts for %s: %v", action, m.selectedModel, err)
 			}
-			close(done)
+			//close(done)
 		}()
 
-		return func() tea.Msg {
-			<-done
-			wg.Wait()
-			logger.Logger.Printf("[DEBUG] Like/Unlike operation completed, sending likeUnlikeCompletedMsg")
-			//m.state = MainMenuState
-			return likeUnlikeCompletedMsg{success: true, err: nil}
-		}
+		//return func() tea.Msg {
+		//<-done
+		wg.Wait()
+		logger.Logger.Printf("[DEBUG] Like/Unlike operation completed, sending likeUnlikeCompletedMsg")
+		//m.state = MainMenuState
+		return likeUnlikeCompletedMsg{success: true, err: nil}
+		//}
 	}
 }
