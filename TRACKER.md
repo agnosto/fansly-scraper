@@ -30,10 +30,10 @@
 - [x] Configurable filename for lives and separate save path
 - [x] Properly handle going back to main menu once finished (downloading/interactions)
 - [x] Fix progress time during file download
+- [x] Add new menu post download/interact, asking to continue with another creator, quit, etc.
 
 ## ToDo:
 
-- [ ] Add new menu post download, asking to continue downloading someone else, quit, etc.
 - [ ] Properly handle monitoring in TUI
 - [ ] Fix occasional `<Access Denied>` file download (most likely rate limit issue)
 - [ ] Properly handle going back during post fetching to cancel
