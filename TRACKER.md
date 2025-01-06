@@ -34,6 +34,7 @@
 
 ## ToDo:
 
+- [ ] Fix progress bar rendering error (eg. ⠋ Downloading xxxxx_xxxxx.png (126 kB) (126 kB, 2.6 MB/s, 2566525 it/s) [0s] 13s])
 - [ ] Properly handle monitoring in TUI
 - [ ] Fix occasional `<Access Denied>` file download (most likely rate limit issue)
 - [ ] Properly handle going back during post fetching to cancel
