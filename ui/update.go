@@ -55,6 +55,8 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.HandleLiveMonitorFilterUpdate(msg)
 		case DownloadPurchasedState:
 			return m.HandlePurchaseProgressMenuUpdate(msg)
+		case CompletionState:
+			return m.HandleCompletionUpdate(msg)
 		// Add cases for other states
 		default:
 			logger.Logger.Printf("[DEBUG] Update: Unhandled state: %v", m.state)
@@ -94,7 +96,7 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}),
 		)
 	case delayedDownloadCompleteMsg:
-		m.state = MainMenuState
+		m.state = CompletionState
 		m.cursorPos = 0
 		return m, nil
 	case likeUnlikeCompletedMsg:
@@ -104,7 +106,7 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}),
 		)
 	case delayedLikeUnlikeCompleteMsg:
-		m.state = MainMenuState
+		m.state = CompletionState
 		m.cursorPos = 0
 		return m, nil
 	case editConfigMsg:
@@ -141,6 +143,8 @@ func (m *MainModel) View() string {
 		return m.RenderLiveMonitorFilterMenu()
 	case DownloadPurchasedState:
 		return m.RenderPurchaseProgressMenu()
+	case CompletionState:
+		return m.RenderCompletionMenu()
 	default:
 		return "Unknown state"
 	}

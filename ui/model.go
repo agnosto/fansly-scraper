@@ -45,6 +45,7 @@ const (
 	DownloadProgressState
 	LiveMonitorFilterState
 	DownloadPurchasedState
+	CompletionState
 )
 
 type MainModel struct {
