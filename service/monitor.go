@@ -37,6 +37,15 @@ type MonitoringService struct {
 	recordingsPath   string
 	stopChan         chan struct{}
 	logger           *log.Logger
+	isTUI            bool
+}
+
+func (ms *MonitoringService) GetRecordingsPath() string {
+	return ms.recordingsPath
+}
+
+func (ms *MonitoringService) StartRecordingStream(modelID, username, playbackUrl string) {
+	ms.startRecording(modelID, username, playbackUrl)
 }
 
 func NewMonitoringService(storagePath string, logger *log.Logger) *MonitoringService {
@@ -54,8 +63,15 @@ func NewMonitoringService(storagePath string, logger *log.Logger) *MonitoringSer
 		recordingsPath: filepath.Join(filepath.Dir(storagePath), "active_recordings"),
 		stopChan:       make(chan struct{}),
 		logger:         logger,
+		isTUI:          false,
 	}
 	return mt
+}
+
+func (ms *MonitoringService) SetTUIMode(enabled bool) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	ms.isTUI = enabled
 }
 
 func (ms *MonitoringService) StartMonitoring() {
@@ -180,29 +196,43 @@ func (ms *MonitoringService) monitorModel(modelID, username string) {
 		ms.mu.Unlock()
 	}()
 
-	fmt.Printf("Starting to monitor %s (%s)\n", username, modelID)
+	if !ms.isTUI {
+		fmt.Printf("Starting to monitor %s (%s)\n", username, modelID)
+	}
+
 	for ms.IsMonitoring(modelID) {
 		isLive, playbackUrl, err := core.CheckIfModelIsLive(modelID)
 		if err != nil {
-			fmt.Printf("Error checking if %s is live: %v\n", username, err)
+			if !ms.isTUI {
+				fmt.Printf("Error checking if %s is live: %v\n", username, err)
+			}
 		} else if isLive {
-			printColoredMessage(fmt.Sprintf("%s is live. Attempting to start recording.", username), true)
 			lockFile := filepath.Join(ms.recordingsPath, modelID+".lock")
 			err = os.MkdirAll(ms.recordingsPath, 0755)
 			if err != nil {
 				return
 			}
+
 			if _, err := os.Stat(lockFile); os.IsNotExist(err) {
+				if !ms.isTUI {
+					printColoredMessage(fmt.Sprintf("%s is live. Attempting to start recording.", username), true)
+				}
 				go ms.startRecording(modelID, username, playbackUrl)
-			} else {
+			} else if !ms.isTUI {
 				fmt.Printf("%s is already being recorded\n", username)
 			}
 		} else {
-			printColoredMessage(fmt.Sprintf("%s is not live. Checking again in 2 minutes.", username), false)
+			if !ms.isTUI {
+				printColoredMessage(fmt.Sprintf("%s is not live. Checking again in 2 minutes.", username), false)
+			}
 		}
+
 		time.Sleep(2 * time.Minute)
 	}
-	fmt.Printf("Stopped monitoring %s (%s)\n", username, modelID)
+
+	if !ms.isTUI {
+		fmt.Printf("Stopped monitoring %s (%s)\n", username, modelID)
+	}
 }
 
 func isProcessRunning(name string) bool {

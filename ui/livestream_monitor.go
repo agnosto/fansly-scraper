@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -87,12 +88,19 @@ func (ms *MonitoringService) StopMonitoring(modelID string) {
 
 func (m *MainModel) HandleLivestreamMonitorUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case LiveStatusUpdateMsg:
+		return m, nil
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.keys.Quit), msg.String() == "ctrl+c":
 			m.quit = true
 			m.Cleanup()
 			return m, tea.Quit
+		case key.Matches(msg, m.keys.Reset):
+			m.filteredLiveMonitorModels = m.followedModels
+			m.liveMonitorFilterInput = ""
+			m.updateMonitoringTable()
+			return m, nil
 		case key.Matches(msg, m.keys.Up):
 			m.monitoringTable.MoveUp(1)
 		case key.Matches(msg, m.keys.Down):
@@ -185,30 +193,68 @@ func (m *MainModel) RenderLiveMonitorFilterMenu() string {
 	return sb.String()
 }
 
-func (m *MainModel) initializeLivestreamMonitoringTable() {
+func (m *MainModel) initializeLivestreamMonitoringTable() tea.Cmd {
 	m.filteredLiveMonitorModels = m.followedModels
+	m.monitoringService.SetTUIMode(true)
+	m.monitoringService.StartMonitoring()
 	m.updateMonitoringTable()
+	return m.startLiveStatusUpdates()
+}
+
+func (m *MainModel) loadMonitoringState() map[string]string {
+	configDir := config.GetConfigDir()
+	statePath := filepath.Join(configDir, "monitoring_state.json")
+
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			logger.Logger.Printf("Error reading monitoring state: %v", err)
+		}
+		return make(map[string]string)
+	}
+
+	var activeMonitors map[string]string
+	if err := json.Unmarshal(data, &activeMonitors); err != nil {
+		logger.Logger.Printf("Error parsing monitoring state: %v", err)
+		return make(map[string]string)
+	}
+
+	return activeMonitors
 }
 
 func (m *MainModel) updateMonitoringTable() {
 	columns := []table.Column{
 		{Title: "Username", Width: 20},
 		{Title: "Account ID", Width: 20},
-		{Title: "Status", Width: 15},
+		{Title: "Monitor Status", Width: 15},
+		{Title: "Live Status", Width: 15},
 	}
 
+	activeMonitors := m.loadMonitoringState()
 	rows := make([]table.Row, len(m.filteredLiveMonitorModels))
+
 	for i, model := range m.filteredLiveMonitorModels {
-		status := "Not Monitoring"
-		statusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("red"))
-		if m.monitoringService.IsMonitoring(model.ID) {
-			status = "Monitoring"
-			statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("green"))
+		monitorStatus := "Not Monitoring"
+		monitorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("red"))
+		liveStatus := "Offline"
+		liveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("red"))
+
+		if _, isMonitored := activeMonitors[model.ID]; isMonitored {
+			monitorStatus = "Monitoring"
+			monitorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("green"))
+
+			isLive, _, _ := core.CheckIfModelIsLive(model.ID)
+			if isLive {
+				liveStatus = "Live"
+				liveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("green"))
+			}
 		}
+
 		rows[i] = table.Row{
 			model.Username,
 			model.ID,
-			statusStyle.Render(status),
+			monitorStyle.Render(monitorStatus),
+			liveStyle.Render(liveStatus),
 		}
 	}
 
@@ -243,6 +289,21 @@ func (m *MainModel) applyLiveMonitorFilter() {
 	}
 	m.filteredLiveMonitorModels = filtered
 	m.updateMonitoringTable()
+}
+
+func (m *MainModel) startLiveStatusUpdates() tea.Cmd {
+	return func() tea.Msg {
+		ticker := time.NewTicker(2 * time.Minute)
+		go func() {
+			for range ticker.C {
+				m.updateMonitoringTable()
+				if m.state == LiveMonitorState {
+					m.program.Send(LiveStatusUpdateMsg{})
+				}
+			}
+		}()
+		return LiveStatusUpdateMsg{}
+	}
 }
 
 func (m *MainModel) Cleanup() {

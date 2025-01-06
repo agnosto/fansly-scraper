@@ -109,6 +109,12 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = CompletionState
 		m.cursorPos = 0
 		return m, nil
+	case LiveStatusUpdateMsg:
+		if m.state == LiveMonitorState {
+			m.updateMonitoringTable()
+			return m, nil
+		}
+		return m, nil
 	case editConfigMsg:
 		if msg.Success {
 			m.message = "Config edited successfully!"

@@ -90,6 +90,7 @@ As this is a wip tool, new versions may be made available sporadically, I've avo
 <small>Maybe also a faq of sorts</small>
 
 For the time being:
+- Currently the `Live Status` column in monitoring for the TUI only reflects the models you are monitoring. And currently doesn't update once the model goes live/offline. 
 - It's recommended to leave m3u8_dl in the config set to false if you want things to download fast depending on your hardware. Do feel free to enable to give input/issues with it if you want.
 
 ### "Duplicate Files"

@@ -80,7 +80,10 @@ type MainModel struct {
 	message                   string
 	monitoredModels           map[string]bool // Map of model IDs to monitoring status
 	monitoringService         *service.MonitoringService
+	program                   *tea.Program
 }
+
+type LiveStatusUpdateMsg struct{}
 
 type delayedDownloadCompleteMsg struct{}
 type delayedLikeUnlikeCompleteMsg struct{}
