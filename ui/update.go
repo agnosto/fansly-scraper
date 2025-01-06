@@ -6,6 +6,8 @@ import (
 	//"github.com/agnosto/fansly-scraper/auth"
 	//"github.com/agnosto/fansly-scraper/config"
 	//"github.com/agnosto/fansly-scraper/core"
+	"time"
+
 	"github.com/agnosto/fansly-scraper/logger"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -86,10 +88,22 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Config editing is finished, refresh the UI
 		return m, tea.ClearScreen
 	case downloadCompleteMsg:
+		return m, tea.Sequence(
+			tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+				return delayedDownloadCompleteMsg{}
+			}),
+		)
+	case delayedDownloadCompleteMsg:
 		m.state = MainMenuState
 		m.cursorPos = 0
 		return m, nil
 	case likeUnlikeCompletedMsg:
+		return m, tea.Sequence(
+			tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+				return delayedLikeUnlikeCompleteMsg{}
+			}),
+		)
+	case delayedLikeUnlikeCompleteMsg:
 		m.state = MainMenuState
 		m.cursorPos = 0
 		return m, nil

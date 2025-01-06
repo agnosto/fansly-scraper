@@ -81,6 +81,9 @@ type MainModel struct {
 	monitoringService         *service.MonitoringService
 }
 
+type delayedDownloadCompleteMsg struct{}
+type delayedLikeUnlikeCompleteMsg struct{}
+
 type monitoringSelectedMsg struct{}
 
 type MonitoringService struct {
