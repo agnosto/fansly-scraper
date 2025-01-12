@@ -35,6 +35,8 @@
 
 ## ToDo:
 
+- [ ] Archive metadata for downloaded post
+- [ ] Handle hashing and db storing of livestreams, handling post processing cases
 - [ ] Properly handle live status in monitoring TUI 
     - [ ] Update to offline once offline
     - [ ] Update status regardless of monitoring status
