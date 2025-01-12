@@ -39,6 +39,7 @@ type AccountConfig struct {
 type OptionsConfig struct {
 	SaveLocation string `toml:"save_location"`
 	M3U8Download bool   `toml:"m3u8_dl"`
+	CheckUpdates bool   `toml:"check_updates"`
 }
 
 type SecurityHeadersConfig struct {
@@ -270,6 +271,7 @@ func CreateDefaultConfig() *Config {
 		Options: OptionsConfig{
 			SaveLocation: "/path/to/save/content/to",
 			M3U8Download: false,
+			CheckUpdates: false,
 		},
 		LiveSettings: LiveSettingsConfig{
 			SaveLocation:         "", // Empty means use default path

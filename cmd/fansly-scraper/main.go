@@ -35,15 +35,12 @@ const version = "v0.4.1"
 func main() {
 	flags, subcommand := cmd.ParseFlags()
 
+	isCliMode := flags.Username != "" || flags.Monitor != "" || subcommand != ""
+
 	err := config.EnsureConfigExists(config.GetConfigPath())
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	//if len(os.Args) == 1 || (len(os.Args) == 2 && (os.Args[1] == "-h" || os.Args[1] == "--help")) {
-	//	cmd.PrintUsage()
-	//	return
-	//}
 
 	if flags.Version {
 		fmt.Printf("Fansly Scraper version %s\n", version)
@@ -92,6 +89,20 @@ func main() {
 		log.Fatal(err)
 	}
 
+	var updateAvailable bool
+	var latestVersion string
+	if cfg.Options.CheckUpdates {
+		available, latestVer, err := updater.CheckUpdateAvailable(version)
+		if err == nil && available {
+			updateAvailable = available
+			latestVersion = latestVer
+
+			if isCliMode {
+				fmt.Printf("Update %s available! Run 'fansly-scraper update' to update.\n", latestVer)
+			}
+		}
+	}
+
 	logger.Logger.Printf("Starting Fansly Scraper version %s", version)
 
 	ffmpegAvailable = cmd.IsFFmpegAvailable()
@@ -137,6 +148,8 @@ func main() {
 	}
 
 	model := ui.NewMainModel(downloader, version, monitoringService)
+	model.UpdateAvailable = updateAvailable
+	model.LatestVersion = latestVersion
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	// Add cleanup on program exit

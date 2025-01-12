@@ -2,15 +2,18 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 	"time"
+
 	//"log"
 	"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/core"
 	"github.com/agnosto/fansly-scraper/logger"
+	"github.com/agnosto/fansly-scraper/updater"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -20,6 +23,11 @@ import (
 // HandleMainMenuUpdate handles updates when in the MainMenuState
 func (m *MainModel) HandleMainMenuUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case updateCheckMsg:
+		logger.Logger.Printf("Received update check message: available=%v, version=%s\n", msg.Available, msg.Version)
+		m.UpdateAvailable = msg.Available
+		m.LatestVersion = msg.Version
+		return m, nil
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.keys.Quit):
@@ -98,6 +106,10 @@ func (m *MainModel) RenderMainMenu() string {
 	configPath := config.GetConfigPath()
 	styledConfigPath := lipgloss.NewStyle().Foreground(lipgloss.Color("#f5c2e7")).Render(configPath)
 	welcomeMessage := "Config path: " + styledConfigPath + "\n" + "Welcome to Fansly-scraper Version " + m.version
+	if m.UpdateAvailable {
+		updateMsg := fmt.Sprintf(" (Update %s available)", m.LatestVersion)
+		welcomeMessage += lipgloss.NewStyle().Foreground(lipgloss.Color("#f38ba8")).Render(updateMsg)
+	}
 	styledWelcomeMessage := lipgloss.NewStyle().Foreground(lipgloss.Color("#a6e3a1")).Render(welcomeMessage)
 	sb.WriteString(styledWelcomeMessage + "\n")
 
@@ -162,5 +174,26 @@ func (m *MainModel) editConfigCmd() tea.Cmd {
 		return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
 			return tickMsg{}
 		})
+	}
+}
+
+func (m *MainModel) checkForUpdates() tea.Cmd {
+	return func() tea.Msg {
+		cfg, err := config.LoadConfig(config.GetConfigPath())
+		if err != nil || !cfg.Options.CheckUpdates {
+			return nil
+		}
+
+		logger.Logger.Printf("Checking for updates. Current version: %s\n", m.version)
+		available, latestVer, err := updater.CheckUpdateAvailable(m.version)
+		if err != nil {
+			return nil
+		}
+
+		logger.Logger.Printf("Update check result: available=%v, latest=%s\n", available, latestVer)
+		return updateCheckMsg{
+			Available: available,
+			Version:   latestVer,
+		}
 	}
 }

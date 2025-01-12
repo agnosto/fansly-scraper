@@ -81,6 +81,13 @@ type MainModel struct {
 	monitoredModels           map[string]bool // Map of model IDs to monitoring status
 	monitoringService         *service.MonitoringService
 	program                   *tea.Program
+	UpdateAvailable           bool
+	LatestVersion             string
+}
+
+type updateCheckMsg struct {
+	Available bool
+	Version   string
 }
 
 type LiveStatusUpdateMsg struct{}
@@ -188,6 +195,7 @@ func (m *MainModel) Init() tea.Cmd {
 	// Add signal handling
 	return tea.Batch(
 		tea.EnterAltScreen,
+		m.checkForUpdates(),
 		func() tea.Msg {
 			c := make(chan os.Signal, 1)
 			signal.Notify(c, os.Interrupt, syscall.SIGTERM)

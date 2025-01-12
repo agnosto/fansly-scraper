@@ -26,6 +26,19 @@ type GithubRelease struct {
 	} `json:"assets"`
 }
 
+func CheckUpdateAvailable(currentVersion string) (bool, string, error) {
+	release, err := getLatestRelease()
+	if err != nil {
+		return false, "", fmt.Errorf("failed to get latest release: %w", err)
+	}
+
+	if !strings.HasPrefix(currentVersion, "v") {
+		currentVersion = "v" + currentVersion
+	}
+
+	return release.TagName != currentVersion, release.TagName, nil
+}
+
 func CheckForUpdate(currentVersion string) error {
 	release, err := getLatestRelease()
 	if err != nil {

@@ -1,7 +1,7 @@
 # Configuration Guide
 
 > [!WARNING]
-> If the config file is fully setup prior to the security headers getting populated, it may reset the Live Settings to defaults/empty. It is recommended for the time being to set your auth_token and user_agent first and run the script to populate those fields and then continue on. 
+> If the config file is fully setup prior to the security headers getting populated, it may reset the Live Settings to defaults/empty. It is recommended for the time being to set your auth_token and user_agent first and run the script to populate those fields and then continue on. You can view an example config file [here](./example-config.toml)
 
 This document outlines available options for the Scraper.
 
@@ -36,6 +36,8 @@ console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weigh
 |---------|-------------|---------|---------|
 | save_location | Base directory for downloads, on windows repalce backslashes ("\\") in the path with forward slashes ("/") | Required | "/home/user/content" |
 | m3u8_dl | Use m3u8 downloader for saving content | false | true/false |
+| check_updates | Check for new updates on launch |false | true/false |
+
 
 ## Live Settings
 | Setting | Description | Default | Example |
