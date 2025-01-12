@@ -25,7 +25,7 @@ Pre-compiled binaries can be downloaded from the [releases](https://github.com/a
 ```bash
 git clone https://github.com/agnosto/fansly-scraper && cd fansly-scraper 
 
-go build -o fansly-scraper ./cmd/fansly-scraper
+go build -v -ldflags "-w -s" -o fansly-scraper ./cmd/fansly-scraper
 
 # run the binary
 ./fansly-scraper
