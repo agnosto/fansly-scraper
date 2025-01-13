@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+
 	//"io"
 	"log"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/core"
 	"github.com/agnosto/fansly-scraper/logger"
+	"github.com/agnosto/fansly-scraper/utils"
 )
 
 type MonitoringService struct {
@@ -81,10 +83,21 @@ func (ms *MonitoringService) StartMonitoring() {
 	}
 }
 
-func (ms *MonitoringService) saveLiveRecording(modelName, filename, streamID string) error {
+func (ms *MonitoringService) saveLiveRecording(modelName, filename /*streamID*/ string) error {
 	cfg, err := config.LoadConfig(config.GetConfigPath())
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	/*finalFilename := filename
+	if cfg.LiveSettings.FFmpegConvert {
+		finalFilename = strings.TrimSuffix(filename, cfg.LiveSettings.VODsFileExtension) + ".mp4"
+	}*/
+
+	// Calculate file hash
+	hash, err := utils.HashMediaFile(filename)
+	if err != nil {
+		return fmt.Errorf("error calculating file hash: %v", err)
 	}
 
 	db, err := sql.Open("sqlite", filepath.Join(cfg.Options.SaveLocation, "downloads.db"))
@@ -94,7 +107,30 @@ func (ms *MonitoringService) saveLiveRecording(modelName, filename, streamID str
 	defer db.Close()
 
 	_, err = db.Exec(`INSERT INTO files (model, hash, path, file_type) VALUES (?, ?, ?, ?)`,
-		modelName, streamID, filename, "livestream")
+		modelName, hash, filename, "livestream")
+	return err
+}
+
+func (ms *MonitoringService) saveContactSheet(modelName, filename string) error {
+	cfg, err := config.LoadConfig(config.GetConfigPath())
+	if err != nil {
+		return err
+	}
+
+	hash, err := utils.HashMediaFile(filename)
+	if err != nil {
+		return fmt.Errorf("error calculating contact sheet hash: %v", err)
+	}
+
+	db, err := sql.Open("sqlite", filepath.Join(cfg.Options.SaveLocation, "downloads.db"))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = db.Exec(`INSERT INTO files (model, hash, path, file_type) VALUES (?, ?, ?, ?)`,
+		modelName, hash, filename, "contact_sheet")
+
 	return err
 }
 
@@ -384,6 +420,8 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 	// Run post-processing in a separate goroutine
 	go func() {
 		defer wg.Done()
+		finalFilename := recordedFilename
+		var conversionSuccess bool
 
 		if cfg.LiveSettings.FFmpegConvert {
 			mp4Filename := strings.TrimSuffix(recordedFilename, cfg.LiveSettings.VODsFileExtension) + ".mp4"
@@ -393,26 +431,34 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 				ms.logger.Printf("Error converting to MP4 for %s: %v", username, err)
 				return
 			}
+			finalFilename = mp4Filename
+			conversionSuccess = true
 			ms.logger.Printf("MP4 conversion complete for %s", username)
 
 			if err := os.Remove(recordedFilename); err != nil && !os.IsNotExist(err) {
 				ms.logger.Printf("Error deleting original file for %s: %v", username, err)
 			}
+		} else {
+			conversionSuccess = true
 		}
 
 		if cfg.LiveSettings.GenerateContactSheet {
-			finalFilename := recordedFilename
-			if cfg.LiveSettings.FFmpegConvert {
-				finalFilename = strings.TrimSuffix(recordedFilename, cfg.LiveSettings.VODsFileExtension) + ".mp4"
-			}
-			if err := ms.generateContactSheet(finalFilename); err != nil {
+			// For contact sheet generation, use MP4 if converted, otherwise use original
+			sourceFile := finalFilename
+			contactSheetFilename := strings.TrimSuffix(sourceFile, filepath.Ext(sourceFile)) + "_contact_sheet.jpg"
+
+			if err := ms.generateContactSheet(sourceFile); err != nil {
 				ms.logger.Printf("Error generating contact sheet for %s: %v", username, err)
+			} else if err := ms.saveContactSheet(username, contactSheetFilename); err != nil {
+				ms.logger.Printf("Error saving contact sheet info for %s: %v", username, err)
 			}
 		}
 
-		// Save recording info to database
-		if err := ms.saveLiveRecording(username, recordedFilename, streamData.StreamID); err != nil {
-			ms.logger.Printf("Error saving live recording info for %s: %v", username, err)
+		// Only save to database if we have a valid file
+		if conversionSuccess {
+			if err := ms.saveLiveRecording(username, finalFilename); err != nil {
+				ms.logger.Printf("Error saving live recording info for %s: %v", username, err)
+			}
 		}
 	}()
 

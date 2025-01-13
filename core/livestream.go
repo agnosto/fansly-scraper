@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/agnosto/fansly-scraper/config"
 	"net/http"
-	"time"
+	//"time"
 )
 
 type StreamResponse struct {
@@ -50,8 +50,8 @@ func CheckIfModelIsLive(modelID string) (bool, string, error) {
 
 	isLive := streamResp.Success &&
 		streamResp.Response.Stream.Status == 2 &&
-		streamResp.Response.Stream.Access &&
-		time.Now().UnixMilli()-streamResp.Response.Stream.LastFetchedAt < 5*60*1000 // Last fetched within 5 minutes
+		streamResp.Response.Stream.Access /*&&
+		time.Now().UnixMilli()-streamResp.Response.Stream.LastFetchedAt < 5*60*1000*/ // Last fetched within 5 minutes
 
 	return isLive, streamResp.Response.Stream.PlaybackUrl, nil
 }
