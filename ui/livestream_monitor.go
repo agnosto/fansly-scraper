@@ -89,7 +89,12 @@ func (ms *MonitoringService) StopMonitoring(modelID string) {
 func (m *MainModel) HandleLivestreamMonitorUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LiveStatusUpdateMsg:
-		return m, nil
+		m.updateMonitoringTable()
+		return m, tea.Batch(
+			tea.Tick(time.Minute*2, func(t time.Time) tea.Msg {
+				return LiveStatusUpdateMsg{}
+			}),
+		)
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.keys.Quit), msg.String() == "ctrl+c":
@@ -198,7 +203,10 @@ func (m *MainModel) initializeLivestreamMonitoringTable() tea.Cmd {
 	m.monitoringService.SetTUIMode(true)
 	m.monitoringService.StartMonitoring()
 	m.updateMonitoringTable()
-	return m.startLiveStatusUpdates()
+	return tea.Batch(
+		m.startLiveStatusUpdates(),
+		func() tea.Msg { return LiveStatusUpdateMsg{} },
+	)
 }
 
 func (m *MainModel) loadMonitoringState() map[string]string {
@@ -292,18 +300,9 @@ func (m *MainModel) applyLiveMonitorFilter() {
 }
 
 func (m *MainModel) startLiveStatusUpdates() tea.Cmd {
-	return func() tea.Msg {
-		ticker := time.NewTicker(2 * time.Minute)
-		go func() {
-			for range ticker.C {
-				m.updateMonitoringTable()
-				if m.state == LiveMonitorState {
-					m.program.Send(LiveStatusUpdateMsg{})
-				}
-			}
-		}()
+	return tea.Tick(time.Minute*2, func(t time.Time) tea.Msg {
 		return LiveStatusUpdateMsg{}
-	}
+	})
 }
 
 func (m *MainModel) Cleanup() {

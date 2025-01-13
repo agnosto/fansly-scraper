@@ -112,7 +112,9 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case LiveStatusUpdateMsg:
 		if m.state == LiveMonitorState {
 			m.updateMonitoringTable()
-			return m, nil
+			return m, tea.Tick(2*time.Minute, func(t time.Time) tea.Msg {
+				return LiveStatusUpdateMsg{}
+			})
 		}
 		return m, nil
 	case editConfigMsg:
