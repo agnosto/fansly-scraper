@@ -27,6 +27,7 @@ type LiveSettingsConfig struct {
 	VODsFileExtension    string `toml:"vods_file_extension"`
 	FFmpegConvert        bool   `toml:"ffmpeg_convert"`
 	GenerateContactSheet bool   `toml:"generate_contact_sheet"`
+	UseMTForContactSheet bool   `toml:"use_mt_for_contact_sheet"`
 	FilenameTemplate     string `toml:"filename_template"` // e.g. "{model_username}_{date}_{streamId}_{streamVersion}"
 	DateFormat           string `toml:"date_format"`
 }
@@ -56,6 +57,11 @@ type Account struct {
 }
 
 func GetConfigPath() string {
+	currentDirConfig := "config.toml"
+	if _, err := os.Stat(currentDirConfig); err == nil {
+		return currentDirConfig
+	}
+
 	var configDir string
 	var err error
 
@@ -278,6 +284,7 @@ func CreateDefaultConfig() *Config {
 			VODsFileExtension:    ".ts",
 			FFmpegConvert:        true,
 			GenerateContactSheet: true,
+			UseMTForContactSheet: false,
 			FilenameTemplate:     "{model_username}_{date}_{streamId}_{streamVersion}",
 			DateFormat:           "20060102_150405",
 		},

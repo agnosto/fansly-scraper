@@ -12,6 +12,7 @@ The program will automatically move/download an example config into the config p
 
 > [!IMPORTANT]
 > [ffmpeg](https://ffmpeg.org/) is not needed for content saving, but for livestream recording and potentially saving higher quality videos, it is required.
+> [mt](https://github.com/mutschler/mt) is recommended for improved contact sheet generation, be sure to have it installed to your PATH. 
 
 ## Installing the program
 

@@ -473,8 +473,18 @@ func (ms *MonitoringService) convertToMP4(tsFilename, mp4Filename string) error 
 }
 
 func (ms *MonitoringService) generateContactSheet(mp4Filename string) error {
+	cfg, err := config.LoadConfig(config.GetConfigPath())
+	if err != nil {
+		ms.logger.Printf("Error loading config: %v", err)
+	}
 	contactSheetFilename := strings.TrimSuffix(mp4Filename, ".mp4") + "_contact_sheet.jpg"
-	//cmd := exec.Command("./mt", "--columns=4", "--numcaps=24", "--header-meta", "--fast", "--comment=Archive - Fansly VODs", "--output="+contactSheetFilename, mp4Filename)
+
+	if cfg.LiveSettings.UseMTForContactSheet {
+		cmd := exec.Command("mt", "--columns=4", "--numcaps=24", "--header-meta", "--fast",
+			"--output="+contactSheetFilename, mp4Filename)
+		return cmd.Run()
+	}
+
 	cmd := exec.Command(
 		"ffmpeg",
 		"-i", mp4Filename,

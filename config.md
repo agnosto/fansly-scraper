@@ -46,6 +46,7 @@ console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weigh
 | vods_file_extension | File extension for recordings | ".ts" | ".ts" or ".mp4" |
 | ffmpeg_convert | Convert to MP4 after recording | true | true/false |
 | generate_contact_sheet | Create preview thumbnails | true | true/false |
+| use_mt_for_contact_sheet | Use [mt](https://github.com/mutschler/mt) for better thumbnails if its installed | false | true/false |
 | filename_template | Template for file naming | See below | "{model_username}_{date}" |
 | date_format | Date format in filenames | "20060102_150405" | "2006-01-02_15:04:05" |
 
