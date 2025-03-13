@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"time"
@@ -102,15 +103,16 @@ func GetConfigDir() string {
 }
 
 func SaveConfig(cfg *Config) error {
-	// Read existing config
-	existingConfig, err := LoadConfig(GetConfigPath())
+	configPath := GetConfigPath()
+
+	// Try to load existing config
+	existingConfig, err := LoadConfig(configPath)
 	if err == nil {
-		// Preserve existing settings while updating security headers
-		cfg.LiveSettings = existingConfig.LiveSettings
-		cfg.Options = existingConfig.Options
+		// Merge the new config with the existing one
+		mergedConfig := MergeConfigs(existingConfig, cfg)
+		cfg = mergedConfig
 	}
 
-	configPath := GetConfigPath()
 	file, err := os.Create(configPath)
 	if err != nil {
 		return err
@@ -119,6 +121,143 @@ func SaveConfig(cfg *Config) error {
 
 	encoder := toml.NewEncoder(file)
 	return encoder.Encode(cfg)
+}
+
+// MergeConfigs merges two configurations, preserving existing values
+// while updating with new values and ensuring defaults for missing fields
+func MergeConfigs(existing *Config, new *Config) *Config {
+	result := &Config{}
+
+	// Create a default config to use for missing fields
+	defaultConfig := CreateDefaultConfig()
+
+	// Merge Account section
+	result.Account = existing.Account
+	// Always update auth token and user agent if provided in new config
+	if new.Account.AuthToken != "" {
+		result.Account.AuthToken = new.Account.AuthToken
+	}
+	if new.Account.UserAgent != "" {
+		result.Account.UserAgent = new.Account.UserAgent
+	}
+
+	// Merge Options section
+	result.Options = existing.Options
+	// Update save location if provided in new config
+	if new.Options.SaveLocation != "" {
+		result.Options.SaveLocation = new.Options.SaveLocation
+	}
+	// If CheckUpdates is explicitly set in new config, use it
+	if reflect.ValueOf(new.Options).FieldByName("CheckUpdates").IsValid() {
+		result.Options.CheckUpdates = new.Options.CheckUpdates
+	}
+	// Ensure the CheckUpdates field exists (for older configs)
+	// using zero value check since it's a boolean
+	if result.Options.SaveLocation == "" {
+		result.Options.SaveLocation = defaultConfig.Options.SaveLocation
+	}
+
+	// Merge LiveSettings section
+	result.LiveSettings = existing.LiveSettings
+	// Ensure all LiveSettings fields have values
+	if result.LiveSettings.VODsFileExtension == "" {
+		result.LiveSettings.VODsFileExtension = defaultConfig.LiveSettings.VODsFileExtension
+	}
+	if result.LiveSettings.FilenameTemplate == "" {
+		result.LiveSettings.FilenameTemplate = defaultConfig.LiveSettings.FilenameTemplate
+	}
+	if result.LiveSettings.DateFormat == "" {
+		result.LiveSettings.DateFormat = defaultConfig.LiveSettings.DateFormat
+	}
+
+	// Update specific fields from new config if they're set
+	if new.LiveSettings.SaveLocation != "" {
+		result.LiveSettings.SaveLocation = new.LiveSettings.SaveLocation
+	}
+	if new.LiveSettings.VODsFileExtension != "" {
+		result.LiveSettings.VODsFileExtension = new.LiveSettings.VODsFileExtension
+	}
+	if new.LiveSettings.FilenameTemplate != "" {
+		result.LiveSettings.FilenameTemplate = new.LiveSettings.FilenameTemplate
+	}
+	if new.LiveSettings.DateFormat != "" {
+		result.LiveSettings.DateFormat = new.LiveSettings.DateFormat
+	}
+
+	// For boolean fields, we check if they're explicitly set in the new config
+	if reflect.ValueOf(new.LiveSettings).FieldByName("FFmpegConvert").IsValid() {
+		result.LiveSettings.FFmpegConvert = new.LiveSettings.FFmpegConvert
+	}
+	if reflect.ValueOf(new.LiveSettings).FieldByName("GenerateContactSheet").IsValid() {
+		result.LiveSettings.GenerateContactSheet = new.LiveSettings.GenerateContactSheet
+	}
+	if reflect.ValueOf(new.LiveSettings).FieldByName("UseMTForContactSheet").IsValid() {
+		result.LiveSettings.UseMTForContactSheet = new.LiveSettings.UseMTForContactSheet
+	}
+
+	// Always update security headers
+	result.SecurityHeaders = new.SecurityHeaders
+
+	return result
+}
+
+// EnsureConfigUpdated checks if the config file has all required fields
+// and updates it with defaults if needed
+func EnsureConfigUpdated(configPath string) error {
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		return err
+	}
+
+	// Create a default config to compare against
+	defaultConfig := CreateDefaultConfig()
+
+	// Check for missing fields and update as needed
+	updated := false
+
+	// Check LiveSettings fields
+	if cfg.LiveSettings.VODsFileExtension == "" {
+		cfg.LiveSettings.VODsFileExtension = defaultConfig.LiveSettings.VODsFileExtension
+		updated = true
+	}
+	if cfg.LiveSettings.FilenameTemplate == "" {
+		cfg.LiveSettings.FilenameTemplate = defaultConfig.LiveSettings.FilenameTemplate
+		updated = true
+	}
+	if cfg.LiveSettings.DateFormat == "" {
+		cfg.LiveSettings.DateFormat = defaultConfig.LiveSettings.DateFormat
+		updated = true
+	}
+
+	// If fields were updated, save the config
+	if updated {
+		file, err := os.Create(configPath)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		encoder := toml.NewEncoder(file)
+		return encoder.Encode(cfg)
+	}
+
+	return nil
+}
+
+// Your existing functions remain unchanged
+
+// Add this function to your main.go or similar:
+func VerifyConfigOnStartup() {
+	configPath := GetConfigPath()
+	err := EnsureConfigExists(configPath)
+	if err != nil {
+		log.Printf("Error ensuring config exists: %v", err)
+	}
+
+	err = EnsureConfigUpdated(configPath)
+	if err != nil {
+		log.Printf("Error updating config: %v", err)
+	}
 }
 
 func OpenConfigInEditor(configPath string) error {

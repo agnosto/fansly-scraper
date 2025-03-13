@@ -42,6 +42,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	err = config.EnsureConfigUpdated(config.GetConfigPath())
+	if err != nil {
+		log.Printf("Warning: Error updating config: %v", err)
+	}
+
 	if flags.Version {
 		fmt.Printf("Fansly Scraper version %s\n", version)
 		return
