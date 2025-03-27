@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/agnosto/fansly-scraper/logger"
 	"golang.org/x/time/rate"
 	"net/http"
 	"os"
 	"time"
-
-	"github.com/agnosto/fansly-scraper/logger"
 	//"github.com/agnosto/fansly-scraper/headers"
-
 	"github.com/schollz/progressbar/v3"
 )
 
@@ -33,20 +31,27 @@ type MessageResponse struct {
 	} `json:"response"`
 }
 
+// Updated Group structure to match new API response
 type Group struct {
-	ID    string `json:"id"`
-	Users []User `json:"users"`
-}
-
-type User struct {
-	GroupID string `json:"groupId"`
-	UserID  string `json:"userId"`
+	AccountID           string `json:"account_id"`
+	GroupID             string `json:"groupId"`
+	PartnerAccountID    string `json:"partnerAccountId"`
+	PartnerUsername     string `json:"partnerUsername"`
+	Flags               int    `json:"flags"`
+	UnreadCount         int    `json:"unreadCount"`
+	SubscriptionTierID  any    `json:"subscriptionTierId"`
+	LastMessageID       string `json:"lastMessageId"`
+	LastUnreadMessageID string `json:"lastUnreadMessageId"`
 }
 
 type GroupResponse struct {
 	Success  bool `json:"success"`
 	Response struct {
-		Groups []Group `json:"groups"`
+		Data            []Group `json:"data"`
+		AggregationData struct {
+			Accounts []struct{} `json:"accounts"`
+			Groups   []struct{} `json:"groups"`
+		} `json:"aggregationData"`
 	} `json:"response"`
 }
 
@@ -57,7 +62,8 @@ func GetMessageGroupID(modelID, authToken, userAgent string) (string, error) {
 		return "", fmt.Errorf("rate limiter error: %v", err)
 	}
 
-	url := "https://apiv3.fansly.com/api/v1/group?ngsw-bypass=true"
+	// Updated URL to the new endpoint
+	url := "https://apiv3.fansly.com/api/v1/messaging/groups?ngsw-bypass=true"
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -84,11 +90,10 @@ func GetMessageGroupID(modelID, authToken, userAgent string) (string, error) {
 		return "", fmt.Errorf("error decoding response: %v", err)
 	}
 
-	for _, group := range groupResp.Response.Groups {
-		for _, user := range group.Users {
-			if user.UserID == modelID {
-				return group.ID, nil
-			}
+	// Look for the group with the matching partner account ID
+	for _, group := range groupResp.Response.Data {
+		if group.PartnerAccountID == modelID {
+			return group.GroupID, nil
 		}
 	}
 
@@ -103,7 +108,6 @@ func GetAllMessageMedia(modelID, authToken, userAgent string) ([]AccountMedia, e
 
 	var allMedia []AccountMedia
 	msgCursor := "0"
-
 	bar := progressbar.NewOptions(-1,
 		progressbar.OptionSetDescription("Fetching Messages"),
 		progressbar.OptionSetWriter(os.Stderr),
@@ -125,11 +129,12 @@ func GetAllMessageMedia(modelID, authToken, userAgent string) ([]AccountMedia, e
 		if nextCursor == "" {
 			break
 		}
+
 		msgCursor = nextCursor
 		bar.Add(len(allMedia))
 	}
-	bar.Finish()
 
+	bar.Finish()
 	return allMedia, nil
 }
 
@@ -173,7 +178,6 @@ func getMessageMediaBatch(groupID, cursor, authToken, userAgent string) ([]Accou
 	var mediaItems []AccountMedia
 	for _, accountMedia := range msgResp.Response.AccountMedia {
 		hasValidLocations := false
-
 		// Check main media variants for locations
 		for _, variant := range accountMedia.Media.Variants {
 			if len(variant.Locations) > 0 {
@@ -181,7 +185,6 @@ func getMessageMediaBatch(groupID, cursor, authToken, userAgent string) ([]Accou
 				break
 			}
 		}
-
 		// Check preview media and its variants for locations
 		if accountMedia.Preview != nil {
 			if len(accountMedia.Preview.Locations) > 0 {
