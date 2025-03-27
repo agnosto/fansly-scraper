@@ -63,7 +63,7 @@ func GetMessageGroupID(modelID, authToken, userAgent string) (string, error) {
 	}
 
 	// Updated URL to the new endpoint
-	url := "https://apiv3.fansly.com/api/v1/messaging/groups?ngsw-bypass=true"
+	url := "https://apiv3.fansly.com/api/v1/messaging/groups?limit=1000&ngsw-bypass=true"
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
