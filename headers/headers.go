@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"strings"
+	//"strings"
 	"time"
 
 	"github.com/agnosto/fansly-scraper/config"
@@ -25,7 +25,7 @@ type FanslyHeaders struct {
 	Config    *config.Config
 }
 
-const fallbackCheckKey = "qybZy9-fyszis-bybxyf"
+const fallbackCheckKey = "necvac-govry3-tybkYz"
 
 func NewFanslyHeaders(cfg *config.Config) (*FanslyHeaders, error) {
 	headers := &FanslyHeaders{
@@ -125,7 +125,8 @@ func getClientTimestamp() int64 {
 
 func (f *FanslyHeaders) SetCheckKey() error {
 	mainJSPattern := `\ssrc\s*=\s*"(main\..*?\.js)"`
-	checkKeyPattern := `this\.checkKey_\s*=\s*\["([^"]+)","([^"]+)"\]\.reverse\(\)\.join\("-"\)\+"([^"]+)"`
+	//checkKeyPattern := `this\.checkKey_\s*=\s*\["([^"]+)","([^"]+)"\]\.reverse\(\)\.join\("-"\)\+"([^"]+)"`
+	checkKeyPattern := `let\s+i\s*=\s*\[\s*\]\s*;\s*i\.push\s*\(\s*"([^"]+)"\s*\)\s*,\s*i\.push\s*\(\s*"([^"]+)"\s*\)\s*,\s*i\.push\s*\(\s*"([^"]+)"\s*\)\s*,\s*this\.checkKey_\s*=\s*i\.join\s*\(\s*"-"\s*\)`
 
 	checkKey, err := GuessCheckKey(mainJSPattern, checkKeyPattern, f.UserAgent)
 	if err != nil {
@@ -312,7 +313,8 @@ func GuessCheckKey(mainJSPattern, checkKeyPattern, userAgent string) (string, er
 		return "", fmt.Errorf("check key not found")
 	}
 
-	checkKey := strings.Join([]string{checkKeyMatch[2], checkKeyMatch[1]}, "-") + checkKeyMatch[3]
+	//checkKey := strings.Join([]string{checkKeyMatch[2], checkKeyMatch[1]}, "-") + checkKeyMatch[3]
+	checkKey := fmt.Sprintf("%s-%s-%s", checkKeyMatch[1], checkKeyMatch[2], checkKeyMatch[3])
 	//checkKey := reversedPart + "-bubayf"
 
 	return checkKey, nil
