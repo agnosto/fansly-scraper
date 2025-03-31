@@ -3,6 +3,20 @@
 > [!WARNING]
 > If the config file is fully setup prior to the security headers getting populated, it may reset the Live Settings to defaults/empty. It is recommended for the time being to set your auth_token and user_agent first and run the script to populate those fields and then continue on. You can view an example config file [here](./example-config.toml)
 
+## Location
+
+Where the config file is located
+
+### Windows:
+
+`%APPDATA%\fansly-scraper\config.toml`
+
+### Linux and Macos:
+
+`~/.config/fansly-scraper/config.toml`
+
+Note: If a `config.toml` file exists in the same directory as the executable, that file will be used instead.
+
 This document outlines available options for the Scraper.
 
 ## Account Settings
