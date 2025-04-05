@@ -100,6 +100,41 @@ Common formats:
 - `Mon Jan 02 2006`: Thu Feb 15 2024
 - `02-01-2006`: 15-02-2024
 
+## Notifications
+
+| Setting | Description | Default | Example |
+|---------|-------------|---------|---------|
+| enabled | Enable notifications | false | true/false |
+| system_notify | Show system notifications | true | true/false |
+| discord_webhook | Discord webhook URL | "" | "https://discord.com/api/webhooks/..." |
+| discord_mention_id | Discord user/role ID to mention | "" | "123456789012345678" |
+| telegram_bot_token | Telegram bot token | "" | "1234567890:ABCDEF..." |
+| telegram_chat_id | Telegram chat ID | "" | "123456789" |
+| notify_on_live_start | Send notification when stream starts | true | true/false |
+| notify_on_live_end | Send notification when stream ends | false | true/false |
+
+### Discord Notifications
+
+To set up Discord notifications:
+1. Create a webhook in your Discord server (Server Settings → Integrations → Webhooks)
+2. Copy the webhook URL to `discord_webhook`
+3. For the `discord_mention_id` field:
+   - For user mentions: Simply add the user ID (e.g., "123456789012345678")
+   - For role mentions: Prefix the role ID with "role:" (e.g., "role:123456789012345678")
+
+To get a user or role ID:
+1. Enable Developer Mode in Discord (User Settings → App Settings → Advanced → Developer Mode)
+2. Right-click on a user or role and select "Copy ID"
+
+### Telegram Notifications
+
+To set up Telegram notifications:
+1. Create a bot using [BotFather](https://t.me/botfather) and get the token
+2. Add the bot to your chat or group
+3. Get your chat ID (you can use [userinfobot](https://t.me/userinfobot) or send a message to your bot and check `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`)
+4. Add the bot token to `telegram_bot_token` and chat ID to `telegram_chat_id`
+
+
 ## Security Headers
 These are automatically managed by the application:
 - `device_id`: Unique device identifier
