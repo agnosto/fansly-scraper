@@ -103,18 +103,19 @@ func (ns *NotificationService) sendLinuxNotification(message, title string) {
 }
 
 // sendWindowsNotification sends a notification on Windows
-func (ns *NotificationService) sendWindowsNotification(message, title string) {
+func (ns *NotificationService) sendWindowsNotification(title, message string) {
 	// Using PowerShell for Windows notifications
 	script := fmt.Sprintf(`
-		[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
-		$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
-		$toastXml = [xml]$template
-		$toastXml.GetElementsByTagName("text")[0].AppendChild($toastXml.CreateTextNode("%s")) > $null
-		$toastXml.GetElementsByTagName("text")[1].AppendChild($toastXml.CreateTextNode("%s")) > $null
-		$toast = [Windows.UI.Notifications.ToastNotification]::new($toastXml)
-		[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("Fansly Scraper").Show($toast)
-	`, title, message)
-
+        Add-Type -AssemblyName PresentationFramework;
+        $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);
+        $xml = New-Object Windows.Data.Xml.Dom.XmlDocument;
+        $xml.LoadXml($template.GetXml());
+        $elements = @($xml.GetElementsByTagName("text"));
+        $elements[0].AppendChild($xml.CreateTextNode("%s")) > $null;
+        $elements[1].AppendChild($xml.CreateTextNode("%s")) > $null;
+        $toast = New-Object Windows.UI.Notifications.ToastNotification($xml);
+        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("Fansly Scraper").Show($toast);
+    `, title, message)
 	cmd := exec.Command("powershell", "-Command", script)
 	if err := cmd.Run(); err != nil {
 		logger.Logger.Printf("Failed to send Windows notification: %v", err)
