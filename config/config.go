@@ -20,6 +20,7 @@ type Config struct {
 	Account         AccountConfig         `toml:"account"`
 	Options         OptionsConfig         `toml:"options"`
 	LiveSettings    LiveSettingsConfig    `toml:"live_settings"`
+	Notifications   NotificationsConfig   `toml:"notifications"`
 	SecurityHeaders SecurityHeadersConfig `toml:"security_headers"`
 }
 
@@ -42,6 +43,17 @@ type OptionsConfig struct {
 	SaveLocation string `toml:"save_location"`
 	M3U8Download bool   `toml:"m3u8_dl"`
 	CheckUpdates bool   `toml:"check_updates"`
+}
+
+type NotificationsConfig struct {
+	Enabled           bool   `toml:"enabled"`
+	SystemNotify      bool   `toml:"system_notify"`
+	DiscordWebhook    string `toml:"discord_webhook"`
+	DiscordMentionID  string `toml:"discord_mention_id"`
+	TelegramBotToken  string `toml:"telegram_bot_token"`
+	TelegramChatID    string `toml:"telegram_chat_id"`
+	NotifyOnLiveStart bool   `toml:"notify_on_live_start"`
+	NotifyOnLiveEnd   bool   `toml:"notify_on_live_end"`
 }
 
 type SecurityHeadersConfig struct {
@@ -195,6 +207,78 @@ func MergeConfigs(existing *Config, new *Config) *Config {
 		result.LiveSettings.UseMTForContactSheet = new.LiveSettings.UseMTForContactSheet
 	}
 
+	// Merge Notifications section
+	// Start with existing notifications config
+	result.Notifications = existing.Notifications
+
+	// Check if the Notifications section exists in the existing config
+	// If not, use the default values
+	existingNotificationsValue := reflect.ValueOf(existing.Notifications)
+	existingNotificationsType := existingNotificationsValue.Type()
+	isNotificationsZero := true
+
+	// Check if all fields in Notifications are zero values - modernized with range
+	for i := range make([]struct{}, existingNotificationsValue.NumField()) {
+		if !existingNotificationsValue.Field(i).IsZero() {
+			isNotificationsZero = false
+			break
+		}
+	}
+
+	// If Notifications section is empty, use defaults
+	if isNotificationsZero {
+		result.Notifications = defaultConfig.Notifications
+	} else {
+		// Check for missing fields in the existing config
+		// This ensures that new fields added to the struct get default values
+
+		// Check for NotifyOnLiveStart field
+		_, hasNotifyOnLiveStart := existingNotificationsType.FieldByName("NotifyOnLiveStart")
+		if !hasNotifyOnLiveStart {
+			result.Notifications.NotifyOnLiveStart = defaultConfig.Notifications.NotifyOnLiveStart
+		}
+
+		// Check for NotifyOnLiveEnd field
+		_, hasNotifyOnLiveEnd := existingNotificationsType.FieldByName("NotifyOnLiveEnd")
+		if !hasNotifyOnLiveEnd {
+			result.Notifications.NotifyOnLiveEnd = defaultConfig.Notifications.NotifyOnLiveEnd
+		}
+
+		// Check for DiscordMentionID field
+		_, hasDiscordMentionID := existingNotificationsType.FieldByName("DiscordMentionID")
+		if !hasDiscordMentionID {
+			result.Notifications.DiscordMentionID = defaultConfig.Notifications.DiscordMentionID
+		}
+	}
+
+	// Update notification fields from new config if they're set
+	if reflect.ValueOf(new.Notifications).FieldByName("Enabled").IsValid() {
+		result.Notifications.Enabled = new.Notifications.Enabled
+	}
+	if reflect.ValueOf(new.Notifications).FieldByName("SystemNotify").IsValid() {
+		result.Notifications.SystemNotify = new.Notifications.SystemNotify
+	}
+	if reflect.ValueOf(new.Notifications).FieldByName("NotifyOnLiveStart").IsValid() {
+		result.Notifications.NotifyOnLiveStart = new.Notifications.NotifyOnLiveStart
+	}
+	if reflect.ValueOf(new.Notifications).FieldByName("NotifyOnLiveEnd").IsValid() {
+		result.Notifications.NotifyOnLiveEnd = new.Notifications.NotifyOnLiveEnd
+	}
+
+	// Update string fields if they're not empty
+	if new.Notifications.DiscordWebhook != "" {
+		result.Notifications.DiscordWebhook = new.Notifications.DiscordWebhook
+	}
+	if new.Notifications.DiscordMentionID != "" {
+		result.Notifications.DiscordMentionID = new.Notifications.DiscordMentionID
+	}
+	if new.Notifications.TelegramBotToken != "" {
+		result.Notifications.TelegramBotToken = new.Notifications.TelegramBotToken
+	}
+	if new.Notifications.TelegramChatID != "" {
+		result.Notifications.TelegramChatID = new.Notifications.TelegramChatID
+	}
+
 	// Always update security headers
 	result.SecurityHeaders = new.SecurityHeaders
 
@@ -227,6 +311,38 @@ func EnsureConfigUpdated(configPath string) error {
 	if cfg.LiveSettings.DateFormat == "" {
 		cfg.LiveSettings.DateFormat = defaultConfig.LiveSettings.DateFormat
 		updated = true
+	}
+
+	// Check Notifications fields using reflection to detect missing fields
+	notificationsType := reflect.TypeOf(cfg.Notifications)
+	notificationsValue := reflect.ValueOf(&cfg.Notifications).Elem()
+	defaultNotificationsValue := reflect.ValueOf(defaultConfig.Notifications)
+
+	// Check for specific notification fields
+	fieldsToCheck := []string{
+		"NotifyOnLiveStart",
+		"NotifyOnLiveEnd",
+		"DiscordMentionID",
+	}
+
+	for _, fieldName := range fieldsToCheck {
+		_, exists := notificationsType.FieldByName(fieldName)
+		if !exists {
+			// If the field doesn't exist in the struct definition, we can't do anything
+			// This should never happen unless the struct definition changes
+			continue
+		}
+
+		// Get the field value
+		fieldValue := notificationsValue.FieldByName(fieldName)
+		defaultFieldValue := defaultNotificationsValue.FieldByName(fieldName)
+
+		// Check if the field is a zero value
+		if fieldValue.IsZero() {
+			// Set the field to the default value
+			fieldValue.Set(defaultFieldValue)
+			updated = true
+		}
 	}
 
 	// If fields were updated, save the config
@@ -426,6 +542,16 @@ func CreateDefaultConfig() *Config {
 			UseMTForContactSheet: false,
 			FilenameTemplate:     "{model_username}_{date}_{streamId}_{streamVersion}",
 			DateFormat:           "20060102_150405",
+		},
+		Notifications: NotificationsConfig{
+			Enabled:           false,
+			SystemNotify:      true,
+			DiscordWebhook:    "",
+			DiscordMentionID:  "",
+			TelegramBotToken:  "",
+			TelegramChatID:    "",
+			NotifyOnLiveStart: true,
+			NotifyOnLiveEnd:   false,
 		},
 		SecurityHeaders: SecurityHeadersConfig{
 			DeviceID:    "",

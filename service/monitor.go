@@ -27,6 +27,7 @@ import (
 	"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/core"
 	"github.com/agnosto/fansly-scraper/logger"
+	"github.com/agnosto/fansly-scraper/notifications"
 	"github.com/agnosto/fansly-scraper/utils"
 )
 
@@ -40,6 +41,7 @@ type MonitoringService struct {
 	stopChan         chan struct{}
 	logger           *log.Logger
 	isTUI            bool
+	notificationSvc  *notifications.NotificationService
 }
 
 func (ms *MonitoringService) GetRecordingsPath() string {
@@ -56,16 +58,24 @@ func NewMonitoringService(storagePath string, logger *log.Logger) *MonitoringSer
 		logger = log.New(os.Stdout, "monitor: ", log.LstdFlags)
 	}
 
+	cfg, err := config.LoadConfig(config.GetConfigPath())
+	if err != nil {
+		logger.Printf("Error loading config: %v", err)
+		// Create a default config if loading fails
+		cfg = config.CreateDefaultConfig()
+	}
+
 	mt := &MonitoringService{
 		activeMonitors:   make(map[string]string),
 		activeRecordings: make(map[string]bool),
 		activeMonitoring: make(map[string]bool),
 		storagePath:      storagePath,
 		//recordingsPath:   storagePath,
-		recordingsPath: filepath.Join(filepath.Dir(storagePath), "active_recordings"),
-		stopChan:       make(chan struct{}),
-		logger:         logger,
-		isTUI:          false,
+		recordingsPath:  filepath.Join(filepath.Dir(storagePath), "active_recordings"),
+		stopChan:        make(chan struct{}),
+		logger:          logger,
+		isTUI:           false,
+		notificationSvc: notifications.NewNotificationService(cfg),
 	}
 	return mt
 }
@@ -236,6 +246,8 @@ func (ms *MonitoringService) monitorModel(modelID, username string) {
 		fmt.Printf("Starting to monitor %s (%s)\n", username, modelID)
 	}
 
+	var wasLive bool = false
+
 	for ms.IsMonitoring(modelID) {
 		isLive, playbackUrl, err := core.CheckIfModelIsLive(modelID)
 		if err != nil {
@@ -249,6 +261,12 @@ func (ms *MonitoringService) monitorModel(modelID, username string) {
 				return
 			}
 
+			// Check if we need to send a notification for going live
+			if !wasLive {
+				ms.notificationSvc.NotifyLiveStart(username, modelID)
+				wasLive = true
+			}
+
 			if _, err := os.Stat(lockFile); os.IsNotExist(err) {
 				if !ms.isTUI {
 					printColoredMessage(fmt.Sprintf("%s is live. Attempting to start recording.", username), true)
@@ -258,11 +276,16 @@ func (ms *MonitoringService) monitorModel(modelID, username string) {
 				fmt.Printf("%s is already being recorded\n", username)
 			}
 		} else {
+			// Check if we need to send a notification for ending stream
+			if wasLive {
+				ms.notificationSvc.NotifyLiveEnd(username, modelID, "")
+				wasLive = false
+			}
+
 			if !ms.isTUI {
 				printColoredMessage(fmt.Sprintf("%s is not live. Checking again in 2 minutes.", username), false)
 			}
 		}
-
 		time.Sleep(2 * time.Minute)
 	}
 
@@ -459,6 +482,8 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 			if err := ms.saveLiveRecording(username, finalFilename); err != nil {
 				ms.logger.Printf("Error saving live recording info for %s: %v", username, err)
 			}
+
+			ms.notificationSvc.NotifyLiveEnd(username, modelID, finalFilename)
 		}
 	}()
 

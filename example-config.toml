@@ -15,6 +15,17 @@ generate_contact_sheet = true # Generate preview thumbnails
 filename_template = "{model_username}_{date}_{streamId}_{streamVersion}" # Available variables: model_username, date, streamId, streamVersion
 date_format = "20060102_150405" # Default format 
 
+[notifications]
+  enabled = true
+  system_notify = false
+  discord_webhook = "https://discord.com/api/webhooks/1234567890/abcdefghi"
+  discord_mention_id = "" # userid or role:roleid
+  telegram_bot_token = ""
+  telegram_chat_id = ""
+  notify_on_live_start = true
+  notify_on_live_end = false
+
+
 [security_headers] # These get automatically added, no need to touch unless you want to.
 device_id = ""
 session_id = ""
