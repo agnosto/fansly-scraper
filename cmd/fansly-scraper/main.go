@@ -238,7 +238,8 @@ func startMonitoring() {
 	}
 
 	pid := os.Getpid()
-	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", pid)), 0644); err != nil {
+	pidStr := strconv.Itoa(pid)
+	if err := os.WriteFile(pidFile, []byte(pidStr), 0644); err != nil {
 		fmt.Printf("Error writing PID file: %v\n", err)
 		return
 	}

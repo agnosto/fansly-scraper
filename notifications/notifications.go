@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os/exec"
-	"runtime"
 	"strings"
 	"time"
 
 	"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/logger"
+	"github.com/gen2brain/beeep"
 )
 
 type NotificationService struct {
@@ -74,51 +73,12 @@ func (ns *NotificationService) NotifyLiveEnd(username, modelID, recordedFilename
 
 // sendSystemNotification sends a system notification based on the OS
 func (ns *NotificationService) sendSystemNotification(message, title string) {
-	switch runtime.GOOS {
-	case "darwin":
-		ns.sendMacNotification(message, title)
-	case "linux":
-		ns.sendLinuxNotification(message, title)
-	case "windows":
-		ns.sendWindowsNotification(message, title)
-	default:
-		logger.Logger.Printf("System notifications not supported on %s", runtime.GOOS)
-	}
-}
+	// You can add an icon path here if you have one, or use empty string for default
+	iconPath := ""
 
-// sendMacNotification sends a notification on macOS
-func (ns *NotificationService) sendMacNotification(message, title string) {
-	cmd := exec.Command("osascript", "-e", fmt.Sprintf(`display notification "%s" with title "%s"`, message, title))
-	if err := cmd.Run(); err != nil {
-		logger.Logger.Printf("Failed to send macOS notification: %v", err)
-	}
-}
-
-// sendLinuxNotification sends a notification on Linux
-func (ns *NotificationService) sendLinuxNotification(message, title string) {
-	cmd := exec.Command("notify-send", title, message)
-	if err := cmd.Run(); err != nil {
-		logger.Logger.Printf("Failed to send Linux notification: %v", err)
-	}
-}
-
-// sendWindowsNotification sends a notification on Windows
-func (ns *NotificationService) sendWindowsNotification(title, message string) {
-	// Using PowerShell for Windows notifications
-	script := fmt.Sprintf(`
-        Add-Type -AssemblyName PresentationFramework;
-        $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);
-        $xml = New-Object Windows.Data.Xml.Dom.XmlDocument;
-        $xml.LoadXml($template.GetXml());
-        $elements = @($xml.GetElementsByTagName("text"));
-        $elements[0].AppendChild($xml.CreateTextNode("%s")) > $null;
-        $elements[1].AppendChild($xml.CreateTextNode("%s")) > $null;
-        $toast = New-Object Windows.UI.Notifications.ToastNotification($xml);
-        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("Fansly Scraper").Show($toast);
-    `, title, message)
-	cmd := exec.Command("powershell", "-Command", script)
-	if err := cmd.Run(); err != nil {
-		logger.Logger.Printf("Failed to send Windows notification: %v", err)
+	err := beeep.Notify(title, message, iconPath)
+	if err != nil {
+		logger.Logger.Printf("Failed to send system notification: %v", err)
 	}
 }
 

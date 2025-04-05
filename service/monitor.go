@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"maps"
 
 	//"io"
 	"log"
@@ -144,7 +145,7 @@ func (ms *MonitoringService) saveContactSheet(modelName, filename string) error 
 	return err
 }
 
-func (ms *MonitoringService) loadActiveRecordings() {
+/*func (ms *MonitoringService) loadActiveRecordings() {
 	data, err := os.ReadFile(ms.recordingsPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -166,7 +167,7 @@ func (ms *MonitoringService) saveActiveRecordings() {
 	if err := os.WriteFile(ms.recordingsPath, data, 0644); err != nil {
 		logger.Logger.Printf("Error saving active recordings: %v", err)
 	}
-}
+}*/
 
 func (ms *MonitoringService) loadState() {
 	data, err := os.ReadFile(ms.storagePath)
@@ -184,9 +185,7 @@ func (ms *MonitoringService) loadState() {
 	}
 
 	// Merge the loaded state with the existing state
-	for modelID, username := range loadedMonitors {
-		ms.activeMonitors[modelID] = username
-	}
+	maps.Copy(ms.activeMonitors, loadedMonitors)
 }
 
 func (ms *MonitoringService) saveState() {
@@ -294,7 +293,7 @@ func (ms *MonitoringService) monitorModel(modelID, username string) {
 	}
 }
 
-func isProcessRunning(name string) bool {
+/*func isProcessRunning(name string) bool {
 	switch runtime.GOOS {
 	case "windows":
 		cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("IMAGENAME eq %s", name))
@@ -310,7 +309,7 @@ func isProcessRunning(name string) bool {
 	default:
 		return false
 	}
-}
+}*/
 
 func (ms *MonitoringService) IsMonitoring(modelID string) bool {
 	ms.mu.Lock()
