@@ -109,7 +109,7 @@ func GetFollowedUsers(userId string, authToken string, userAgent string) ([]Foll
 	}
 	// Get List of followed account IDs
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", "https://apiv3.fansly.com/api/v1/account/"+userId+"/following?before=0&after=0&limit=425&offset=0", nil)
+	req, err := http.NewRequest("GET", "https://apiv3.fansly.com/api/v1/account/"+userId+"/following?before=0&after=0&limit=999&offset=0", nil)
 	if err != nil {
 		return nil, err
 	}
