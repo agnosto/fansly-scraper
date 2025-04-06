@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 	//"github.com/agnosto/fansly-scraper/headers"
 )
 
@@ -107,73 +108,172 @@ func GetFollowedUsers(userId string, authToken string, userAgent string) ([]Foll
 		"Authorization": authToken,
 		"User-Agent":    userAgent,
 	}
-	// Get List of followed account IDs
+
+	// Get List of followed account IDs with pagination
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", "https://apiv3.fansly.com/api/v1/account/"+userId+"/following?before=0&after=0&limit=999&offset=0", nil)
-	if err != nil {
-		return nil, err
+
+	// First, get the total count of followed accounts
+	var allAccountIDs []AccountID
+	offset := 0
+	batchSize := 200 // Smaller batch size to avoid rate limiting
+
+	for {
+		// Add delay to avoid rate limiting
+		time.Sleep(500 * time.Millisecond)
+
+		url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/account/%s/following?before=0&after=0&limit=%d&offset=%d",
+			userId, batchSize, offset)
+
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		for key, value := range headerMap {
+			req.Header.Add(key, value)
+		}
+
+		// Use exponential backoff for retries
+		var resp *http.Response
+		maxRetries := 5
+		retryDelay := 1 * time.Second
+
+		for retry := range maxRetries {
+			resp, err = client.Do(req)
+
+			if err != nil {
+				return nil, err
+			}
+
+			// If we get rate limited, wait and retry
+			if resp.StatusCode == 429 {
+				resp.Body.Close()
+				waitTime := retryDelay * time.Duration(1<<uint(retry))
+				time.Sleep(waitTime)
+				continue
+			}
+
+			// If we get any other error, return it
+			if resp.StatusCode != http.StatusOK {
+				resp.Body.Close()
+				return nil, fmt.Errorf("failed to fetch following list with status code %d", resp.StatusCode)
+			}
+
+			// If we get here, we have a successful response
+			break
+		}
+
+		// If we've exhausted our retries and still have an error
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return nil, fmt.Errorf("failed to fetch following list after multiple retries with status code %d", resp.StatusCode)
+		}
+
+		var followingResponse struct {
+			Success  bool        `json:"success"`
+			Response []AccountID `json:"response"`
+		}
+
+		err = json.NewDecoder(resp.Body).Decode(&followingResponse)
+		resp.Body.Close()
+
+		if err != nil {
+			return nil, err
+		}
+
+		if len(followingResponse.Response) == 0 {
+			break // No more accounts to fetch
+		}
+
+		allAccountIDs = append(allAccountIDs, followingResponse.Response...)
+
+		if len(followingResponse.Response) < batchSize {
+			break // Last batch
+		}
+
+		offset += batchSize
 	}
 
-	for key, value := range headerMap {
-		req.Header.Add(key, value)
+	// Process account IDs in smaller batches to avoid 413 errors
+	var allModels []FollowedModel
+	batchSize = 100 // Even smaller batch size for fetching account details
+
+	for i := 0; i < len(allAccountIDs); i += batchSize {
+		// Add delay between batches to avoid rate limiting
+		time.Sleep(1 * time.Second)
+
+		end := min(i+batchSize, len(allAccountIDs))
+		batch := allAccountIDs[i:end]
+
+		// Concatenate batch IDs with commas
+		batchIDsSlice := make([]string, len(batch))
+		for j, accountId := range batch {
+			batchIDsSlice[j] = accountId.AccountId
+		}
+
+		idsParam := strings.Join(batchIDsSlice, ",")
+
+		// Make request for this batch
+		modelsURL := fmt.Sprintf("https://apiv3.fansly.com/api/v1/account?ids=%s&ngsw-bypass=true", idsParam)
+		req, err := http.NewRequest("GET", modelsURL, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		for key, value := range headerMap {
+			req.Header.Add(key, value)
+		}
+
+		// Use exponential backoff for retries
+		var resp *http.Response
+		maxRetries := 5
+		retryDelay := 1 * time.Second
+
+		for retry := range maxRetries {
+			resp, err = client.Do(req)
+
+			if err != nil {
+				return nil, err
+			}
+
+			// If we get rate limited, wait and retry
+			if resp.StatusCode == 429 {
+				resp.Body.Close()
+				waitTime := retryDelay * time.Duration(1<<uint(retry))
+				time.Sleep(waitTime)
+				continue
+			}
+
+			// If we get any other error, return it
+			if resp.StatusCode != http.StatusOK {
+				resp.Body.Close()
+				return nil, fmt.Errorf("failed to fetch models information with status code %d", resp.StatusCode)
+			}
+
+			// If we get here, we have a successful response
+			break
+		}
+
+		// If we've exhausted our retries and still have an error
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return nil, fmt.Errorf("failed to fetch models information after multiple retries with status code %d", resp.StatusCode)
+		}
+
+		var modelsResponse struct {
+			Success  bool            `json:"success"`
+			Response []FollowedModel `json:"response"`
+		}
+
+		err = json.NewDecoder(resp.Body).Decode(&modelsResponse)
+		resp.Body.Close()
+
+		if err != nil {
+			return nil, err
+		}
+
+		allModels = append(allModels, modelsResponse.Response...)
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch following list with status code %d", resp.StatusCode)
-	}
-
-	var followingResponse struct {
-		Success  bool        `json:"success"`
-		Response []AccountID `json:"response"`
-	}
-	err = json.NewDecoder(resp.Body).Decode(&followingResponse)
-	if err != nil {
-		return nil, err
-	}
-
-	// Concatenate all account IDs with commas
-	accountIDs := make([]string, len(followingResponse.Response))
-	for i, accountId := range followingResponse.Response {
-		accountIDs[i] = accountId.AccountId
-	}
-	idsParam := strings.Join(accountIDs, ",")
-
-	// Make a single request to get all followed models' information
-	modelsURL := fmt.Sprintf("https://apiv3.fansly.com/api/v1/account?ids=%s&ngsw-bypass=true", idsParam)
-	req, err = http.NewRequest("GET", modelsURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	for key, value := range headerMap {
-		req.Header.Add(key, value)
-	}
-
-	resp, err = client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch models information with status code %d", resp.StatusCode)
-	}
-
-	var modelsResponse struct {
-		Success  bool            `json:"success"`
-		Response []FollowedModel `json:"response"`
-	}
-	err = json.NewDecoder(resp.Body).Decode(&modelsResponse)
-	if err != nil {
-		return nil, err
-	}
-
-	return modelsResponse.Response, nil
-
+	return allModels, nil
 }

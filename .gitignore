@@ -1,5 +1,6 @@
 subs-output.json
 example-config.ini
+config.toml
 *.bak
 *.exe
 /fansly-scraper

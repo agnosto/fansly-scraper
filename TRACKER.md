@@ -33,10 +33,11 @@
 - [x] Add new menu post download/interact, asking to continue with another creator, quit, etc.
 - [x] Properly handle monitoring in TUI
 - [x] Notifications for monitored creators livestreams
+- [x] Handle displaying all followed creators (in cases of people who follow {original limit}+)
+
 
 ## ToDo:
 
-- [ ] Handle displaying all followed creators (in cases of people follow {limit}+)
 - [ ] Archive metadata for downloaded post
 - [ ] Standardize DB handling
 - [ ] Handle hashing and db storing of livestreams, handling post processing cases

@@ -51,6 +51,7 @@ func (m *MainModel) HandleFollowedModelsMenuUpdate(msg tea.Msg) (tea.Model, tea.
 		case key.Matches(msg, m.keys.Back):
 			m.state = MainMenuState
 			m.cursorPos = 0
+			m.actionChosen = ""
 			return m, nil
 		}
 	}

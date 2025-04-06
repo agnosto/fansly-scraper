@@ -50,7 +50,20 @@ func (m *MainModel) handleMainMenuSelection() (tea.Model, tea.Cmd) {
 	switch m.selected {
 	case "Download a user's post":
 		m.actionChosen = "download"
-		return m, m.fetchAccountInfoCmd()
+		if !m.accountsFetched {
+			m.state = LoadingState
+			m.loadingMessage = "Fetching your followed accounts..."
+			m.isLoading = true
+			m.loadingDots = 0
+			return m, tea.Batch(
+				m.fetchAccountInfoCmd(),
+				loadingTickCmd(),
+			)
+		} else {
+			m.state = FollowedModelsState
+			m.updateTable()
+			return m, nil
+		}
 	case "Download purchased content":
 		m.actionChosen = "download_purchases"
 		m.state = DownloadPurchasedState
@@ -65,19 +78,53 @@ func (m *MainModel) handleMainMenuSelection() (tea.Model, tea.Cmd) {
 		//return m, m.fetchAccountInfoCmd()
 	case "Monitor a user's livestreams":
 		m.actionChosen = "monitor"
-		return m, tea.Batch(
-			m.fetchAccountInfoCmd(),
-			func() tea.Msg {
-				m.updateMonitoringTable()
-				return monitoringSelectedMsg{}
-			},
-		)
+		if !m.accountsFetched {
+			m.state = LoadingState
+			m.loadingMessage = "Fetching your followed accounts..."
+			m.isLoading = true
+			m.loadingDots = 0
+			return m, tea.Batch(
+				m.fetchAccountInfoCmd(),
+				loadingTickCmd(),
+			)
+		} else {
+			m.state = LiveMonitorState
+			m.filteredLiveMonitorModels = m.followedModels
+			m.updateMonitoringTable()
+			return m, nil
+		}
 	case "Like all of a user's post":
 		m.actionChosen = "like"
-		return m, m.fetchAccountInfoCmd()
+		if !m.accountsFetched {
+			m.state = LoadingState
+			m.loadingMessage = "Fetching your followed accounts..."
+			m.isLoading = true
+			m.loadingDots = 0
+			return m, tea.Batch(
+				m.fetchAccountInfoCmd(),
+				loadingTickCmd(),
+			)
+		} else {
+			m.state = FollowedModelsState
+			m.updateTable()
+			return m, nil
+		}
 	case "Unlike all of a user's post":
 		m.actionChosen = "unlike"
-		return m, m.fetchAccountInfoCmd()
+		if !m.accountsFetched {
+			m.state = LoadingState
+			m.loadingMessage = "Fetching your followed accounts..."
+			m.isLoading = true
+			m.loadingDots = 0
+			return m, tea.Batch(
+				m.fetchAccountInfoCmd(),
+				loadingTickCmd(),
+			)
+		} else {
+			m.state = FollowedModelsState
+			m.updateTable()
+			return m, nil
+		}
 	case "Edit config.toml file":
 		configPath := config.GetConfigPath()
 		err := config.EnsureConfigExists(configPath)
@@ -146,13 +193,43 @@ func (m *MainModel) getEditor() string {
 // fetchAccountInfoCmd is a command that fetches account info
 func (m *MainModel) fetchAccountInfoCmd() tea.Cmd {
 	return func() tea.Msg {
-		accountInfo, err := core.FetchAccountInfo(config.GetConfigPath())
-		if err != nil {
-			logger.Logger.Printf("Error fetching account info: %v", err)
-			return fetchAccountInfoMsg{Success: false, Error: err}
+		// Create a context with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+
+		// Create a channel for the result
+		resultCh := make(chan fetchAccountInfoMsg, 1)
+
+		// Start the fetch in a goroutine
+		go func() {
+			accountInfo, err := core.FetchAccountInfo(config.GetConfigPath())
+			if err != nil {
+				logger.Logger.Printf("Error fetching account info: %v", err)
+				resultCh <- fetchAccountInfoMsg{Success: false, Error: err}
+			} else {
+				resultCh <- fetchAccountInfoMsg{Success: true, AccountInfo: accountInfo}
+			}
+		}()
+
+		// Wait for either the result or timeout
+		select {
+		case result := <-resultCh:
+			return result
+		case <-ctx.Done():
+			return fetchAccountInfoMsg{
+				Success: false,
+				Error:   fmt.Errorf("timeout fetching account information"),
+			}
 		}
-		return fetchAccountInfoMsg{Success: true, AccountInfo: accountInfo}
 	}
+}
+
+/*
+func (m *MainModel) initLoadingState(message string) {
+	m.state = LoadingState
+	m.loadingMessage = message
+	m.isLoading = true
+	m.loadingDots = 0
 }
 
 // editConfigCmd is a command that initiates config editing
@@ -176,6 +253,7 @@ func (m *MainModel) editConfigCmd() tea.Cmd {
 		})
 	}
 }
+*/
 
 func (m *MainModel) checkForUpdates() tea.Cmd {
 	return func() tea.Msg {

@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/agnosto/fansly-scraper/auth"
 	//"github.com/agnosto/fansly-scraper/config"
@@ -46,6 +47,7 @@ const (
 	LiveMonitorFilterState
 	DownloadPurchasedState
 	CompletionState
+	LoadingState
 )
 
 type MainModel struct {
@@ -83,6 +85,19 @@ type MainModel struct {
 	program                   *tea.Program
 	UpdateAvailable           bool
 	LatestVersion             string
+	isLoading                 bool
+	loadingMessage            string
+	loadingDots               int
+	loadingTicker             *time.Ticker
+	accountsFetched           bool
+}
+
+type loadingTickMsg struct{}
+
+func loadingTickCmd() tea.Cmd {
+	return tea.Tick(time.Millisecond*500, func(t time.Time) tea.Msg {
+		return loadingTickMsg{}
+	})
 }
 
 type updateCheckMsg struct {
@@ -133,18 +148,19 @@ type followedModelsModel struct {
 }
 
 type keyMap struct {
-	Up     key.Binding
-	Down   key.Binding
-	Help   key.Binding
-	Quit   key.Binding
-	Filter key.Binding
-	Reset  key.Binding
-	Back   key.Binding
-	Select key.Binding
+	Up      key.Binding
+	Down    key.Binding
+	Help    key.Binding
+	Quit    key.Binding
+	Filter  key.Binding
+	Reset   key.Binding
+	Back    key.Binding
+	Select  key.Binding
+	Refresh key.Binding
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Help, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.Help, k.Quit, k.Refresh}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
@@ -153,6 +169,7 @@ func (k keyMap) FullHelp() [][]key.Binding {
 		{k.Down, k.Back}, // second column
 		{k.Help, k.Reset},
 		{k.Quit, k.Select},
+		{k.Refresh},
 	}
 }
 
@@ -188,6 +205,10 @@ var defaultKeyMap = keyMap{
 	Select: key.NewBinding(
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "select"),
+	),
+	Refresh: key.NewBinding(
+		key.WithKeys("ctrl+r"),
+		key.WithHelp("ctrl+r", "refresh accounts"),
 	),
 }
 
@@ -229,6 +250,10 @@ func NewMainModel(downloader *download.Downloader, version string, monitoringSer
 		state:             MainMenuState,
 		monitoredModels:   make(map[string]bool),
 		monitoringService: monitoringService,
+		isLoading:         false,
+		loadingMessage:    "",
+		loadingDots:       0,
+		accountsFetched:   false,
 	}
 }
 

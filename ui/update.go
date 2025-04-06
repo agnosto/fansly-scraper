@@ -29,6 +29,18 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyMsg:
 		switch {
+		case key.Matches(msg, m.keys.Refresh):
+			if m.state == FollowedModelsState || m.state == LiveMonitorState {
+				m.state = LoadingState
+				m.loadingMessage = "Refreshing your followed accounts..."
+				m.isLoading = true
+				m.loadingDots = 0
+				m.accountsFetched = false // Reset the flag to force a refresh
+				return m, tea.Batch(
+					m.fetchAccountInfoCmd(),
+					loadingTickCmd(),
+				)
+			}
 		case key.Matches(msg, m.keys.Help):
 			m.help.ShowAll = !m.help.ShowAll
 		case key.Matches(msg, m.keys.Quit):
@@ -62,24 +74,33 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			logger.Logger.Printf("[DEBUG] Update: Unhandled state: %v", m.state)
 			return m, nil
 		}
+	case loadingTickMsg:
+		if m.state == LoadingState {
+			m.loadingDots = (m.loadingDots + 1) % 4
+			return m, loadingTickCmd()
+		}
+		return m, nil
 	case fetchAccountInfoMsg:
+		m.isLoading = false
 		if msg.Success {
 			m.welcome = msg.AccountInfo.Welcome
 			m.followedModels = msg.AccountInfo.FollowedModels
 			m.filteredModels = msg.AccountInfo.FollowedModels
-			m.updateTable()
-			if m.state != LiveMonitorState {
-				m.updateTable()
-			} else {
+			m.accountsFetched = true // Set the flag when accounts are successfully fetched
+
+			if m.actionChosen == "monitor" {
 				m.state = LiveMonitorState
+				m.filteredLiveMonitorModels = m.followedModels
 				m.initializeLivestreamMonitoringTable()
 				m.updateMonitoringTable()
-			}
-			if m.actionChosen != "monitor" {
+			} else {
 				m.state = FollowedModelsState
+				m.updateTable()
 			}
 		} else {
 			// Handle error
+			m.state = MainMenuState
+			m.message = "Error fetching account info: " + msg.Error.Error()
 		}
 		return m, nil
 	case monitoringSelectedMsg:
@@ -120,6 +141,7 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editConfigMsg:
 		if msg.Success {
 			m.message = "Config edited successfully!"
+			m.accountsFetched = false
 			//return m, tea.ClearScreen
 		} else {
 			m.message = "Error editing config: " + msg.Error.Error()
@@ -134,6 +156,8 @@ func (m *MainModel) View() string {
 	switch m.state {
 	case MainMenuState:
 		return m.RenderMainMenu()
+	case LoadingState:
+		return m.RenderLoadingScreen()
 		// Add cases for other states
 	case FollowedModelsState:
 		return m.RenderFollowedModelsMenu()

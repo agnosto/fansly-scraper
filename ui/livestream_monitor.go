@@ -334,6 +334,7 @@ func (m *MainModel) Cleanup() {
 }
 
 // Add a cleanup function that can be called from the TUI
+/*
 func cleanupLockFiles() {
 	recordingsPath := filepath.Join(config.GetConfigDir(), "active_recordings")
 	files, err := os.ReadDir(recordingsPath)
@@ -348,3 +349,4 @@ func cleanupLockFiles() {
 		}
 	}
 }
+*/
