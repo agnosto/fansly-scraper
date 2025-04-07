@@ -1,18 +1,26 @@
 layout {
-    pane size=1 borderless=true {
-        plugin location="tab-bar"
-    } 
-    pane split_direction="vertical" {
-        //pane edit="./cmd/fansly-scraper/main.go"
+    default_tab_template {
+        children
+        pane size=1 borderless=true {
+            plugin location="tab-bar"
+        }
+    }
+
+    tab name="Editor" {
         pane command="nvim" {
             args "./cmd/fansly-scraper/main.go"
         }
+    }
+
+    tab name="Run" {
         pane command="go" {
-            args "run" "main.go"
+            args "run" "./cmd/fansly-scraper/main.go"
             start_suspended true
         }
     }
-    pane size=1 borderless=true {
-        plugin location="status-bar"
+
+    tab name="Git" {
+        pane command="lazygit" {
+        }
     }
 }
