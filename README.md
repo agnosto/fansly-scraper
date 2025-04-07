@@ -1,7 +1,7 @@
 # Fansly Scraper 
 
 > [!NOTE] 
-> This is currently under development, everything is still being planned out and tested. Feel free to create issues/pr's to assist in the creation of this project.
+> This is currently under development, everything is still being planned out and tested. Feel free to create issues/pr's with any features/bugs to assist in the creation of this project.
 > [Tracker](./TRACKER.md) will hold a list of things to do for the project, as well as act as a kind of roadmap.
 > I also recommend reading [Program Status](https://github.com/agnosto/fansly-scraper?tab=readme-ov-file#program-status) for more info and currently known issues before running.
 
