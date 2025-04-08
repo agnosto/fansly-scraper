@@ -98,7 +98,7 @@ For the time being:
 
 ### "Duplicate Files"
 
-The scraper does what it says, it scrapes. Fansly API response for post can sometimes have the main media item (the preview image you see in the post) and another preview item (one that could be shown depending on timeline permissions), sometimes they can be the same image if that's how the model setup the post I guess.
+The scraper does attempt to scrape. Fansly API response for post can sometimes have the main media item (the preview image you see in the post) and another preview item (one that could be shown depending on timeline permissions), sometimes they can be the same image if that's how the model setup the post I guess.
 
 
 ## Disclaimer
