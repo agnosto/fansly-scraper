@@ -90,6 +90,8 @@ As this is a wip tool, new versions may be made available sporadically, There's 
 
 <small>Maybe also a faq of sorts</small>
 
+Macos users may need to accept/allow the use of notifications if you choose to enable system notifications as per [this issue](https://github.com/gen2brain/beeep/issues/67#issuecomment-2646474049) for the notification library used in the program.
+
 For the time being:
 - Currently the `Live Status` column in monitoring for the TUI only reflects the models you are monitoring. And currently doesn't update once the model goes live/offline. You can press `r` to reset/refresh the list to update it.
 - It's recommended to leave m3u8_dl in the config set to false if you want things to download fast depending on your hardware. Do feel free to enable to give input/issues with it if you want.
