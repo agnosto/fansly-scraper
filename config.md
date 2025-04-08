@@ -48,7 +48,7 @@ console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weigh
 ## Options
 | Setting | Description | Default | Example |
 |---------|-------------|---------|---------|
-| save_location | Base directory for downloads, on windows repalce backslashes ("\\") in the path with forward slashes ("/") | Required | "/home/user/content" |
+| save_location | Base directory for downloads, on windows replace backslashes ("\\") in the path with forward slashes ("/") | Required | "/home/user/content" |
 | m3u8_dl | Use m3u8 downloader for saving content | false | true/false |
 | check_updates | Check for new updates on launch |false | true/false |
 
