@@ -32,6 +32,7 @@ type LiveSettingsConfig struct {
 	UseMTForContactSheet bool   `toml:"use_mt_for_contact_sheet"`
 	FilenameTemplate     string `toml:"filename_template"` // e.g. "{model_username}_{date}_{streamId}_{streamVersion}"
 	DateFormat           string `toml:"date_format"`
+	RecordChat           bool   `toml:"record_chat"`
 }
 
 type AccountConfig struct {
@@ -195,6 +196,9 @@ func MergeConfigs(existing *Config, new *Config) *Config {
 	if new.LiveSettings.DateFormat != "" {
 		result.LiveSettings.DateFormat = new.LiveSettings.DateFormat
 	}
+	if reflect.ValueOf(new.LiveSettings).FieldByName("RecordChat").IsValid() {
+		result.LiveSettings.RecordChat = new.LiveSettings.RecordChat
+	}
 
 	// For boolean fields, we check if they're explicitly set in the new config
 	if reflect.ValueOf(new.LiveSettings).FieldByName("FFmpegConvert").IsValid() {
@@ -310,6 +314,11 @@ func EnsureConfigUpdated(configPath string) error {
 	}
 	if cfg.LiveSettings.DateFormat == "" {
 		cfg.LiveSettings.DateFormat = defaultConfig.LiveSettings.DateFormat
+		updated = true
+	}
+	// Check if RecordChat is missing (this is a new field)
+	if reflect.ValueOf(cfg.LiveSettings).FieldByName("RecordChat").IsZero() {
+		cfg.LiveSettings.RecordChat = defaultConfig.LiveSettings.RecordChat
 		updated = true
 	}
 
@@ -542,6 +551,7 @@ func CreateDefaultConfig() *Config {
 			UseMTForContactSheet: false,
 			FilenameTemplate:     "{model_username}_{date}_{streamId}_{streamVersion}",
 			DateFormat:           "20060102_150405",
+			RecordChat:           true,
 		},
 		Notifications: NotificationsConfig{
 			Enabled:           false,

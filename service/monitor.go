@@ -43,6 +43,7 @@ type MonitoringService struct {
 	logger           *log.Logger
 	isTUI            bool
 	notificationSvc  *notifications.NotificationService
+	chatRecorder     *ChatRecorder
 }
 
 func (ms *MonitoringService) GetRecordingsPath() string {
@@ -320,7 +321,6 @@ func (ms *MonitoringService) IsMonitoring(modelID string) bool {
 
 func (ms *MonitoringService) startRecording(modelID, username, playbackUrl string) {
 	lockFile := filepath.Join(ms.recordingsPath, modelID+".lock")
-
 	// Ensure recordings directory exists
 	if err := os.MkdirAll(ms.recordingsPath, 0755); err != nil {
 		ms.logger.Printf("Error creating recordings directory: %v", err)
@@ -367,32 +367,44 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 		"streamId":       streamData.StreamID,
 		"streamVersion":  streamData.StreamVersion,
 	}
-
 	savePath := config.ResolveLiveSavePath(cfg, username)
 	if err := os.MkdirAll(savePath, 0755); err != nil {
 		ms.logger.Printf("Error creating directory: %v", err)
 		return
 	}
-
 	filename := config.GetVODFilename(cfg, data)
 	recordedFilename := filepath.Join(savePath, filename)
-
 	dir := filepath.Join(cfg.Options.SaveLocation, strings.ToLower(username), "lives")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		ms.logger.Printf("Error creating directory for %s: %v", username, err)
 		return
 	}
+	// Start chat recording if we have a chat room ID
+	if cfg.LiveSettings.RecordChat && streamData.ChatRoomID != "" {
+		if ms.chatRecorder == nil {
+			ms.chatRecorder = NewChatRecorder(ms.logger)
+		}
+		chatFilename := strings.TrimSuffix(recordedFilename, filepath.Ext(recordedFilename)) + "_chat.json"
 
-	// Set up recording filename
-	//currentTime := time.Now().Format("20060102_150405")
-	//sanitizedUsername := strings.Map(func(r rune) rune {
-	//	if strings.ContainsRune(`<>:"/\|?*`, r) {
-	//		return '_'
-	//	}
-	//	return r
-	//}, username)
-	//filename := fmt.Sprintf("%s_%s_v%s", sanitizedUsername, currentTime, streamData.StreamID)
-	//recordedFilename := filepath.Join(dir, filename+cfg.Options.VODsFileExtension)
+		// Add debug logging
+		ms.logger.Printf("Chat room ID: %s", streamData.ChatRoomID)
+		ms.logger.Printf("Chat filename: %s", chatFilename)
+
+		// Ensure directory exists
+		chatDir := filepath.Dir(chatFilename)
+		if err := os.MkdirAll(chatDir, 0755); err != nil {
+			ms.logger.Printf("Error creating directory for chat file: %v", err)
+		}
+
+		if err := ms.chatRecorder.StartRecording(modelID, username, streamData.ChatRoomID, chatFilename); err != nil {
+			ms.logger.Printf("Error starting chat recording for %s: %v", username, err)
+		} else {
+			ms.logger.Printf("Started chat recording for %s", username)
+		}
+	}
+
+	// Log the FFmpeg command for debugging
+	ms.logger.Printf("Starting FFmpeg recording for %s with URL: %s to file: %s", username, playbackUrl, recordedFilename)
 
 	// Create FFmpeg command
 	cmd := exec.Command("ffmpeg", "-i", playbackUrl, "-c", "copy",
@@ -401,13 +413,9 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 		"-reconnect_streamed", "300", "-reconnect_delay_max", "300",
 		"-rtmp_live", "live", recordedFilename)
 
-	// Capture FFmpeg output for debugging
-	//var stdBuffer bytes.Buffer
-	//mw := io.MultiWriter(os.Stdout, &stdBuffer)
-	//cmd.Stdout = mw
-	//cmd.Stderr = mw
-
-	ms.logger.Printf("Starting FFmpeg recording for %s with URL: %s", username, playbackUrl)
+	// Set up stdout and stderr to be logged
+	//cmd.Stdout = os.Stdout
+	//cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
 		ms.logger.Printf("Error starting FFmpeg for %s: %v", username, err)
@@ -442,13 +450,20 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 	// Run post-processing in a separate goroutine
 	go func() {
 		defer wg.Done()
+		// Stop chat recording when the stream ends
+		if ms.chatRecorder != nil && ms.chatRecorder.IsRecording(modelID) {
+			if err := ms.chatRecorder.StopRecording(modelID); err != nil {
+				ms.logger.Printf("Error stopping chat recording for %s: %v", username, err)
+			} else {
+				ms.logger.Printf("Stopped chat recording for %s", username)
+			}
+		}
+
 		finalFilename := recordedFilename
 		var conversionSuccess bool
-
 		if cfg.LiveSettings.FFmpegConvert {
 			mp4Filename := strings.TrimSuffix(recordedFilename, cfg.LiveSettings.VODsFileExtension) + ".mp4"
 			ms.logger.Printf("Starting MP4 conversion for %s", username)
-
 			if err := ms.convertToMP4(recordedFilename, mp4Filename); err != nil {
 				ms.logger.Printf("Error converting to MP4 for %s: %v", username, err)
 				return
@@ -456,7 +471,6 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 			finalFilename = mp4Filename
 			conversionSuccess = true
 			ms.logger.Printf("MP4 conversion complete for %s", username)
-
 			if err := os.Remove(recordedFilename); err != nil && !os.IsNotExist(err) {
 				ms.logger.Printf("Error deleting original file for %s: %v", username, err)
 			}
@@ -468,7 +482,6 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 			// For contact sheet generation, use MP4 if converted, otherwise use original
 			sourceFile := finalFilename
 			contactSheetFilename := strings.TrimSuffix(sourceFile, filepath.Ext(sourceFile)) + "_contact_sheet.jpg"
-
 			if err := ms.generateContactSheet(sourceFile); err != nil {
 				ms.logger.Printf("Error generating contact sheet for %s: %v", username, err)
 			} else if err := ms.saveContactSheet(username, contactSheetFilename); err != nil {
@@ -481,7 +494,6 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 			if err := ms.saveLiveRecording(username, finalFilename); err != nil {
 				ms.logger.Printf("Error saving live recording info for %s: %v", username, err)
 			}
-
 			ms.notificationSvc.NotifyLiveEnd(username, modelID, finalFilename)
 		}
 	}()

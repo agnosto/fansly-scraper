@@ -12,6 +12,7 @@ import (
 
 type StreamData struct {
 	Username      string
+	ChatRoomID    string
 	StreamID      string
 	StreamVersion string
 	PlaybackURL   string
@@ -60,6 +61,7 @@ func GetStreamData(modelID string) (StreamData, error) {
 
 	return StreamData{
 		Username:      stream["title"].(string), // Assuming the title is the username
+		ChatRoomID:    response["chatRoomId"].(string),
 		StreamID:      stream["id"].(string),
 		StreamVersion: version,
 		PlaybackURL:   response["playbackUrl"].(string),
