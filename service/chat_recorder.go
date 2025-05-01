@@ -489,78 +489,52 @@ func (cr *ChatRecorder) handleMessages(session *chatRecordingSession) error {
 func (cr *ChatRecorder) parseMessage(data string, startTime time.Time) (*ChatMessage, error) {
 	cr.logger.Printf("Parsing message data: %s", data)
 
-	// First, we need to unmarshal the outer JSON object
-	var msg struct {
-		Type int             `json:"t"`
-		Data json.RawMessage `json:"d"`
+	// Try to unmarshal the data as a JSON object
+	var rawData struct {
+		ServiceID int    `json:"serviceId"`
+		Event     string `json:"event"`
 	}
 
-	if err := json.Unmarshal([]byte(data), &msg); err != nil {
-		// Try to handle the case where data is already a string that needs to be unescaped
-		var rawData struct {
-			ServiceID int    `json:"serviceId"`
-			Event     string `json:"event"`
+	// First, check if the data is a JSON string that needs to be unescaped
+	if data[0] == '"' && data[len(data)-1] == '"' {
+		// This is a JSON string that needs to be unescaped
+		var unquotedData string
+		if err := json.Unmarshal([]byte(data), &unquotedData); err != nil {
+			return nil, fmt.Errorf("error unquoting JSON string: %v", err)
 		}
+		data = unquotedData
+	}
 
-		if err := json.Unmarshal([]byte(data), &rawData); err != nil {
+	if err := json.Unmarshal([]byte(data), &rawData); err != nil {
+		// Try to handle other message formats
+		var msg struct {
+			Type int             `json:"t"`
+			Data json.RawMessage `json:"d"`
+		}
+		if err := json.Unmarshal([]byte(data), &msg); err != nil {
 			return nil, fmt.Errorf("error unmarshaling message data: %v", err)
 		}
 
-		// Only process chat room messages (service ID 46)
-		if rawData.ServiceID != 46 {
-			cr.logger.Printf("Ignoring message with service ID: %d", rawData.ServiceID)
+		// Only process chat messages (type 10000)
+		if msg.Type != 10000 {
 			return nil, nil
 		}
 
-		// Now parse the event JSON which is a string
-		var eventData struct {
-			Type            int `json:"type"`
-			ChatRoomMessage struct {
-				ID                string        `json:"id"`
-				ChatRoomID        string        `json:"chatRoomId"`
-				SenderID          string        `json:"senderId"`
-				Content           string        `json:"content"`
-				Type              int           `json:"type"`
-				Private           int           `json:"private"`
-				Metadata          string        `json:"metadata"`
-				CreatedAt         int64         `json:"createdAt"`
-				Username          string        `json:"username"`
-				DisplayName       string        `json:"displayname"`
-				UsernameColor     string        `json:"usernameColor"`
-				AccountFlags      int           `json:"accountFlags"`
-				Attachments       []interface{} `json:"attachments"`
-				Embeds            []interface{} `json:"embeds"`
-				ChatRoomAccountID string        `json:"chatRoomAccountId"`
-			} `json:"chatRoomMessage"`
+		// Parse the message data
+		var chatData struct {
+			MessageID  string `json:"id"`
+			Content    string `json:"content"`
+			SenderID   string `json:"senderId"`
+			SenderName string `json:"senderName"`
+			CreatedAt  int64  `json:"createdAt"`
+			IsCreator  bool   `json:"isCreator"`
+			IsStaff    bool   `json:"isStaff"`
+			TierID     string `json:"tierId"`
+			TierColor  string `json:"tierColor"`
+			TierName   string `json:"tierName"`
 		}
-
-		if err := json.Unmarshal([]byte(rawData.Event), &eventData); err != nil {
-			return nil, fmt.Errorf("error unmarshaling event data: %v", err)
-		}
-
-		// Only process text messages (type 10)
-		if eventData.Type != 10 {
-			cr.logger.Printf("Ignoring event with type: %d", eventData.Type)
-			return nil, nil
-		}
-
-		// Parse the metadata for additional user info
-		var metadata struct {
-			SenderIsCreator    bool `json:"senderIsCreator"`
-			SenderIsStaff      bool `json:"senderIsStaff"`
-			SenderIsFollowing  bool `json:"senderIsFollowing"`
-			SenderSubscription struct {
-				TierID    string `json:"tierId"`
-				TierColor string `json:"tierColor"`
-				TierName  string `json:"tierName"`
-			} `json:"senderSubscription"`
-		}
-
-		// Handle potentially missing metadata
-		if eventData.ChatRoomMessage.Metadata != "" {
-			if err := json.Unmarshal([]byte(eventData.ChatRoomMessage.Metadata), &metadata); err != nil {
-				cr.logger.Printf("Warning: could not parse message metadata: %v", err)
-			}
+		if err := json.Unmarshal(msg.Data, &chatData); err != nil {
+			return nil, fmt.Errorf("error unmarshaling chat data: %v", err)
 		}
 
 		// Calculate time in seconds since stream start
@@ -572,56 +546,85 @@ func (cr *ChatRecorder) parseMessage(data string, startTime time.Time) (*ChatMes
 		seconds := int(elapsedSeconds) % 60
 		timeText := fmt.Sprintf("%02d:%02d", minutes, seconds)
 
-		cr.logger.Printf("Successfully parsed chat message from %s", eventData.ChatRoomMessage.DisplayName)
-
+		cr.logger.Printf("Successfully parsed chat message from %s", chatData.SenderName)
 		return &ChatMessage{
-			MessageID:     eventData.ChatRoomMessage.ID,
-			Message:       eventData.ChatRoomMessage.Content,
+			MessageID:     chatData.MessageID,
+			Message:       chatData.Content,
 			MessageType:   "text_message",
-			Timestamp:     eventData.ChatRoomMessage.CreatedAt,
+			Timestamp:     chatData.CreatedAt,
 			TimeInSeconds: elapsedSeconds,
 			TimeText:      timeText,
 			Author: Author{
-				ID:        eventData.ChatRoomMessage.SenderID,
-				Name:      eventData.ChatRoomMessage.DisplayName,
-				IsCreator: metadata.SenderIsCreator,
-				IsStaff:   metadata.SenderIsStaff,
+				ID:        chatData.SenderID,
+				Name:      chatData.SenderName,
+				IsCreator: chatData.IsCreator,
+				IsStaff:   chatData.IsStaff,
 				TierInfo: TierInfo{
-					TierID:    metadata.SenderSubscription.TierID,
-					TierColor: metadata.SenderSubscription.TierColor,
-					TierName:  metadata.SenderSubscription.TierName,
+					TierID:    chatData.TierID,
+					TierColor: chatData.TierColor,
+					TierName:  chatData.TierName,
 				},
 			},
-			RawData:    data,
+			RawData:    string(data),
 			ReceivedAt: receivedAt,
 		}, nil
 	}
 
-	// If we got here, we have a different message format
-	// This handles the case where the message is in the expected format with t/d fields
-	cr.logger.Printf("Message has type: %d", msg.Type)
-
-	// Only process chat messages (type 10000)
-	if msg.Type != 10000 {
+	// Only process chat room messages (service ID 46)
+	if rawData.ServiceID != 46 {
+		cr.logger.Printf("Ignoring message with service ID: %d", rawData.ServiceID)
 		return nil, nil
 	}
 
-	// Parse the message data
-	var chatData struct {
-		MessageID  string `json:"id"`
-		Content    string `json:"content"`
-		SenderID   string `json:"senderId"`
-		SenderName string `json:"senderName"`
-		CreatedAt  int64  `json:"createdAt"`
-		IsCreator  bool   `json:"isCreator"`
-		IsStaff    bool   `json:"isStaff"`
-		TierID     string `json:"tierId"`
-		TierColor  string `json:"tierColor"`
-		TierName   string `json:"tierName"`
+	// Now parse the event JSON which is a string
+	var eventData struct {
+		Type            int `json:"type"`
+		ChatRoomMessage struct {
+			ID                string        `json:"id"`
+			ChatRoomID        string        `json:"chatRoomId"`
+			SenderID          string        `json:"senderId"`
+			Content           string        `json:"content"`
+			Type              int           `json:"type"`
+			Private           int           `json:"private"`
+			Metadata          string        `json:"metadata"`
+			CreatedAt         int64         `json:"createdAt"`
+			Username          string        `json:"username"`
+			DisplayName       string        `json:"displayname"`
+			UsernameColor     string        `json:"usernameColor"`
+			AccountFlags      int           `json:"accountFlags"`
+			Attachments       []interface{} `json:"attachments"`
+			Embeds            []interface{} `json:"embeds"`
+			ChatRoomAccountID string        `json:"chatRoomAccountId"`
+		} `json:"chatRoomMessage"`
 	}
 
-	if err := json.Unmarshal(msg.Data, &chatData); err != nil {
-		return nil, fmt.Errorf("error unmarshaling chat data: %v", err)
+	if err := json.Unmarshal([]byte(rawData.Event), &eventData); err != nil {
+		return nil, fmt.Errorf("error unmarshaling event data: %v", err)
+	}
+
+	// Only process text messages (type 10)
+	if eventData.Type != 10 {
+		cr.logger.Printf("Ignoring event with type: %d", eventData.Type)
+		return nil, nil
+	}
+
+	// Parse the metadata for additional user info
+	var metadata struct {
+		SenderIsCreator    bool `json:"senderIsCreator"`
+		SenderIsStaff      bool `json:"senderIsStaff"`
+		SenderIsFollowing  bool `json:"senderIsFollowing"`
+		SenderSubscription struct {
+			TierID    string `json:"tierId"`
+			TierColor string `json:"tierColor"`
+			TierName  string `json:"tierName"`
+		} `json:"senderSubscription"`
+	}
+
+	// Handle potentially missing metadata
+	if eventData.ChatRoomMessage.Metadata != "" {
+		if err := json.Unmarshal([]byte(eventData.ChatRoomMessage.Metadata), &metadata); err != nil {
+			cr.logger.Printf("Warning: could not parse message metadata: %v", err)
+		}
 	}
 
 	// Calculate time in seconds since stream start
@@ -633,27 +636,26 @@ func (cr *ChatRecorder) parseMessage(data string, startTime time.Time) (*ChatMes
 	seconds := int(elapsedSeconds) % 60
 	timeText := fmt.Sprintf("%02d:%02d", minutes, seconds)
 
-	cr.logger.Printf("Successfully parsed chat message from %s", chatData.SenderName)
-
+	cr.logger.Printf("Successfully parsed chat message from %s", eventData.ChatRoomMessage.DisplayName)
 	return &ChatMessage{
-		MessageID:     chatData.MessageID,
-		Message:       chatData.Content,
+		MessageID:     eventData.ChatRoomMessage.ID,
+		Message:       eventData.ChatRoomMessage.Content,
 		MessageType:   "text_message",
-		Timestamp:     chatData.CreatedAt,
+		Timestamp:     eventData.ChatRoomMessage.CreatedAt,
 		TimeInSeconds: elapsedSeconds,
 		TimeText:      timeText,
 		Author: Author{
-			ID:        chatData.SenderID,
-			Name:      chatData.SenderName,
-			IsCreator: chatData.IsCreator,
-			IsStaff:   chatData.IsStaff,
+			ID:        eventData.ChatRoomMessage.SenderID,
+			Name:      eventData.ChatRoomMessage.DisplayName,
+			IsCreator: metadata.SenderIsCreator,
+			IsStaff:   metadata.SenderIsStaff,
 			TierInfo: TierInfo{
-				TierID:    chatData.TierID,
-				TierColor: chatData.TierColor,
-				TierName:  chatData.TierName,
+				TierID:    metadata.SenderSubscription.TierID,
+				TierColor: metadata.SenderSubscription.TierColor,
+				TierName:  metadata.SenderSubscription.TierName,
 			},
 		},
-		RawData:    string(data),
+		RawData:    data,
 		ReceivedAt: receivedAt,
 	}, nil
 }
