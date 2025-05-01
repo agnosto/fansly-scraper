@@ -63,6 +63,13 @@ console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weigh
 | use_mt_for_contact_sheet | Use [mt](https://github.com/mutschler/mt) for better thumbnails if its installed | false | true/false |
 | filename_template | Template for file naming | See below | "{model_username}_{date}" |
 | date_format | Date format in filenames | "20060102_150405" | "2006-01-02_15:04:05" |
+| record_chat | Save chat messages from streams to a json file* | true | true/false|
+
+### Recorded chat
+
+I saved chat messages in a json format to be compatible with the player from this amazing archive project: https://archive.ragtag.moe/player
+
+It allows you to play local videos with the chat to have full context of streams with timestamps of the messages (as close as possible).
 
 ### Video File Extensions
 Common options for `vods_file_extension`:
