@@ -209,12 +209,20 @@ func (ms *MonitoringService) saveState() {
 func (ms *MonitoringService) ToggleMonitoring(modelID, username string) bool {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
-
 	ms.loadState()
-
 	if _, exists := ms.activeMonitors[modelID]; exists {
 		delete(ms.activeMonitors, modelID)
 		logger.Logger.Printf("Stopped monitoring %s", username)
+
+		// Stop chat recording if active
+		if ms.chatRecorder != nil && ms.chatRecorder.IsRecording(modelID) {
+			if err := ms.chatRecorder.StopRecording(modelID); err != nil {
+				logger.Logger.Printf("Error stopping chat recording for %s: %v", username, err)
+			} else {
+				logger.Logger.Printf("Stopped chat recording for %s", username)
+			}
+		}
+
 		ms.saveState()
 		return false
 	} else {
@@ -224,7 +232,6 @@ func (ms *MonitoringService) ToggleMonitoring(modelID, username string) bool {
 		ms.saveState()
 		return true
 	}
-	//ms.saveState()
 }
 
 func (ms *MonitoringService) monitorModel(modelID, username string) {
@@ -565,6 +572,10 @@ func (ms *MonitoringService) checkModels() {
 
 func (ms *MonitoringService) Shutdown() {
 	close(ms.stopChan)
+
+	if ms.chatRecorder != nil {
+		ms.chatRecorder.StopAllRecordings()
+	}
 	//ms.mu.Lock()
 	//defer ms.mu.Unlock()
 	//ms.saveState()
