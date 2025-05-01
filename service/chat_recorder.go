@@ -3,6 +3,8 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/agnosto/fansly-scraper/config"
+	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
 	"os"
@@ -11,9 +13,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/agnosto/fansly-scraper/config"
-	"github.com/gorilla/websocket"
 )
 
 // ChatMessage represents a single chat message from the Fansly chat
@@ -47,7 +46,7 @@ type TierInfo struct {
 
 // ChatRecorder handles recording chat messages from livestreams
 type ChatRecorder struct {
-	activeRecorders map[string]*chatRecordingSession // Add this field
+	activeRecorders map[string]*chatRecordingSession
 	mu              sync.Mutex
 	logger          *log.Logger
 	reconnectWait   time.Duration
@@ -66,7 +65,8 @@ type chatRecordingSession struct {
 	wg           sync.WaitGroup
 	saveInterval time.Duration
 	lastSaveTime time.Time
-	mu           sync.Mutex // Add mutex for thread safety
+	mu           sync.Mutex
+	isRunning    bool // Add a flag to track if the session is running
 }
 
 // NewChatRecorder creates a new chat recorder service
@@ -75,7 +75,7 @@ func NewChatRecorder(logger *log.Logger) *ChatRecorder {
 		logger = log.New(os.Stdout, "chat_recorder: ", log.LstdFlags)
 	}
 	cr := &ChatRecorder{
-		activeRecorders: make(map[string]*chatRecordingSession), // Initialize the map
+		activeRecorders: make(map[string]*chatRecordingSession),
 		logger:          logger,
 		reconnectWait:   5 * time.Second,
 		maxRetries:      5,
@@ -84,11 +84,22 @@ func NewChatRecorder(logger *log.Logger) *ChatRecorder {
 }
 
 func (cr *ChatRecorder) attemptReconnect(session *chatRecordingSession) bool {
+	// If the session is not running anymore, don't try to reconnect
+	if !session.isRunning {
+		cr.logger.Printf("Session for %s is no longer running, skipping reconnection", session.username)
+		return false
+	}
+
 	for attempt := 1; attempt <= cr.maxRetries; attempt++ {
 		cr.logger.Printf("Reconnection attempt %d/%d for %s", attempt, cr.maxRetries, session.username)
-
 		// Wait before reconnecting
 		time.Sleep(cr.reconnectWait)
+
+		// Check if the session is still running before attempting reconnection
+		if !session.isRunning {
+			cr.logger.Printf("Session for %s is no longer running during reconnection attempt", session.username)
+			return false
+		}
 
 		// Try to connect again
 		cfg, err := config.LoadConfig(config.GetConfigPath())
@@ -100,12 +111,10 @@ func (cr *ChatRecorder) attemptReconnect(session *chatRecordingSession) bool {
 		dialer := websocket.Dialer{
 			HandshakeTimeout: 45 * time.Second,
 		}
-
 		conn, _, err := dialer.Dial("wss://chatws.fansly.com/?v=3", http.Header{
 			"Origin":     []string{"https://fansly.com"},
 			"User-Agent": []string{cfg.Account.UserAgent},
 		})
-
 		if err != nil {
 			cr.logger.Printf("Reconnection attempt %d failed: %v", attempt, err)
 			continue
@@ -142,7 +151,6 @@ func (cr *ChatRecorder) attemptReconnect(session *chatRecordingSession) bool {
 			Type int             `json:"t"`
 			Data json.RawMessage `json:"d"`
 		}
-
 		err = conn.ReadJSON(&authResp)
 		conn.SetReadDeadline(time.Time{}) // Reset deadline
 
@@ -201,6 +209,7 @@ func (cr *ChatRecorder) StartRecording(modelID, username, chatRoomID, outputFile
 		stopChan:     make(chan struct{}),
 		saveInterval: 30 * time.Second, // Save messages every 30 seconds
 		lastSaveTime: time.Now(),
+		isRunning:    true,
 	}
 
 	// Ensure the directory exists
@@ -226,6 +235,12 @@ func (cr *ChatRecorder) StopRecording(modelID string) error {
 		cr.mu.Unlock()
 		return fmt.Errorf("no active chat recording for model ID %s", modelID)
 	}
+
+	// Mark the session as not running before closing the channel
+	session.mu.Lock()
+	session.isRunning = false
+	session.mu.Unlock()
+
 	delete(cr.activeRecorders, modelID)
 	cr.mu.Unlock()
 
@@ -254,6 +269,12 @@ func (cr *ChatRecorder) StopRecording(modelID string) error {
 		}
 	}
 
+	// Ensure the connection is closed
+	if session.conn != nil {
+		session.conn.Close()
+		session.conn = nil
+	}
+
 	cr.logger.Printf("Stopped recording chat for %s", session.username)
 	return nil
 }
@@ -263,6 +284,11 @@ func (cr *ChatRecorder) StopAllRecordings() {
 	cr.mu.Lock()
 	activeSessions := make([]*chatRecordingSession, 0, len(cr.activeRecorders))
 	for _, session := range cr.activeRecorders {
+		// Mark each session as not running
+		session.mu.Lock()
+		session.isRunning = false
+		session.mu.Unlock()
+
 		activeSessions = append(activeSessions, session)
 	}
 	cr.activeRecorders = make(map[string]*chatRecordingSession)
@@ -293,6 +319,12 @@ func (cr *ChatRecorder) StopAllRecordings() {
 				cr.logger.Printf("Error saving final chat messages: %v", err)
 			}
 		}
+
+		// Ensure the connection is closed
+		if session.conn != nil {
+			session.conn.Close()
+			session.conn = nil
+		}
 	}
 
 	cr.logger.Printf("Stopped all chat recordings")
@@ -306,47 +338,86 @@ func (cr *ChatRecorder) recordChat(session *chatRecordingSession) {
 		if r := recover(); r != nil {
 			cr.logger.Printf("Recovered from panic in chat recorder: %v", r)
 		}
+		// Make sure to close the connection when exiting
+		if session.conn != nil {
+			session.conn.Close()
+			session.conn = nil
+		}
+		// Mark the session as not running
+		session.mu.Lock()
+		session.isRunning = false
+		session.mu.Unlock()
 	}()
 
 	cr.logger.Printf("Starting chat recording for model %s (%s), chat room ID: %s, output file: %s",
 		session.username, session.modelID, session.chatRoomID, session.outputFile)
 
-	// Connect to the WebSocket
+	// Main connection loop - will retry until session is stopped
+	for {
+		// Check if the session is still running
+		session.mu.Lock()
+		isRunning := session.isRunning
+		session.mu.Unlock()
+
+		if !isRunning {
+			cr.logger.Printf("Session for %s is no longer running, exiting connection loop", session.username)
+			return
+		}
+
+		// Connect to the WebSocket
+		if err := cr.connectAndAuthenticate(session); err != nil {
+			cr.logger.Printf("Error connecting to chat: %v, will retry in %v", err, cr.reconnectWait)
+			time.Sleep(cr.reconnectWait)
+			continue
+		}
+
+		// Start message handling loop
+		if err := cr.handleMessages(session); err != nil {
+			cr.logger.Printf("Error in message handling: %v, will reconnect", err)
+			// Close the connection before reconnecting
+			if session.conn != nil {
+				session.conn.Close()
+				session.conn = nil
+			}
+			time.Sleep(cr.reconnectWait)
+			continue
+		}
+
+		// If we get here, the message loop exited normally (session stopped)
+		return
+	}
+}
+
+// New helper function to handle connection and authentication
+func (cr *ChatRecorder) connectAndAuthenticate(session *chatRecordingSession) error {
+	// Load config
 	cfg, err := config.LoadConfig(config.GetConfigPath())
 	if err != nil {
-		cr.logger.Printf("Error loading config: %v", err)
-		return
+		return fmt.Errorf("error loading config: %v", err)
 	}
 
 	// Connect to the WebSocket server
 	dialer := websocket.Dialer{
 		HandshakeTimeout: 45 * time.Second,
 	}
-
-	cr.logger.Printf("Attempting to connect to chat WebSocket for %s", session.username)
+	cr.logger.Printf("Connecting to chat WebSocket for %s", session.username)
 	conn, resp, err := dialer.Dial("wss://chatws.fansly.com/?v=3", http.Header{
 		"Origin":     []string{"https://fansly.com"},
 		"User-Agent": []string{cfg.Account.UserAgent},
 	})
-
 	if err != nil {
-		cr.logger.Printf("Error connecting to chat WebSocket: %v", err)
 		if resp != nil {
-			cr.logger.Printf("WebSocket response status: %s", resp.Status)
+			return fmt.Errorf("error connecting to chat WebSocket: %v (status: %s)", err, resp.Status)
 		}
-		return
+		return fmt.Errorf("error connecting to chat WebSocket: %v", err)
 	}
-
 	cr.logger.Printf("Successfully connected to chat WebSocket for %s", session.username)
 	session.conn = conn
-	defer conn.Close()
 
 	// Set up error handling for the connection
 	conn.SetPingHandler(func(appData string) error {
-		cr.logger.Printf("Received ping, sending pong")
 		return conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(10*time.Second))
 	})
-
 	conn.SetCloseHandler(func(code int, text string) error {
 		cr.logger.Printf("WebSocket connection closed: %d %s", code, text)
 		return nil
@@ -360,11 +431,10 @@ func (cr *ChatRecorder) recordChat(session *chatRecordingSession) {
 		Type: 1,
 		Data: fmt.Sprintf(`{"token":"%s","v":3}`, cfg.Account.AuthToken),
 	}
-
 	cr.logger.Printf("Sending authentication message to chat server")
 	if err := conn.WriteJSON(authMsg); err != nil {
-		cr.logger.Printf("Error sending auth message: %v", err)
-		return
+		conn.Close()
+		return fmt.Errorf("error sending auth message: %v", err)
 	}
 
 	// Wait for auth response with timeout
@@ -373,21 +443,18 @@ func (cr *ChatRecorder) recordChat(session *chatRecordingSession) {
 		Type int             `json:"t"`
 		Data json.RawMessage `json:"d"`
 	}
-
 	err = conn.ReadJSON(&authResp)
 	conn.SetReadDeadline(time.Time{}) // Reset deadline
-
 	if err != nil {
-		cr.logger.Printf("Error receiving auth response: %v", err)
-		return
+		conn.Close()
+		return fmt.Errorf("error receiving auth response: %v", err)
 	}
-
 	cr.logger.Printf("Received auth response: type=%d", authResp.Type)
 
 	// Check if auth was successful
 	if authResp.Type != 1 && authResp.Type != 2 {
-		cr.logger.Printf("Authentication failed: unexpected response type %d", authResp.Type)
-		return
+		conn.Close()
+		return fmt.Errorf("authentication failed: unexpected response type %d", authResp.Type)
 	}
 
 	// Join the chat room
@@ -398,13 +465,17 @@ func (cr *ChatRecorder) recordChat(session *chatRecordingSession) {
 		Type: 46001,
 		Data: fmt.Sprintf(`{"chatRoomId":"%s"}`, session.chatRoomID),
 	}
-
 	cr.logger.Printf("Joining chat room: %s", session.chatRoomID)
 	if err := conn.WriteJSON(joinMsg); err != nil {
-		cr.logger.Printf("Error joining chat room: %v", err)
-		return
+		conn.Close()
+		return fmt.Errorf("error joining chat room: %v", err)
 	}
 
+	return nil
+}
+
+// New helper function to handle message processing
+func (cr *ChatRecorder) handleMessages(session *chatRecordingSession) error {
 	// Set up ticker for periodic pings
 	pingTicker := time.NewTicker(30 * time.Second)
 	defer pingTicker.Stop()
@@ -413,13 +484,24 @@ func (cr *ChatRecorder) recordChat(session *chatRecordingSession) {
 	saveTicker := time.NewTicker(session.saveInterval)
 	defer saveTicker.Stop()
 
-	// Message handling loop with improved error handling and reconnection
-	connectionErrors := 0
+	// Set a reasonable read deadline for the first message
+	session.conn.SetReadDeadline(time.Now().Add(45 * time.Second))
+
 	for {
+		// Check if the session is still running
+		session.mu.Lock()
+		isRunning := session.isRunning
+		session.mu.Unlock()
+
+		if !isRunning {
+			return nil // Exit normally if session is stopped
+		}
+
 		select {
 		case <-session.stopChan:
 			cr.logger.Printf("Received stop signal for %s", session.username)
-			return
+			return nil
+
 		case <-pingTicker.C:
 			// Send ping message
 			pingMsg := struct {
@@ -430,30 +512,10 @@ func (cr *ChatRecorder) recordChat(session *chatRecordingSession) {
 				Data: "p",
 			}
 			cr.logger.Printf("Sending ping to keep connection alive")
-			if err := conn.WriteJSON(pingMsg); err != nil {
-				cr.logger.Printf("Error sending ping: %v", err)
-				connectionErrors++
-				if connectionErrors >= 3 {
-					cr.logger.Printf("Too many connection errors, attempting to reconnect")
-					if cr.attemptReconnect(session) {
-						// Reconnection successful, reset connection errors
-						connectionErrors = 0
-						conn = session.conn
-						continue
-					} else {
-						// Save any remaining messages before returning
-						if len(session.messages) > 0 {
-							if err := cr.saveMessages(session); err != nil {
-								cr.logger.Printf("Error saving chat messages: %v", err)
-							}
-						}
-						return
-					}
-				}
-			} else {
-				// Reset connection errors on successful ping
-				connectionErrors = 0
+			if err := session.conn.WriteJSON(pingMsg); err != nil {
+				return fmt.Errorf("error sending ping: %v", err)
 			}
+
 		case <-saveTicker.C:
 			// Save messages periodically
 			if len(session.messages) > 0 {
@@ -463,61 +525,26 @@ func (cr *ChatRecorder) recordChat(session *chatRecordingSession) {
 					cr.logger.Printf("Error saving chat messages: %v", err)
 				}
 			}
+
 		default:
-			// Use a safer approach to read messages with a short timeout
-			conn.SetReadDeadline(time.Now().Add(1 * time.Second))
-			messageType, message, err := conn.ReadMessage()
-			conn.SetReadDeadline(time.Time{}) // Reset the deadline
+			// Read the next message with a reasonable timeout
+			session.conn.SetReadDeadline(time.Now().Add(45 * time.Second))
+			messageType, message, err := session.conn.ReadMessage()
+			session.conn.SetReadDeadline(time.Time{}) // Reset the deadline after read
 
 			if err != nil {
 				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-					cr.logger.Printf("WebSocket closed normally")
-					// Try to reconnect
-					if cr.attemptReconnect(session) {
-						// Reconnection successful
-						conn = session.conn
-						continue
-					} else {
-						// Save any remaining messages before returning
-						if len(session.messages) > 0 {
-							if err := cr.saveMessages(session); err != nil {
-								cr.logger.Printf("Error saving chat messages: %v", err)
-							}
-						}
-						return
-					}
+					return fmt.Errorf("websocket closed normally")
 				}
 
-				// Check if it's just a timeout (which is expected with our approach)
+				// Check if it's a timeout (which is expected with our approach)
 				if strings.Contains(err.Error(), "timeout") {
-					// This is just a timeout from our short deadline, not a real error
+					// This is just a timeout from our deadline, not a real error
 					continue
 				}
 
-				cr.logger.Printf("Error reading message: %v", err)
-				connectionErrors++
-				if connectionErrors >= 3 {
-					cr.logger.Printf("Too many read errors, attempting to reconnect")
-					if cr.attemptReconnect(session) {
-						// Reconnection successful, reset connection errors
-						connectionErrors = 0
-						conn = session.conn
-						continue
-					} else {
-						// Save any remaining messages before returning
-						if len(session.messages) > 0 {
-							if err := cr.saveMessages(session); err != nil {
-								cr.logger.Printf("Error saving chat messages: %v", err)
-							}
-						}
-						return
-					}
-				}
-				continue
+				return fmt.Errorf("error reading message: %v", err)
 			}
-
-			// Reset connection errors on successful read
-			connectionErrors = 0
 
 			// Only process text messages
 			if messageType != websocket.TextMessage {
@@ -530,16 +557,12 @@ func (cr *ChatRecorder) recordChat(session *chatRecordingSession) {
 				Type int             `json:"t"`
 				Data json.RawMessage `json:"d"`
 			}
-
 			if err := json.Unmarshal(message, &msg); err != nil {
 				cr.logger.Printf("Error unmarshaling message: %v", err)
 				continue
 			}
 
 			// Process the message
-			cr.logger.Printf("Received message type: %d", msg.Type)
-
-			// Handle different message types
 			if msg.Type == 10000 {
 				// This is a chat message event
 				chatMsg, err := cr.parseMessage(string(msg.Data), session.startTime)
@@ -547,11 +570,9 @@ func (cr *ChatRecorder) recordChat(session *chatRecordingSession) {
 					cr.logger.Printf("Error parsing message: %v", err)
 					continue
 				}
-
 				if chatMsg != nil {
 					cr.logger.Printf("Received chat message from %s: %s",
 						chatMsg.Author.Name, chatMsg.Message)
-
 					session.mu.Lock()
 					session.messages = append(session.messages, *chatMsg)
 					messageCount := len(session.messages)
@@ -573,75 +594,140 @@ func (cr *ChatRecorder) recordChat(session *chatRecordingSession) {
 // parseMessage converts a raw WebSocket message to a ChatMessage
 func (cr *ChatRecorder) parseMessage(data string, startTime time.Time) (*ChatMessage, error) {
 	cr.logger.Printf("Parsing message data: %s", data)
-	var serviceEvent struct {
-		ServiceID int             `json:"serviceId"`
-		Event     json.RawMessage `json:"event"`
-	}
-	if err := json.Unmarshal([]byte(data), &serviceEvent); err != nil {
-		return nil, fmt.Errorf("error unmarshaling service event: %v", err)
+
+	// First, we need to unmarshal the outer JSON object
+	var msg struct {
+		Type int             `json:"t"`
+		Data json.RawMessage `json:"d"`
 	}
 
-	// Only process chat room messages (service ID 46)
-	if serviceEvent.ServiceID != 46 {
-		cr.logger.Printf("Ignoring message with service ID: %d", serviceEvent.ServiceID)
-		return nil, nil
-	}
-
-	// First, determine the event type
-	var eventTypeCheck struct {
-		Type int `json:"type"`
-	}
-	if err := json.Unmarshal(serviceEvent.Event, &eventTypeCheck); err != nil {
-		return nil, fmt.Errorf("error checking event type: %v", err)
-	}
-
-	// Only process text messages (type 10)
-	if eventTypeCheck.Type != 10 {
-		cr.logger.Printf("Ignoring event with type: %d", eventTypeCheck.Type)
-		return nil, nil
-	}
-
-	var eventData struct {
-		Type            int `json:"type"`
-		ChatRoomMessage struct {
-			ID                string        `json:"id"`
-			ChatRoomID        string        `json:"chatRoomId"`
-			SenderID          string        `json:"senderId"`
-			Content           string        `json:"content"`
-			Type              int           `json:"type"`
-			Private           int           `json:"private"`
-			Metadata          string        `json:"metadata"`
-			CreatedAt         int64         `json:"createdAt"`
-			Username          string        `json:"username"`
-			DisplayName       string        `json:"displayname"`
-			UsernameColor     string        `json:"usernameColor"`
-			AccountFlags      int           `json:"accountFlags"`
-			Attachments       []interface{} `json:"attachments"`
-			Embeds            []interface{} `json:"embeds"`
-			ChatRoomAccountID string        `json:"chatRoomAccountId"`
-		} `json:"chatRoomMessage"`
-	}
-	if err := json.Unmarshal(serviceEvent.Event, &eventData); err != nil {
-		return nil, fmt.Errorf("error unmarshaling event data: %v", err)
-	}
-
-	// Parse the metadata for additional user info
-	var metadata struct {
-		SenderIsCreator    bool `json:"senderIsCreator"`
-		SenderIsStaff      bool `json:"senderIsStaff"`
-		SenderIsFollowing  bool `json:"senderIsFollowing"`
-		SenderSubscription struct {
-			TierID    string `json:"tierId"`
-			TierColor string `json:"tierColor"`
-			TierName  string `json:"tierName"`
-		} `json:"senderSubscription"`
-	}
-
-	// Handle potentially missing metadata
-	if eventData.ChatRoomMessage.Metadata != "" {
-		if err := json.Unmarshal([]byte(eventData.ChatRoomMessage.Metadata), &metadata); err != nil {
-			cr.logger.Printf("Warning: could not parse message metadata: %v", err)
+	if err := json.Unmarshal([]byte(data), &msg); err != nil {
+		// Try to handle the case where data is already a string that needs to be unescaped
+		var rawData struct {
+			ServiceID int    `json:"serviceId"`
+			Event     string `json:"event"`
 		}
+
+		if err := json.Unmarshal([]byte(data), &rawData); err != nil {
+			return nil, fmt.Errorf("error unmarshaling message data: %v", err)
+		}
+
+		// Only process chat room messages (service ID 46)
+		if rawData.ServiceID != 46 {
+			cr.logger.Printf("Ignoring message with service ID: %d", rawData.ServiceID)
+			return nil, nil
+		}
+
+		// Now parse the event JSON which is a string
+		var eventData struct {
+			Type            int `json:"type"`
+			ChatRoomMessage struct {
+				ID                string        `json:"id"`
+				ChatRoomID        string        `json:"chatRoomId"`
+				SenderID          string        `json:"senderId"`
+				Content           string        `json:"content"`
+				Type              int           `json:"type"`
+				Private           int           `json:"private"`
+				Metadata          string        `json:"metadata"`
+				CreatedAt         int64         `json:"createdAt"`
+				Username          string        `json:"username"`
+				DisplayName       string        `json:"displayname"`
+				UsernameColor     string        `json:"usernameColor"`
+				AccountFlags      int           `json:"accountFlags"`
+				Attachments       []interface{} `json:"attachments"`
+				Embeds            []interface{} `json:"embeds"`
+				ChatRoomAccountID string        `json:"chatRoomAccountId"`
+			} `json:"chatRoomMessage"`
+		}
+
+		if err := json.Unmarshal([]byte(rawData.Event), &eventData); err != nil {
+			return nil, fmt.Errorf("error unmarshaling event data: %v", err)
+		}
+
+		// Only process text messages (type 10)
+		if eventData.Type != 10 {
+			cr.logger.Printf("Ignoring event with type: %d", eventData.Type)
+			return nil, nil
+		}
+
+		// Parse the metadata for additional user info
+		var metadata struct {
+			SenderIsCreator    bool `json:"senderIsCreator"`
+			SenderIsStaff      bool `json:"senderIsStaff"`
+			SenderIsFollowing  bool `json:"senderIsFollowing"`
+			SenderSubscription struct {
+				TierID    string `json:"tierId"`
+				TierColor string `json:"tierColor"`
+				TierName  string `json:"tierName"`
+			} `json:"senderSubscription"`
+		}
+
+		// Handle potentially missing metadata
+		if eventData.ChatRoomMessage.Metadata != "" {
+			if err := json.Unmarshal([]byte(eventData.ChatRoomMessage.Metadata), &metadata); err != nil {
+				cr.logger.Printf("Warning: could not parse message metadata: %v", err)
+			}
+		}
+
+		// Calculate time in seconds since stream start
+		receivedAt := time.Now()
+		elapsedSeconds := receivedAt.Sub(startTime).Seconds()
+
+		// Format time as MM:SS
+		minutes := int(elapsedSeconds) / 60
+		seconds := int(elapsedSeconds) % 60
+		timeText := fmt.Sprintf("%02d:%02d", minutes, seconds)
+
+		cr.logger.Printf("Successfully parsed chat message from %s", eventData.ChatRoomMessage.DisplayName)
+
+		return &ChatMessage{
+			MessageID:     eventData.ChatRoomMessage.ID,
+			Message:       eventData.ChatRoomMessage.Content,
+			MessageType:   "text_message",
+			Timestamp:     eventData.ChatRoomMessage.CreatedAt,
+			TimeInSeconds: elapsedSeconds,
+			TimeText:      timeText,
+			Author: Author{
+				ID:        eventData.ChatRoomMessage.SenderID,
+				Name:      eventData.ChatRoomMessage.DisplayName,
+				IsCreator: metadata.SenderIsCreator,
+				IsStaff:   metadata.SenderIsStaff,
+				TierInfo: TierInfo{
+					TierID:    metadata.SenderSubscription.TierID,
+					TierColor: metadata.SenderSubscription.TierColor,
+					TierName:  metadata.SenderSubscription.TierName,
+				},
+			},
+			RawData:    data,
+			ReceivedAt: receivedAt,
+		}, nil
+	}
+
+	// If we got here, we have a different message format
+	// This handles the case where the message is in the expected format with t/d fields
+	cr.logger.Printf("Message has type: %d", msg.Type)
+
+	// Only process chat messages (type 10000)
+	if msg.Type != 10000 {
+		return nil, nil
+	}
+
+	// Parse the message data
+	var chatData struct {
+		MessageID  string `json:"id"`
+		Content    string `json:"content"`
+		SenderID   string `json:"senderId"`
+		SenderName string `json:"senderName"`
+		CreatedAt  int64  `json:"createdAt"`
+		IsCreator  bool   `json:"isCreator"`
+		IsStaff    bool   `json:"isStaff"`
+		TierID     string `json:"tierId"`
+		TierColor  string `json:"tierColor"`
+		TierName   string `json:"tierName"`
+	}
+
+	if err := json.Unmarshal(msg.Data, &chatData); err != nil {
+		return nil, fmt.Errorf("error unmarshaling chat data: %v", err)
 	}
 
 	// Calculate time in seconds since stream start
@@ -653,27 +739,27 @@ func (cr *ChatRecorder) parseMessage(data string, startTime time.Time) (*ChatMes
 	seconds := int(elapsedSeconds) % 60
 	timeText := fmt.Sprintf("%02d:%02d", minutes, seconds)
 
-	cr.logger.Printf("Successfully parsed chat message from %s", eventData.ChatRoomMessage.DisplayName)
+	cr.logger.Printf("Successfully parsed chat message from %s", chatData.SenderName)
 
 	return &ChatMessage{
-		MessageID:     eventData.ChatRoomMessage.ID,
-		Message:       eventData.ChatRoomMessage.Content,
+		MessageID:     chatData.MessageID,
+		Message:       chatData.Content,
 		MessageType:   "text_message",
-		Timestamp:     eventData.ChatRoomMessage.CreatedAt,
+		Timestamp:     chatData.CreatedAt,
 		TimeInSeconds: elapsedSeconds,
 		TimeText:      timeText,
 		Author: Author{
-			ID:        eventData.ChatRoomMessage.SenderID,
-			Name:      eventData.ChatRoomMessage.DisplayName,
-			IsCreator: metadata.SenderIsCreator,
-			IsStaff:   metadata.SenderIsStaff,
+			ID:        chatData.SenderID,
+			Name:      chatData.SenderName,
+			IsCreator: chatData.IsCreator,
+			IsStaff:   chatData.IsStaff,
 			TierInfo: TierInfo{
-				TierID:    metadata.SenderSubscription.TierID,
-				TierColor: metadata.SenderSubscription.TierColor,
-				TierName:  metadata.SenderSubscription.TierName,
+				TierID:    chatData.TierID,
+				TierColor: chatData.TierColor,
+				TierName:  chatData.TierName,
 			},
 		},
-		RawData:    string(serviceEvent.Event),
+		RawData:    string(data),
 		ReceivedAt: receivedAt,
 	}, nil
 }
@@ -704,9 +790,11 @@ func (cr *ChatRecorder) saveMessages(session *chatRecordingSession) error {
 		if err != nil {
 			return fmt.Errorf("error reading existing chat file: %v", err)
 		}
+
 		if err := json.Unmarshal(data, &existingMessages); err != nil {
 			return fmt.Errorf("error parsing existing chat file: %v", err)
 		}
+
 		cr.logger.Printf("Found %d existing messages in chat file", len(existingMessages))
 	} else {
 		cr.logger.Printf("Creating new chat file: %s", session.outputFile)
