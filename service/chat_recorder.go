@@ -226,7 +226,58 @@ func (cr *ChatRecorder) StopAllRecordings() {
 
 // recordChat handles the WebSocket connection and message recording
 func (cr *ChatRecorder) recordChat(session *chatRecordingSession) {
-	defer session.wg.Done()
+	// Create a flag to track if we've already decremented the WaitGroup
+	decrementedWG := false
+	defer func() {
+		// Only decrement WaitGroup if we haven't already
+		if !decrementedWG {
+			session.wg.Done()
+			decrementedWG = true
+		}
+	}()
+
+	defer func() {
+		// Recover from any panics
+		if r := recover(); r != nil {
+			cr.logger.Printf("Recovered from panic in chat recorder: %v", r)
+
+			// Close the connection if it exists
+			if session.conn != nil {
+				session.conn.Close()
+				session.conn = nil
+			}
+
+			// Check if the session should still be running
+			session.mu.Lock()
+			isRunning := session.isRunning
+			session.mu.Unlock()
+
+			// If the session should still be running, restart the websocket connection
+			if isRunning {
+				cr.logger.Printf("Attempting to reconnect after panic for %s", session.username)
+				time.Sleep(cr.reconnectWait) // Wait before reconnecting
+
+				// Increment the WaitGroup before starting a new goroutine
+				session.wg.Add(1)
+
+				// Start a new goroutine
+				go cr.recordChat(session)
+			} else {
+				cr.logger.Printf("Session for %s marked as not running, not reconnecting after panic", session.username)
+			}
+		} else {
+			// This is a normal exit (not a panic)
+			// Make sure to close the connection when exiting
+			if session.conn != nil {
+				session.conn.Close()
+				session.conn = nil
+			}
+			// Mark the session as not running only if this was not a panic
+			session.mu.Lock()
+			session.isRunning = false
+			session.mu.Unlock()
+		}
+	}()
 
 	cr.logger.Printf("Starting chat recording for model %s (%s), chat room ID: %s, output file: %s",
 		session.username, session.modelID, session.chatRoomID, session.outputFile)
@@ -251,32 +302,19 @@ func (cr *ChatRecorder) recordChat(session *chatRecordingSession) {
 		}
 
 		// Start message handling loop
-		err := cr.handleMessages(session)
-
-		// If the session is stopped normally, exit
-		if err == nil {
-			return
+		if err := cr.handleMessages(session); err != nil {
+			cr.logger.Printf("Error in message handling: %v, will reconnect", err)
+			// Close the connection before reconnecting
+			if session.conn != nil {
+				session.conn.Close()
+				session.conn = nil
+			}
+			time.Sleep(cr.reconnectWait)
+			continue
 		}
 
-		cr.logger.Printf("Error in message handling: %v, will reconnect", err)
-
-		// Close the connection before reconnecting
-		if session.conn != nil {
-			session.conn.Close()
-			session.conn = nil
-		}
-
-		// Check if the session is still supposed to be running
-		session.mu.Lock()
-		isRunning = session.isRunning
-		session.mu.Unlock()
-
-		if !isRunning {
-			return
-		}
-
-		cr.logger.Printf("Reconnecting for %s in %v", session.username, cr.reconnectWait)
-		time.Sleep(cr.reconnectWait)
+		// If we get here, the message loop exited normally (session stopped)
+		return
 	}
 }
 
@@ -305,6 +343,15 @@ func (cr *ChatRecorder) connectAndAuthenticate(session *chatRecordingSession) er
 	}
 	cr.logger.Printf("Successfully connected to chat WebSocket for %s", session.username)
 	session.conn = conn
+
+	// Set up error handling for the connection
+	conn.SetPingHandler(func(appData string) error {
+		return conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(10*time.Second))
+	})
+	conn.SetCloseHandler(func(code int, text string) error {
+		cr.logger.Printf("WebSocket connection closed: %d %s", code, text)
+		return nil
+	})
 
 	// Send authentication message
 	authMsg := struct {
@@ -367,62 +414,75 @@ func (cr *ChatRecorder) handleMessages(session *chatRecordingSession) error {
 	saveTicker := time.NewTicker(session.saveInterval)
 	defer saveTicker.Stop()
 
-	// Set a reasonable read timeout for detecting connection issues
-	readTimeout := 45 * time.Second
-
-	// Create a channel for receiving messages
-	messageChan := make(chan []byte, 10)
-	errorChan := make(chan error, 1)
-
-	// Start a goroutine to read messages
-	go func() {
-		for {
-			// Set read deadline for each message
-			if err := session.conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
-				errorChan <- fmt.Errorf("failed to set read deadline: %v", err)
-				return
-			}
-
-			_, message, err := session.conn.ReadMessage()
-
-			// Reset the deadline after reading
-			session.conn.SetReadDeadline(time.Time{})
-
-			if err != nil {
-				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-					errorChan <- fmt.Errorf("websocket closed normally")
-				} else if strings.Contains(err.Error(), "timeout") {
-					// This is just our read timeout, not a real error
-					// Just continue reading
-					continue
-				} else {
-					errorChan <- fmt.Errorf("error reading message: %v", err)
-				}
-				return
-			}
-
-			// Send the message to the processing goroutine
-			select {
-			case messageChan <- message:
-				// Message sent successfully
-			case <-session.stopChan:
-				// Session is stopping
-				return
-			}
-		}
-	}()
+	// Set a reasonable read deadline for the first message
+	session.conn.SetReadDeadline(time.Now().Add(45 * time.Second))
 
 	for {
+		// Check if the session is still running
+		session.mu.Lock()
+		isRunning := session.isRunning
+		session.mu.Unlock()
+
+		if !isRunning {
+			return nil // Exit normally if session is stopped
+		}
+
 		select {
 		case <-session.stopChan:
 			cr.logger.Printf("Received stop signal for %s", session.username)
 			return nil
 
-		case err := <-errorChan:
-			return err
+		case <-pingTicker.C:
+			// Send ping message
+			pingMsg := struct {
+				Type int    `json:"t"`
+				Data string `json:"d"`
+			}{
+				Type: 0,
+				Data: "p",
+			}
+			cr.logger.Printf("Sending ping to keep connection alive")
+			if err := session.conn.WriteJSON(pingMsg); err != nil {
+				return fmt.Errorf("error sending ping: %v", err)
+			}
 
-		case message := <-messageChan:
-			// Process the message
+		case <-saveTicker.C:
+			// Save messages periodically
+			if len(session.messages) > 0 {
+				cr.logger.Printf("Periodic save triggered for %s (%d messages)",
+					session.username, len(session.messages))
+				if err := cr.saveMessages(session); err != nil {
+					cr.logger.Printf("Error saving chat messages: %v", err)
+				}
+			}
+
+		default:
+			// Read the next message with a reasonable timeout
+			session.conn.SetReadDeadline(time.Now().Add(45 * time.Second))
+			messageType, message, err := session.conn.ReadMessage()
+			session.conn.SetReadDeadline(time.Time{}) // Reset the deadline after read
+
+			if err != nil {
+				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+					return fmt.Errorf("websocket closed normally")
+				}
+
+				// Check if it's a timeout (which is expected with our approach)
+				if strings.Contains(err.Error(), "timeout") {
+					// This is just a timeout from our deadline, not a real error
+					continue
+				}
+
+				return fmt.Errorf("error reading message: %v", err)
+			}
+
+			// Only process text messages
+			if messageType != websocket.TextMessage {
+				cr.logger.Printf("Received non-text message type: %d", messageType)
+				continue
+			}
+
+			// Parse the message
 			var msg struct {
 				Type int             `json:"t"`
 				Data json.RawMessage `json:"d"`
@@ -455,30 +515,6 @@ func (cr *ChatRecorder) handleMessages(session *chatRecordingSession) error {
 							cr.logger.Printf("Error saving chat messages: %v", err)
 						}
 					}
-				}
-			}
-
-		case <-pingTicker.C:
-			// Send ping message
-			pingMsg := struct {
-				Type int    `json:"t"`
-				Data string `json:"d"`
-			}{
-				Type: 0,
-				Data: "p",
-			}
-			cr.logger.Printf("Sending ping to keep connection alive")
-			if err := session.conn.WriteJSON(pingMsg); err != nil {
-				return fmt.Errorf("error sending ping: %v", err)
-			}
-
-		case <-saveTicker.C:
-			// Save messages periodically
-			if len(session.messages) > 0 {
-				cr.logger.Printf("Periodic save triggered for %s (%d messages)",
-					session.username, len(session.messages))
-				if err := cr.saveMessages(session); err != nil {
-					cr.logger.Printf("Error saving chat messages: %v", err)
 				}
 			}
 		}
