@@ -69,7 +69,7 @@ console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weigh
 
 Chat messages are saved in a json format to be compatible with the player from this amazing archive project: https://archive.ragtag.moe/player
 
-It allows you to play local videos with the chat to have full context of streams with timestamps of the messages (as close as possible).
+It allows you to play local videos with the chat to have full context of streams with timestamps of the messages (as close as possible). Any empty messages are most likely tips that had no messages associated with it, I may also save those as the amount tipped.
 
 ### Video File Extensions
 Common options for `vods_file_extension`:
