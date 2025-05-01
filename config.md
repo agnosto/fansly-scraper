@@ -67,7 +67,7 @@ console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weigh
 
 ### Recorded chat
 
-I saved chat messages in a json format to be compatible with the player from this amazing archive project: https://archive.ragtag.moe/player
+Chat messages are saved in a json format to be compatible with the player from this amazing archive project: https://archive.ragtag.moe/player
 
 It allows you to play local videos with the chat to have full context of streams with timestamps of the messages (as close as possible).
 
