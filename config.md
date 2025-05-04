@@ -67,7 +67,7 @@ console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weigh
 
 ### Recorded chat
 
-Chat messages are saved in a json format to be compatible with the player from this amazing archive project: https://archive.ragtag.moe/player or for offline local use inspired by ragtag, this wails [archive player](https://github.com/agnosto/archive-player/releases) that integrates with the scraper to view the vods and chat messages right from the app.
+Chat messages are saved in a json format to be compatible with the player from this amazing archive project: https://archive.ragtag.moe/player
 
 It allows you to play local videos with the chat to have full context of streams with timestamps of the messages (as close as possible). Any empty messages are most likely tips that had no messages associated with it, I may also save those as the amount tipped.
 
