@@ -38,6 +38,7 @@
 
 ## ToDo:
 
+- [ ] Add option to limit resolution for downloading (post and livestreams)
 - [ ] Archive metadata for downloaded post
 - [ ] Standardize DB handling
 - [ ] Handle hashing and db storing of livestreams, handling post processing cases
