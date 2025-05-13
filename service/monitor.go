@@ -146,30 +146,6 @@ func (ms *MonitoringService) saveContactSheet(modelName, filename string) error 
 	return err
 }
 
-/*func (ms *MonitoringService) loadActiveRecordings() {
-	data, err := os.ReadFile(ms.recordingsPath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			logger.Logger.Printf("Error loading active recordings: %v", err)
-		}
-		return
-	}
-	if err := json.Unmarshal(data, &ms.activeRecordings); err != nil {
-		logger.Logger.Printf("Error unmarshaling active recordings: %v", err)
-	}
-}
-
-func (ms *MonitoringService) saveActiveRecordings() {
-	data, err := json.Marshal(ms.activeRecordings)
-	if err != nil {
-		logger.Logger.Printf("Error marshaling active recordings: %v", err)
-		return
-	}
-	if err := os.WriteFile(ms.recordingsPath, data, 0644); err != nil {
-		logger.Logger.Printf("Error saving active recordings: %v", err)
-	}
-}*/
-
 func (ms *MonitoringService) loadState() {
 	data, err := os.ReadFile(ms.storagePath)
 	if err != nil {
@@ -300,24 +276,6 @@ func (ms *MonitoringService) monitorModel(modelID, username string) {
 		fmt.Printf("Stopped monitoring %s (%s)\n", username, modelID)
 	}
 }
-
-/*func isProcessRunning(name string) bool {
-	switch runtime.GOOS {
-	case "windows":
-		cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("IMAGENAME eq %s", name))
-		output, err := cmd.Output()
-		if err != nil {
-			return false
-		}
-		return strings.Contains(string(output), name)
-	case "darwin", "linux":
-		cmd := exec.Command("pgrep", name)
-		err := cmd.Run()
-		return err == nil
-	default:
-		return false
-	}
-}*/
 
 func (ms *MonitoringService) IsMonitoring(modelID string) bool {
 	ms.mu.Lock()
