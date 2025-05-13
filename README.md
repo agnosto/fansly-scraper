@@ -18,8 +18,9 @@ The program will automatically move/download an example config into the config p
 
 ### Releases
 
-Pre-compiled binaries can be downloaded from the [releases](https://github.com/agnosto/fansly-scraper/releases) section.
+Pre-compiled binaries are available in the [GitHub releases](https://github.com/agnosto/fansly-scraper/releases) section.
 
+For a more user-friendly download experience, you can visit this [download page](https://agnosto.github.io/projects/fansly-scraper/), which provides an interface to the same release binaries. The download page automatically detects your operating system and architecture to suggest the appropriate version.
 
 ### Manual Compile
 
