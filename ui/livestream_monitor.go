@@ -7,9 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-
-	//"fmt"
-	//"sync"
 	"strings"
 	"time"
 
@@ -17,9 +14,6 @@ import (
 	"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/core"
 	"github.com/agnosto/fansly-scraper/logger"
-
-	//"github.com/agnosto/fansly-scraper/service"
-
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
@@ -47,14 +41,11 @@ func (ms *MonitoringService) Shutdown() {
 func (ms *MonitoringService) StartMonitoring(modelID, username string) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
-
 	if _, exists := ms.activeMonitors[modelID]; exists {
 		return // Already monitoring
 	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	ms.activeMonitors[modelID] = cancel
-
 	go func() {
 		for {
 			select {
@@ -79,7 +70,6 @@ func (ms *MonitoringService) StartMonitoring(modelID, username string) {
 func (ms *MonitoringService) StopMonitoring(modelID string) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
-
 	if cancel, exists := ms.activeMonitors[modelID]; exists {
 		cancel()
 		delete(ms.activeMonitors, modelID)
@@ -114,8 +104,13 @@ func (m *MainModel) HandleLivestreamMonitorUpdate(msg tea.Msg) (tea.Model, tea.C
 			selectedRow := m.monitoringTable.SelectedRow()
 			modelID := selectedRow[1]
 			username := selectedRow[0]
+
+			// Toggle monitoring without sending log messages
+			m.monitoringService.SetTUIMode(true) // Ensure TUI mode is set
 			m.monitoringService.ToggleMonitoring(modelID, username)
 			m.updateMonitoringTable()
+
+			return m, nil
 		case key.Matches(msg, m.keys.Filter):
 			m.state = LiveMonitorFilterState
 			return m, nil
@@ -123,14 +118,6 @@ func (m *MainModel) HandleLivestreamMonitorUpdate(msg tea.Msg) (tea.Model, tea.C
 			m.state = MainMenuState
 			m.cursorPos = 0
 			return m, nil
-			//case msg.String() == "backspace":
-			//    if len(m.liveMonitorFilterInput) > 0 {
-			//        m.liveMonitorFilterInput = m.liveMonitorFilterInput[:len(m.liveMonitorFilterInput)-1]
-			//        m.applyLiveMonitorFilter()
-			//    }
-			//default:
-			//    m.liveMonitorFilterInput += msg.String()
-			//    m.applyLiveMonitorFilter()
 		}
 	}
 	return m, nil
@@ -150,10 +137,8 @@ func (m *MainModel) HandleLiveMonitorFilterUpdate(msg tea.Msg) (tea.Model, tea.C
 			m.state = LiveMonitorState
 			return m, nil
 		case "up":
-			//    m.table.MoveUp(1)
 			return m, nil
 		case "down":
-			//    m.table.MoveDown(1)
 			return m, nil
 		case "enter":
 			m.applyLiveMonitorFilter()
@@ -186,15 +171,9 @@ func (m *MainModel) RenderLivestreamMonitorMenu() string {
 
 func (m *MainModel) RenderLiveMonitorFilterMenu() string {
 	var sb strings.Builder
-
 	sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#f5c2e7")).Render("Livestream Monitoring Filter") + "\n\n")
 	sb.WriteString("Filter by username: " + m.liveMonitorFilterInput + "\n")
 	sb.WriteString(m.monitoringTable.View() + "\n")
-
-	//helpView := m.help.View(m.keys)
-	//height := m.height - strings.Count(helpView, "\n") - m.monitoringTable.Height() - 8
-	//sb.WriteString("\n" + strings.Repeat("\n", height) + helpView)
-
 	return sb.String()
 }
 
@@ -212,7 +191,6 @@ func (m *MainModel) initializeLivestreamMonitoringTable() tea.Cmd {
 func (m *MainModel) loadMonitoringState() map[string]string {
 	configDir := config.GetConfigDir()
 	statePath := filepath.Join(configDir, "monitoring_state.json")
-
 	data, err := os.ReadFile(statePath)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -220,13 +198,11 @@ func (m *MainModel) loadMonitoringState() map[string]string {
 		}
 		return make(map[string]string)
 	}
-
 	var activeMonitors map[string]string
 	if err := json.Unmarshal(data, &activeMonitors); err != nil {
 		logger.Logger.Printf("Error parsing monitoring state: %v", err)
 		return make(map[string]string)
 	}
-
 	return activeMonitors
 }
 
@@ -237,27 +213,22 @@ func (m *MainModel) updateMonitoringTable() {
 		{Title: "Monitor Status", Width: 15},
 		{Title: "Live Status", Width: 15},
 	}
-
 	activeMonitors := m.loadMonitoringState()
 	rows := make([]table.Row, len(m.filteredLiveMonitorModels))
-
 	for i, model := range m.filteredLiveMonitorModels {
 		monitorStatus := "Not Monitoring"
 		monitorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("red"))
 		liveStatus := "Offline"
 		liveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("red"))
-
 		if _, isMonitored := activeMonitors[model.ID]; isMonitored {
 			monitorStatus = "Monitoring"
 			monitorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("green"))
-
 			isLive, _, _ := core.CheckIfModelIsLive(model.ID)
 			if isLive {
 				liveStatus = "Live"
 				liveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("green"))
 			}
 		}
-
 		rows[i] = table.Row{
 			model.Username,
 			model.ID,
@@ -265,14 +236,12 @@ func (m *MainModel) updateMonitoringTable() {
 			liveStyle.Render(liveStatus),
 		}
 	}
-
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows(rows),
 		table.WithFocused(true),
 		table.WithHeight(m.height-10),
 	)
-
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
@@ -284,7 +253,6 @@ func (m *MainModel) updateMonitoringTable() {
 		Background(lipgloss.Color("#cba6f7")).
 		Bold(false)
 	t.SetStyles(s)
-
 	m.monitoringTable = t
 }
 
@@ -308,7 +276,6 @@ func (m *MainModel) startLiveStatusUpdates() tea.Cmd {
 func (m *MainModel) Cleanup() {
 	// Stop all monitoring first
 	m.monitoringService.Shutdown()
-
 	// Kill FFmpeg processes with proper error handling
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
@@ -317,7 +284,6 @@ func (m *MainModel) Cleanup() {
 		cmd = exec.Command("pkill", "ffmpeg")
 	}
 	cmd.Run() // Execute the command synchronously
-
 	// Clean up lock files with verification
 	recordingsPath := filepath.Join(config.GetConfigDir(), "active_recordings")
 	files, err := os.ReadDir(recordingsPath)
@@ -332,21 +298,3 @@ func (m *MainModel) Cleanup() {
 		}
 	}
 }
-
-// Add a cleanup function that can be called from the TUI
-/*
-func cleanupLockFiles() {
-	recordingsPath := filepath.Join(config.GetConfigDir(), "active_recordings")
-	files, err := os.ReadDir(recordingsPath)
-	if err != nil {
-		return
-	}
-
-	for _, file := range files {
-		if filepath.Ext(file.Name()) == ".lock" {
-			lockFile := filepath.Join(recordingsPath, file.Name())
-			os.Remove(lockFile)
-		}
-	}
-}
-*/

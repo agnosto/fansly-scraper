@@ -7,18 +7,10 @@ import (
 	"time"
 
 	"github.com/agnosto/fansly-scraper/auth"
-	//"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/core"
 	"github.com/agnosto/fansly-scraper/download"
 	"github.com/agnosto/fansly-scraper/service"
 
-	//"fmt"
-	//"log"
-	//"os"
-	//"path/filepath"
-	//"runtime"
-	//"strings"
-	//"time"
 	"context"
 	"sync"
 

@@ -52,22 +52,6 @@ func (m *MainModel) HandleFilterModelsMenuUpdate(msg tea.Msg) (tea.Model, tea.Cm
 	return m, nil
 }
 
-/*
-func (m *MainModel) handleFilterModelsSelection() (tea.Model, tea.Cmd) {
-	switch m.actionChosen {
-        case "download":
-            m.state = DownloadActionsState
-        case "monitor":
-            m.state = LiveMonitorState
-        case "like":
-            m.state = LikePostState
-        case "unlike":
-            m.state = UnlikePostState
-        }
-	return m, nil
-}
-*/
-
 func (m *MainModel) RenderFilterModelsMenu() string {
 	var sb strings.Builder
 

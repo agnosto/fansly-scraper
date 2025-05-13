@@ -7,6 +7,7 @@ import (
 
 	"github.com/agnosto/fansly-scraper/auth"
 	"github.com/agnosto/fansly-scraper/config"
+	"github.com/agnosto/fansly-scraper/headers"
 	"github.com/agnosto/fansly-scraper/logger"
 )
 
@@ -21,7 +22,13 @@ func FetchAccountInfo(configPath string) (AccountInfo, error) {
 		return AccountInfo{}, fmt.Errorf("error loading config: %v", err)
 	}
 
-	accountInfo, err := auth.Login(cfg.Account.AuthToken, cfg.Account.UserAgent)
+	// Create FanslyHeaders instance
+	fanslyHeaders, err := headers.NewFanslyHeaders(cfg)
+	if err != nil {
+		return AccountInfo{}, fmt.Errorf("error creating headers: %v", err)
+	}
+
+	accountInfo, err := auth.Login(fanslyHeaders)
 	if err != nil {
 		return AccountInfo{}, fmt.Errorf("error logging in: %v", err)
 	}
@@ -31,7 +38,7 @@ func FetchAccountInfo(configPath string) (AccountInfo, error) {
 	// Log that we're starting to fetch followed accounts
 	logger.Logger.Printf("Fetching followed accounts for %s. This may take a while if you follow many accounts...", accountInfo.Username)
 
-	followedModels, err := auth.GetFollowedUsers(accountInfo.ID, cfg.Account.AuthToken, cfg.Account.UserAgent)
+	followedModels, err := auth.GetFollowedUsers(accountInfo.ID, fanslyHeaders)
 	if err != nil {
 		return AccountInfo{}, fmt.Errorf("error getting followed models: %v", err)
 	}
@@ -60,16 +67,21 @@ func GetModelIDFromUsername(username string) (string, error) {
 		return "", fmt.Errorf("failed to load config: %v", err)
 	}
 
+	// Create FanslyHeaders instance
+	fanslyHeaders, err := headers.NewFanslyHeaders(cfg)
+	if err != nil {
+		return "", fmt.Errorf("error creating headers: %v", err)
+	}
+
 	AccountURL := fmt.Sprintf("https://apiv3.fansly.com/api/v1/account?usernames=%s&ngsw-bypass=true", username)
 	client := &http.Client{}
-
 	req, err := http.NewRequest("GET", AccountURL, nil)
 	if err != nil {
 		return "", err
 	}
 
-	req.Header.Add("Authorization", cfg.Account.AuthToken)
-	req.Header.Add("User-Agent", cfg.Account.UserAgent)
+	// Use the headers package to add headers
+	fanslyHeaders.AddHeadersToRequest(req, true)
 
 	resp, err := client.Do(req)
 	if err != nil {

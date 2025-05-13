@@ -29,22 +29,6 @@ func (m *MainModel) HandlePurchaseProgressMenuUpdate(msg tea.Msg) (tea.Model, te
 	return m, nil
 }
 
-/*
-func (m *MainModel) handleDownloadProgressSelection() (tea.Model, tea.Cmd) {
-	switch m.actionChosen {
-        case "download":
-            m.state = DownloadActionsState
-        case "monitor":
-            m.state = LiveMonitorState
-        case "like":
-            m.state = LikePostState
-        case "unlike":
-            m.state = UnlikePostState
-        }
-	return m, nil
-}
-*/
-
 // RenderMainMenu renders the main menu view
 func (m *MainModel) RenderPurchaseProgressMenu() string {
 	var sb strings.Builder

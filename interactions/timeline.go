@@ -5,28 +5,42 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/agnosto/fansly-scraper/posts"
 	"io"
 	"net/http"
 	"os"
 	"time"
-	//"github.com/agnosto/fansly-scraper/headers"
+
+	"github.com/agnosto/fansly-scraper/config"
+	"github.com/agnosto/fansly-scraper/headers"
 	"github.com/agnosto/fansly-scraper/logger"
+	"github.com/agnosto/fansly-scraper/posts"
 	"github.com/schollz/progressbar/v3"
 	"golang.org/x/time/rate"
 )
 
 // LikeAllPosts likes all posts in the given slice
-func LikeAllPosts(ctx context.Context, allPosts []posts.Post, authToken, userAgent string) error {
-	return processAllPosts(ctx, allPosts, authToken, userAgent, "https://apiv3.fansly.com/api/v1/likes?ngsw-bypass=true", "Liking")
+func LikeAllPosts(ctx context.Context, allPosts []posts.Post, configPath string) error {
+	return processAllPosts(ctx, allPosts, configPath, "https://apiv3.fansly.com/api/v1/likes?ngsw-bypass=true", "Liking")
 }
 
 // UnlikeAllPosts unlikes all posts in the given slice
-func UnlikeAllPosts(ctx context.Context, allPosts []posts.Post, authToken, userAgent string) error {
-	return processAllPosts(ctx, allPosts, authToken, userAgent, "https://apiv3.fansly.com/api/v1/likes/remove?ngsw-bypass=true", "Unliking")
+func UnlikeAllPosts(ctx context.Context, allPosts []posts.Post, configPath string) error {
+	return processAllPosts(ctx, allPosts, configPath, "https://apiv3.fansly.com/api/v1/likes/remove?ngsw-bypass=true", "Unliking")
 }
 
-func processAllPosts(ctx context.Context, allPosts []posts.Post, authToken, userAgent, url, action string) error {
+func processAllPosts(ctx context.Context, allPosts []posts.Post, configPath, url, action string) error {
+	// Load config
+	cfg, err := config.LoadConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("error loading config: %v", err)
+	}
+
+	// Create FanslyHeaders instance
+	fanslyHeaders, err := headers.NewFanslyHeaders(cfg)
+	if err != nil {
+		return fmt.Errorf("error creating headers: %v", err)
+	}
+
 	// Start with a more conservative rate limit: 1 request every 3 seconds
 	limiter := rate.NewLimiter(rate.Every(3*time.Second), 1)
 
@@ -64,37 +78,31 @@ func processAllPosts(ctx context.Context, allPosts []posts.Post, authToken, user
 		maxRetries := 3
 
 		for !success && retries < maxRetries {
-			err := processPost(post.ID, url, authToken, userAgent)
+			err := processPost(post.ID, url, fanslyHeaders)
 			if err != nil {
 				if retries < maxRetries-1 {
 					// Check if it's a rate limit error
 					if err.Error() == "request failed with status code 429" {
 						consecutiveFailures++
-
 						// Exponential backoff
 						waitTime := backoffDuration * time.Duration(consecutiveFailures)
 						waitTime = min(waitTime, 2*time.Minute)
-
 						logger.Logger.Printf("[WARN] Rate limited. Waiting for %v before retrying...", waitTime)
 						bar.Describe(fmt.Sprintf("[yellow]Rate limited. Waiting %v...[reset]", waitTime))
-
 						select {
 						case <-time.After(waitTime):
 							// Continue after waiting
 						case <-ctx.Done():
 							return ctx.Err()
 						}
-
 						// Adjust the rate limiter to be more conservative
 						newRate := rate.Every(time.Duration(3+consecutiveFailures) * time.Second)
 						limiter.SetLimit(newRate)
 						logger.Logger.Printf("[INFO] Adjusted rate limit to 1 request every %v", newRate)
-
 						retries++
 						continue
 					}
 				}
-
 				failedPosts = append(failedPosts, post.ID)
 				logger.Logger.Printf("[ERROR] Failed to %s post %s: %v", action, post.ID, err)
 				bar.Describe(fmt.Sprintf("[red]Failed[reset]: %s", post.ID))
@@ -104,7 +112,6 @@ func processAllPosts(ctx context.Context, allPosts []posts.Post, authToken, user
 				consecutiveFailures = 0
 				success = true
 				bar.Add(1)
-
 				// Every 10 successful requests, add a small random delay
 				if i > 0 && i%10 == 0 {
 					randomDelay := time.Duration(1000+time.Now().UnixNano()%2000) * time.Millisecond
@@ -123,7 +130,7 @@ func processAllPosts(ctx context.Context, allPosts []posts.Post, authToken, user
 	return nil
 }
 
-func processPost(postID, url, authToken, userAgent string) error {
+func processPost(postID, url string, fanslyHeaders *headers.FanslyHeaders) error {
 	payload := map[string]string{"postId": postID}
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
@@ -135,10 +142,11 @@ func processPost(postID, url, authToken, userAgent string) error {
 		return fmt.Errorf("failed to create request: %v", err)
 	}
 
-	//headers.AddHeadersToRequest(req, true)
+	// Set the headers using the FanslyHeaders struct
+	fanslyHeaders.AddHeadersToRequest(req, true)
+
+	// Add Content-Type header which isn't included in the FanslyHeaders
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", authToken)
-	req.Header.Set("User-Agent", userAgent)
 
 	client := &http.Client{
 		Timeout: 30 * time.Second,
@@ -152,7 +160,6 @@ func processPost(postID, url, authToken, userAgent string) error {
 
 	// Read response body for better error reporting
 	body, _ := io.ReadAll(resp.Body)
-
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("request failed with status code %d: %s", resp.StatusCode, string(body))
 	}

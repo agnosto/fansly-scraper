@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/agnosto/fansly-scraper/headers"
 	"github.com/agnosto/fansly-scraper/logger"
+	"github.com/schollz/progressbar/v3"
 	"golang.org/x/time/rate"
 	"net/http"
 	"os"
 	"time"
-	//"github.com/agnosto/fansly-scraper/headers"
-	"github.com/schollz/progressbar/v3"
 )
 
 var (
@@ -55,7 +55,7 @@ type GroupResponse struct {
 	} `json:"response"`
 }
 
-func GetMessageGroupID(modelID, authToken, userAgent string) (string, error) {
+func GetMessageGroupID(modelID string, fanslyHeaders *headers.FanslyHeaders) (string, error) {
 	ctx := context.Background()
 	err := messageLimiter.Wait(ctx)
 	if err != nil {
@@ -64,15 +64,12 @@ func GetMessageGroupID(modelID, authToken, userAgent string) (string, error) {
 
 	// Updated URL to the new endpoint
 	url := "https://apiv3.fansly.com/api/v1/messaging/groups?limit=1000&ngsw-bypass=true"
-
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("error creating request: %v", err)
 	}
 
-	req.Header.Set("Authorization", authToken)
-	req.Header.Set("User-Agent", userAgent)
-	//headers.AddHeadersToRequest(req, true)
+	fanslyHeaders.AddHeadersToRequest(req, true)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -100,8 +97,8 @@ func GetMessageGroupID(modelID, authToken, userAgent string) (string, error) {
 	return "", fmt.Errorf("no group found for model ID: %s", modelID)
 }
 
-func GetAllMessageMedia(modelID, authToken, userAgent string) ([]AccountMedia, error) {
-	groupID, err := GetMessageGroupID(modelID, authToken, userAgent)
+func GetAllMessageMedia(modelID string, fanslyHeaders *headers.FanslyHeaders) ([]AccountMedia, error) {
+	groupID, err := GetMessageGroupID(modelID, fanslyHeaders)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get group ID: %v", err)
 	}
@@ -119,17 +116,14 @@ func GetAllMessageMedia(modelID, authToken, userAgent string) ([]AccountMedia, e
 	)
 
 	for {
-		media, nextCursor, err := getMessageMediaBatch(groupID, msgCursor, authToken, userAgent)
+		media, nextCursor, err := getMessageMediaBatch(groupID, msgCursor, fanslyHeaders)
 		if err != nil {
 			return nil, err
 		}
-
 		allMedia = append(allMedia, media...)
-
 		if nextCursor == "" {
 			break
 		}
-
 		msgCursor = nextCursor
 		bar.Add(len(allMedia))
 	}
@@ -138,7 +132,7 @@ func GetAllMessageMedia(modelID, authToken, userAgent string) ([]AccountMedia, e
 	return allMedia, nil
 }
 
-func getMessageMediaBatch(groupID, cursor, authToken, userAgent string) ([]AccountMedia, string, error) {
+func getMessageMediaBatch(groupID, cursor string, fanslyHeaders *headers.FanslyHeaders) ([]AccountMedia, string, error) {
 	ctx := context.Background()
 	err := messageLimiter.Wait(ctx)
 	if err != nil {
@@ -156,8 +150,7 @@ func getMessageMediaBatch(groupID, cursor, authToken, userAgent string) ([]Accou
 		return nil, "", err
 	}
 
-	req.Header.Add("Authorization", authToken)
-	req.Header.Add("User-Agent", userAgent)
+	fanslyHeaders.AddHeadersToRequest(req, true)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -198,7 +191,6 @@ func getMessageMediaBatch(groupID, cursor, authToken, userAgent string) ([]Accou
 				}
 			}
 		}
-
 		if hasValidLocations {
 			mediaItems = append(mediaItems, accountMedia)
 		} else {

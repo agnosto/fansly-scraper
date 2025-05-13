@@ -523,7 +523,7 @@ func (cr *ChatRecorder) handleMessages(session *chatRecordingSession) error {
 
 // parseMessage converts a raw WebSocket message to a ChatMessage
 func (cr *ChatRecorder) parseMessage(data string, startTime time.Time) (*ChatMessage, error) {
-	cr.logger.Printf("Parsing message data: %s", data)
+	//cr.logger.Printf("Parsing message data: %s", data)
 
 	// Try to unmarshal the data as a JSON object
 	var rawData struct {
@@ -616,21 +616,21 @@ func (cr *ChatRecorder) parseMessage(data string, startTime time.Time) (*ChatMes
 	var eventData struct {
 		Type            int `json:"type"`
 		ChatRoomMessage struct {
-			ID                string        `json:"id"`
-			ChatRoomID        string        `json:"chatRoomId"`
-			SenderID          string        `json:"senderId"`
-			Content           string        `json:"content"`
-			Type              int           `json:"type"`
-			Private           int           `json:"private"`
-			Metadata          string        `json:"metadata"`
-			CreatedAt         int64         `json:"createdAt"`
-			Username          string        `json:"username"`
-			DisplayName       string        `json:"displayname"`
-			UsernameColor     string        `json:"usernameColor"`
-			AccountFlags      int           `json:"accountFlags"`
-			Attachments       []interface{} `json:"attachments"`
-			Embeds            []interface{} `json:"embeds"`
-			ChatRoomAccountID string        `json:"chatRoomAccountId"`
+			ID                string `json:"id"`
+			ChatRoomID        string `json:"chatRoomId"`
+			SenderID          string `json:"senderId"`
+			Content           string `json:"content"`
+			Type              int    `json:"type"`
+			Private           int    `json:"private"`
+			Metadata          string `json:"metadata"`
+			CreatedAt         int64  `json:"createdAt"`
+			Username          string `json:"username"`
+			DisplayName       string `json:"displayname"`
+			UsernameColor     string `json:"usernameColor"`
+			AccountFlags      int    `json:"accountFlags"`
+			Attachments       []any  `json:"attachments"`
+			Embeds            []any  `json:"embeds"`
+			ChatRoomAccountID string `json:"chatRoomAccountId"`
 		} `json:"chatRoomMessage"`
 	}
 

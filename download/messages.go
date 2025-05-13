@@ -18,7 +18,7 @@ func (d *Downloader) DownloadMessages(ctx context.Context, modelId, modelName st
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	messageMediaItems, err := posts.GetAllMessageMedia(modelId, d.authToken, d.userAgent)
+	messageMediaItems, err := posts.GetAllMessageMedia(modelId, d.headers)
 	if err != nil {
 		logger.Logger.Printf("[ERROR] [%s] Failed to get message media: %v", modelName, err)
 		return err

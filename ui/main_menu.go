@@ -224,37 +224,6 @@ func (m *MainModel) fetchAccountInfoCmd() tea.Cmd {
 	}
 }
 
-/*
-func (m *MainModel) initLoadingState(message string) {
-	m.state = LoadingState
-	m.loadingMessage = message
-	m.isLoading = true
-	m.loadingDots = 0
-}
-
-// editConfigCmd is a command that initiates config editing
-func (m *MainModel) editConfigCmd() tea.Cmd {
-	return func() tea.Msg {
-		configPath := config.GetConfigPath()
-		err := config.EnsureConfigExists(configPath)
-		if err != nil {
-			logger.Logger.Printf("Error check config %v", err)
-			return editConfigMsg{Success: false, Error: err}
-		}
-
-		err = config.OpenConfigInEditor(configPath)
-		if err != nil {
-			logger.Logger.Printf("Error opening config %v", err)
-			return editConfigMsg{Success: false, Error: err}
-		}
-
-		return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
-			return tickMsg{}
-		})
-	}
-}
-*/
-
 func (m *MainModel) checkForUpdates() tea.Cmd {
 	return func() tea.Msg {
 		cfg, err := config.LoadConfig(config.GetConfigPath())

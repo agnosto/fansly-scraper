@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/agnosto/fansly-scraper/headers"
 	"github.com/agnosto/fansly-scraper/logger"
 	"golang.org/x/time/rate"
 	"net/http"
@@ -26,16 +27,16 @@ type AlbumsResponse struct {
 }
 
 type AlbumContent struct {
-	ID                 string      `json:"id"`
-	MediaOfferId       string      `json:"mediaOfferId"`
-	MediaOfferType     int         `json:"mediaOfferType"`
-	MediaOfferBundleId interface{} `json:"mediaOfferBundleId"`
-	MediaId            string      `json:"mediaId"`
-	MediaType          int         `json:"mediaType"`
-	PreviewId          interface{} `json:"previewId"`
-	AlbumId            string      `json:"albumId"`
-	AccountId          string      `json:"accountId"`
-	CreatedAt          int64       `json:"createdAt"`
+	ID                 string `json:"id"`
+	MediaOfferId       string `json:"mediaOfferId"`
+	MediaOfferType     int    `json:"mediaOfferType"`
+	MediaOfferBundleId any    `json:"mediaOfferBundleId"`
+	MediaId            string `json:"mediaId"`
+	MediaType          int    `json:"mediaType"`
+	PreviewId          any    `json:"previewId"`
+	AlbumId            string `json:"albumId"`
+	AccountId          string `json:"accountId"`
+	CreatedAt          int64  `json:"createdAt"`
 }
 
 type AlbumContentResponse struct {
@@ -48,16 +49,14 @@ type AlbumContentResponse struct {
 	} `json:"response"`
 }
 
-func FetchPurchasedAlbums(authToken, userAgent string) (string, error) {
+func FetchPurchasedAlbums(fanslyHeaders *headers.FanslyHeaders) (string, error) {
 	url := "https://apiv3.fansly.com/api/v1/uservault/albumsnew?accountId&ngsw-bypass=true"
-
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", err
 	}
 
-	req.Header.Add("Authorization", authToken)
-	req.Header.Add("User-Agent", userAgent)
+	fanslyHeaders.AddHeadersToRequest(req, true)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -81,11 +80,10 @@ func FetchPurchasedAlbums(authToken, userAgent string) (string, error) {
 	return "", fmt.Errorf("no purchases album found")
 }
 
-func FetchAlbumContent(albumID, authToken, userAgent string) (*AlbumContentResponse, error) {
+func FetchAlbumContent(albumID string, fanslyHeaders *headers.FanslyHeaders) (*AlbumContentResponse, error) {
 	var allContent AlbumContentResponse
 	before := "0"
 	hasMore := true
-
 	limiter := rate.NewLimiter(rate.Every(3*time.Second), 2)
 
 	for hasMore {
@@ -94,13 +92,13 @@ func FetchAlbumContent(albumID, authToken, userAgent string) (*AlbumContentRespo
 		}
 
 		url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/uservault/album/content?albumId=%s&before=%s&after=0&limit=25&ngsw-bypass=true", albumID, before)
-
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Add("Authorization", authToken)
-		req.Header.Add("User-Agent", userAgent)
+
+		fanslyHeaders.AddHeadersToRequest(req, true)
+
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
@@ -131,6 +129,7 @@ func FetchAlbumContent(albumID, authToken, userAgent string) (*AlbumContentRespo
 	if len(allContent.Response.AlbumContent) > 0 {
 		logger.Logger.Printf("Sample AlbumContent: %+v", allContent.Response.AlbumContent[0])
 	}
+
 	if len(allContent.Response.AggregationData.AccountMedia) > 0 {
 		logger.Logger.Printf("Sample AccountMedia: %+v", allContent.Response.AggregationData.AccountMedia[0])
 	}
@@ -139,14 +138,14 @@ func FetchAlbumContent(albumID, authToken, userAgent string) (*AlbumContentRespo
 	return &allContent, nil
 }
 
-func FetchAccountInfo(accountID, authToken, userAgent string) (string, error) {
+func FetchAccountInfo(accountID string, fanslyHeaders *headers.FanslyHeaders) (string, error) {
 	url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/account?ids=%s&ngsw-bypass=true", accountID)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Add("Authorization", authToken)
-	req.Header.Add("User-Agent", userAgent)
+
+	fanslyHeaders.AddHeadersToRequest(req, true)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -172,5 +171,6 @@ func FetchAccountInfo(accountID, authToken, userAgent string) (string, error) {
 		logger.Logger.Printf("Fetched username %s with accountId %s", accountResp.Response[0].Username, accountID)
 		return accountResp.Response[0].Username, nil
 	}
+
 	return "", nil
 }

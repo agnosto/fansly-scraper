@@ -113,7 +113,8 @@ func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error
 func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	timelinePosts, err := posts.GetAllTimelinePosts(modelId, d.authToken, d.userAgent)
+
+	timelinePosts, err := posts.GetAllTimelinePosts(modelId, d.headers)
 	//log.Printf("Got all timeline posts for %v", modelName)
 	//log.Printf("[TimelinePosts] Info: %v", timelinePosts)
 	if err != nil {
@@ -204,7 +205,7 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			accountMediaItems, err := posts.GetPostMedia(post.ID, d.authToken, d.userAgent)
+			accountMediaItems, err := posts.GetPostMedia(post.ID, d.headers)
 			//log.Printf("Getting Media Items for Post: %v", post.ID)
 			if err != nil {
 				logger.Logger.Printf("[ERROR] [%s] Failed to fetch media for post %s: %v", modelName, post.ID, err)

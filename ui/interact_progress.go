@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	//"os"
+
 	"github.com/agnosto/fansly-scraper/config"
+	"github.com/agnosto/fansly-scraper/headers"
 	"github.com/agnosto/fansly-scraper/interactions"
 	"github.com/agnosto/fansly-scraper/logger"
 	"github.com/agnosto/fansly-scraper/posts"
-	//"github.com/schollz/progressbar/v3"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -48,56 +48,57 @@ func (m *MainModel) HandleLikeUnlikeUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *MainModel) RenderLikeUnlikeMenu() string {
 	var sb strings.Builder
-
 	sb.WriteString(fmt.Sprintf("Liking/Unliking posts for %s\n\n", m.selectedModel))
-
 	return sb.String()
 }
 
 func (m *MainModel) InitiateLikeUnlike(action string) tea.Cmd {
 	return func() tea.Msg {
-		cfg, err := config.LoadConfig(config.GetConfigPath())
+		configPath := config.GetConfigPath()
+		cfg, err := config.LoadConfig(configPath)
 		if err != nil {
 			logger.Logger.Printf("[ERROR] Failed to load config %v", err)
+			return likeUnlikeCompletedMsg{success: false, err: err}
 		}
 
-		//done := make(chan struct{})
 		var wg sync.WaitGroup
 		wg.Add(1)
+
 		go func() {
 			defer wg.Done()
-			//defer close(done)
+
 			ctx := context.Background()
 
+			// Create FanslyHeaders instance
+			fanslyHeaders, err := headers.NewFanslyHeaders(cfg)
+			if err != nil {
+				logger.Logger.Printf("[ERROR] Failed to create headers: %v", err)
+				return
+			}
+
 			// Fetch all timeline posts
-			timelinePosts, err := posts.GetAllTimelinePosts(m.selectedModelId, cfg.Account.AuthToken, cfg.Account.UserAgent)
+			timelinePosts, err := posts.GetAllTimelinePosts(m.selectedModelId, fanslyHeaders)
 			if err != nil {
 				logger.Logger.Printf("Error fetching timeline posts for %s: %v", m.selectedModel, err)
-				//close(done)
 				return
 			}
 
 			// Process the posts
 			if action == "like" {
 				logger.Logger.Printf("[INFO] Starting To Like All Posts for %v", m.selectedModel)
-				err = interactions.LikeAllPosts(ctx, timelinePosts, cfg.Account.AuthToken, cfg.Account.UserAgent)
+				err = interactions.LikeAllPosts(ctx, timelinePosts, configPath)
 			} else {
 				logger.Logger.Printf("[INFO] Starting To Unlike All Posts for %v", m.selectedModel)
-				err = interactions.UnlikeAllPosts(ctx, timelinePosts, cfg.Account.AuthToken, cfg.Account.UserAgent)
+				err = interactions.UnlikeAllPosts(ctx, timelinePosts, configPath)
 			}
 
 			if err != nil {
 				logger.Logger.Printf("Error %sing posts for %s: %v", action, m.selectedModel, err)
 			}
-			//close(done)
 		}()
 
-		//return func() tea.Msg {
-		//<-done
 		wg.Wait()
 		logger.Logger.Printf("[DEBUG] Like/Unlike operation completed, sending likeUnlikeCompletedMsg")
-		//m.state = MainMenuState
 		return likeUnlikeCompletedMsg{success: true, err: nil}
-		//}
 	}
 }

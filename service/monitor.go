@@ -1,20 +1,15 @@
 package service
 
 import (
-	//"context"
-	//"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"maps"
 
-	//"io"
 	"log"
 
-	//"strconv"
 	"strings"
 
-	//"io"
 	"os"
 	"os/exec"
 	"path/filepath"

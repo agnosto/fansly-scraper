@@ -3,9 +3,10 @@ package core
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/agnosto/fansly-scraper/config"
 	"net/http"
-	//"time"
+
+	"github.com/agnosto/fansly-scraper/config"
+	"github.com/agnosto/fansly-scraper/headers"
 )
 
 type StreamResponse struct {
@@ -27,14 +28,20 @@ func CheckIfModelIsLive(modelID string) (bool, string, error) {
 		return false, "", fmt.Errorf("failed to load config: %v", err)
 	}
 
+	// Create FanslyHeaders instance
+	fanslyHeaders, err := headers.NewFanslyHeaders(cfg)
+	if err != nil {
+		return false, "", fmt.Errorf("error creating headers: %v", err)
+	}
+
 	url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/streaming/channel/%s", modelID)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return false, "", fmt.Errorf("failed to create request: %v", err)
 	}
 
-	req.Header.Set("Authorization", cfg.Account.AuthToken)
-	req.Header.Set("User-Agent", cfg.Account.UserAgent)
+	// Use the headers package to add headers
+	fanslyHeaders.AddHeadersToRequest(req, true)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -50,8 +57,7 @@ func CheckIfModelIsLive(modelID string) (bool, string, error) {
 
 	isLive := streamResp.Success &&
 		streamResp.Response.Stream.Status == 2 &&
-		streamResp.Response.Stream.Access /*&&
-		time.Now().UnixMilli()-streamResp.Response.Stream.LastFetchedAt < 5*60*1000*/ // Last fetched within 5 minutes
+		streamResp.Response.Stream.Access
 
 	return isLive, streamResp.Response.Stream.PlaybackUrl, nil
 }

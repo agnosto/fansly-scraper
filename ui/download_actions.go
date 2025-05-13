@@ -44,22 +44,6 @@ func (m *MainModel) HandleDownloadActionsMenuUpdate(msg tea.Msg) (tea.Model, tea
 	return m, nil
 }
 
-/*
-func (m *MainModel) handleDownloadActionsSelection() (tea.Model, tea.Cmd) {
-	switch m.actionChosen {
-        case "download":
-            m.state = DownloadActionsState
-        case "monitor":
-            m.state = LiveMonitorState
-        case "like":
-            m.state = LikePostState
-        case "unlike":
-            m.state = UnlikePostState
-        }
-	return m, nil
-}
-*/
-
 func (m *MainModel) RenderDownloadActionsMenu() string {
 	var sb strings.Builder
 

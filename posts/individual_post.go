@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/agnosto/fansly-scraper/headers"
+	"github.com/agnosto/fansly-scraper/logger"
 	"golang.org/x/time/rate"
 	"net/http"
 	"time"
-	//"log"
-	//"github.com/agnosto/fansly-scraper/headers"
-	"github.com/agnosto/fansly-scraper/logger"
 )
 
 var (
@@ -68,7 +67,7 @@ type PostResponse struct {
 	} `json:"response"`
 }
 
-func GetPostMedia(postId string, authToken string, userAgent string) ([]AccountMedia, error) {
+func GetPostMedia(postId string, fanslyHeaders *headers.FanslyHeaders) ([]AccountMedia, error) {
 	ctx := context.Background()
 	err := limiter.Wait(ctx)
 	if err != nil {
@@ -77,7 +76,6 @@ func GetPostMedia(postId string, authToken string, userAgent string) ([]AccountM
 
 	url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/post?ids=%s&ngsw-bypass=true", postId)
 	logger.Logger.Printf("[INFO] Starting media parsing for Post: %s with URL: %v", postId, url)
-	//log.Printf("\n[INFO] Starting  media extraction for postId: %s with url: %s \n", postId, url)
 
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
@@ -85,9 +83,7 @@ func GetPostMedia(postId string, authToken string, userAgent string) ([]AccountM
 		return nil, err
 	}
 
-	//headers.AddHeadersToRequest(req, true)
-	req.Header.Add("Authorization", authToken)
-	req.Header.Add("User-Agent", userAgent)
+	fanslyHeaders.AddHeadersToRequest(req, true)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -107,15 +103,10 @@ func GetPostMedia(postId string, authToken string, userAgent string) ([]AccountM
 
 	var accountMediaItems []AccountMedia
 	for _, post := range postResp.Response.Posts {
-		//log.Printf("[DEBUG] Processing post: %s", post.ID)
 		for _, attachment := range post.Attachments {
-			//log.Printf("[DEBUG] Processing attachment: %s", attachment.ContentID)
 			for _, accountMedia := range postResp.Response.AccountMedia {
 				if accountMedia.ID == attachment.ContentID {
-					//log.Printf("[DEBUG] Found matching AccountMedia: %s", accountMedia.ID)
-
 					hasLocations := false
-
 					// Check main media variants for locations
 					for _, variant := range accountMedia.Media.Variants {
 						if len(variant.Locations) > 0 {
@@ -123,7 +114,6 @@ func GetPostMedia(postId string, authToken string, userAgent string) ([]AccountM
 							break
 						}
 					}
-
 					// Check preview media and its variants for locations
 					if accountMedia.Preview != nil {
 						if len(accountMedia.Preview.Locations) > 0 {
@@ -137,19 +127,15 @@ func GetPostMedia(postId string, authToken string, userAgent string) ([]AccountM
 							}
 						}
 					}
-
 					if hasLocations {
 						accountMediaItems = append(accountMediaItems, accountMedia)
-						//log.Printf("[INFO] Added AccountMedia: %s", accountMedia.ID)
 					} else {
 						logger.Logger.Printf("[WARN] POST: %s, Skipping AccountMedia %s: No locations found", postId, accountMedia.ID)
-						//log.Printf("[WARN] Skipping AccountMedia %s: No locations found", accountMedia.ID)
 					}
 					break
 				}
 			}
 		}
-
 		for _, bundle := range postResp.Response.AccountMediaBundles {
 			if bundle.Access {
 				for _, bundleContent := range bundle.BundleContent {
@@ -174,7 +160,6 @@ func GetPostMedia(postId string, authToken string, userAgent string) ([]AccountM
 				break
 			}
 		}
-
 		if !alreadyAdded {
 			// Add if it has locations or its preview has locations
 			if hasLocations(accountMedia.Media) || (accountMedia.Preview != nil && hasLocations(*accountMedia.Preview)) {
@@ -183,7 +168,6 @@ func GetPostMedia(postId string, authToken string, userAgent string) ([]AccountM
 		}
 	}
 
-	//log.Printf("[INFO] Retrieved %d media items for post %s", len(accountMediaItems), postId)
 	logger.Logger.Printf("[INFO] Retrieved %d media items for post %s", len(accountMediaItems), postId)
 	return accountMediaItems, nil
 }

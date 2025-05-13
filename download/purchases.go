@@ -19,13 +19,13 @@ type AccountInfo struct {
 }
 
 func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
-	albumID, err := posts.FetchPurchasedAlbums(d.authToken, d.userAgent)
+	albumID, err := posts.FetchPurchasedAlbums(d.headers)
 	if err != nil {
 		return fmt.Errorf("failed to fetch purchased albums: %v", err)
 	}
 	logger.Logger.Printf("Purchases Album ID: %s", albumID)
 
-	content, err := posts.FetchAlbumContent(albumID, d.authToken, d.userAgent)
+	content, err := posts.FetchAlbumContent(albumID, d.headers)
 	if err != nil {
 		return fmt.Errorf("error fetching content for album %s: %v", albumID, err)
 	}
@@ -54,7 +54,7 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 
 	// Fetch usernames for each unique account ID
 	for accountID := range accountInfoMap {
-		username, err := posts.FetchAccountInfo(accountID, d.authToken, d.userAgent)
+		username, err := posts.FetchAccountInfo(accountID, d.headers)
 		if err != nil || username == "" {
 			logger.Logger.Printf("Error fetching account info for %s or username is empty: %v", accountID, err)
 			username = accountID // Use AccountId as fallback

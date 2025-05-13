@@ -209,7 +209,7 @@ func GetSessionID(authToken string) (string, error) {
 	}
 	defer c.Close()
 
-	message := map[string]interface{}{
+	message := map[string]any{
 		"t": 1,
 		"d": fmt.Sprintf("{\"token\":\"%s\"}", authToken),
 	}

@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"time"
-
+	"github.com/agnosto/fansly-scraper/headers"
 	"github.com/agnosto/fansly-scraper/logger"
 	"golang.org/x/time/rate"
+	"net/http"
+	"time"
 )
 
 var (
@@ -34,7 +34,7 @@ type StoriesResponse struct {
 	} `json:"response"`
 }
 
-func GetModelStories(accountID, authToken, userAgent string) ([]Story, []AccountMedia, error) {
+func GetModelStories(accountID string, fanslyHeaders *headers.FanslyHeaders) ([]Story, []AccountMedia, error) {
 	ctx := context.Background()
 	err := storyLimiter.Wait(ctx)
 	if err != nil {
@@ -42,14 +42,12 @@ func GetModelStories(accountID, authToken, userAgent string) ([]Story, []Account
 	}
 
 	url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/mediastoriesnew?accountId=%s&ngsw-bypass=true", accountID)
-
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error creating request: %v", err)
 	}
 
-	req.Header.Add("Authorization", authToken)
-	req.Header.Add("User-Agent", userAgent)
+	fanslyHeaders.AddHeadersToRequest(req, true)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -69,7 +67,6 @@ func GetModelStories(accountID, authToken, userAgent string) ([]Story, []Account
 	}
 
 	validAccountMedia := filterValidAccountMedia(storiesResp.Response.AggregationData.AccountMedia)
-
 	logger.Logger.Printf("[INFO] Retrieved %d stories and %d valid media items",
 		len(storiesResp.Response.MediaStories), len(validAccountMedia))
 
@@ -78,7 +75,6 @@ func GetModelStories(accountID, authToken, userAgent string) ([]Story, []Account
 
 func filterValidAccountMedia(accountMedia []AccountMedia) []AccountMedia {
 	var validMedia []AccountMedia
-
 	for _, media := range accountMedia {
 		if hasValidLocations(media) {
 			validMedia = append(validMedia, media)
@@ -86,7 +82,6 @@ func filterValidAccountMedia(accountMedia []AccountMedia) []AccountMedia {
 			logger.Logger.Printf("[WARN] Skipping AccountMedia %s: No valid locations found", media.ID)
 		}
 	}
-
 	return validMedia
 }
 

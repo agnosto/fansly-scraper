@@ -4,18 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	//"log"
 	"net/http"
 	"os"
 	"time"
 
-	//"github.com/agnosto/fansly-scraper/logger"
-
+	"github.com/agnosto/fansly-scraper/headers"
+	"github.com/agnosto/fansly-scraper/logger"
 	"github.com/schollz/progressbar/v3"
 	"golang.org/x/time/rate"
-	//"github.com/k0kubun/go-ansi"
-	//"github.com/agnosto/fansly-scraper/headers"
-	//"strings"
 )
 
 type Post struct {
@@ -42,6 +38,7 @@ type TimelineResponse struct {
 	} `json:"response"`
 }
 
+// Restore the original access checking logic
 func hasTimelineAccess(response TimelineResponse) bool {
 	requiredFlags := response.Response.TimelineReadPermissionFlags
 	userFlags := response.Response.AccountTimelineReadPermissionFlags.Flags
@@ -61,26 +58,36 @@ func hasTimelineAccess(response TimelineResponse) bool {
 	return false
 }
 
-func GetAllTimelinePosts(modelId string, authToken string, userAgent string) ([]Post, error) {
+var (
+	timelineLimiter = rate.NewLimiter(rate.Every(3*time.Second), 2)
+)
+
+func GetAllTimelinePosts(accountID string, fanslyHeaders *headers.FanslyHeaders) ([]Post, error) {
 	var allPosts []Post
 	before := "0"
 	hasMore := true
 
-	initialResponse, _, err := getTimelinePostsBatch(modelId, "0", authToken, userAgent)
+	// Get initial batch to check access
+	initialResponse, err := getTimelineBatchResponse(accountID, before, fanslyHeaders)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to check timeline access: %v", err)
 	}
 
-	// Check permissions
+	// Check if we have access
 	if !hasTimelineAccess(initialResponse) {
-		return nil, fmt.Errorf("no access to timeline")
+		return nil, fmt.Errorf("no access to timeline for account %s", accountID)
 	}
 
-	limiter := rate.NewLimiter(rate.Every(3*time.Second), 2)
+	// Add posts from initial response
+	allPosts = append(allPosts, initialResponse.Response.Posts...)
+	if len(initialResponse.Response.Posts) > 0 {
+		before = initialResponse.Response.Posts[len(initialResponse.Response.Posts)-1].ID
+	} else {
+		hasMore = false
+	}
 
-	// Create an indeterminate progress bar
 	bar := progressbar.NewOptions(-1,
-		progressbar.OptionSetDescription("Fetching posts"),
+		progressbar.OptionSetDescription("Fetching Timeline"),
 		progressbar.OptionSetWriter(os.Stderr),
 		progressbar.OptionSetWidth(15),
 		progressbar.OptionThrottle(65*time.Millisecond),
@@ -89,84 +96,65 @@ func GetAllTimelinePosts(modelId string, authToken string, userAgent string) ([]
 		progressbar.OptionFullWidth(),
 	)
 
-	//allPosts = append(allPosts, initialResponse.Response.Posts...)
-	//bar.Add(len(initialResponse.Response.Posts))
+	bar.Add(len(initialResponse.Response.Posts))
 
 	for hasMore {
-		if err := limiter.Wait(context.Background()); err != nil {
-			return nil, fmt.Errorf("rate limiter error: %v", err)
-		}
-
-		response, nextBefore, err := getTimelinePostsBatch(modelId, before, authToken, userAgent)
+		response, err := getTimelineBatchResponse(accountID, before, fanslyHeaders)
 		if err != nil {
-			if err.Error() == "not subscribed or followed: unable to get timeline feed" {
-				bar.Finish()
-				return nil, err // Return the error to be handled by the caller
-			}
 			return nil, err
 		}
-		//log.Printf("[GetAllTimelinePosts] posts: %v", posts)
 
-		allPosts = append(allPosts, response.Response.Posts...)
+		posts := response.Response.Posts
+		allPosts = append(allPosts, posts...)
 
-		if nextBefore == "" || len(response.Response.Posts) == 0 {
+		if len(posts) == 0 {
 			hasMore = false
 		} else {
-			before = nextBefore
+			before = posts[len(posts)-1].ID
 		}
-		bar.Add(len(response.Response.Posts))
-	}
-	//log.Printf("[GetAllTimelinePosts] All Posts: %v", allPosts)
-	bar.Finish()
 
+		bar.Add(len(posts))
+	}
+
+	bar.Finish()
+	logger.Logger.Printf("[INFO] Retrieved %d total timeline posts for account %s", len(allPosts), accountID)
 	return allPosts, nil
 }
 
-func getTimelinePostsBatch(modelId, before string, authToken string, userAgent string) (TimelineResponse, string, error) {
-	headerMap := map[string]string{
-		"Authorization": authToken,
-		"User-Agent":    userAgent,
+func getTimelineBatchResponse(accountID, before string, fanslyHeaders *headers.FanslyHeaders) (TimelineResponse, error) {
+	ctx := context.Background()
+	err := timelineLimiter.Wait(ctx)
+	if err != nil {
+		return TimelineResponse{}, fmt.Errorf("rate limiter error: %v", err)
 	}
-	client := &http.Client{}
-	url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/timelinenew/%s?before=%s&after=0&wallId&contentSearch&ngsw-bypass=true", modelId, before)
+
+	// Use the original URL format that was working
+	url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/timelinenew/%s?before=%s&after=0&wallId&contentSearch&ngsw-bypass=true", accountID, before)
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return TimelineResponse{}, "", err
+		return TimelineResponse{}, err
 	}
 
-	//headers.AddHeadersToRequest(req, true)
-	for key, value := range headerMap {
-		req.Header.Add(key, value)
-	}
+	fanslyHeaders.AddHeadersToRequest(req, true)
 
+	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return TimelineResponse{}, "", err
+		return TimelineResponse{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return TimelineResponse{}, "", fmt.Errorf("failed to fetch model timeline with status code %d", resp.StatusCode)
+		return TimelineResponse{}, fmt.Errorf("failed to fetch timeline with status code %d", resp.StatusCode)
 	}
 
 	var timelineResp TimelineResponse
 	err = json.NewDecoder(resp.Body).Decode(&timelineResp)
 	if err != nil {
-		return TimelineResponse{}, "", err
+		return TimelineResponse{}, err
 	}
 
-	//if timelineResp.Response.AccountTimelineReadPermissionFlags.Flags == 0 {
-	//    return nil, "", fmt.Errorf("not subscribed: unable to get timeline feed")
-	//}
-
-	if len(timelineResp.Response.Posts) == 0 {
-		return timelineResp, "", nil
-	}
-
-	//nextBefore := posts[len(posts)-1].ID
-	nextBefore := timelineResp.Response.Posts[len(timelineResp.Response.Posts)-1].ID
-	//log.Printf("[Timeline Batch] Last Post Id in resposne: %v", nextBefore)
-
-	return timelineResp, nextBefore, nil
-
+	logger.Logger.Printf("[INFO] Retrieved %d posts in timeline batch", len(timelineResp.Response.Posts))
+	return timelineResp, nil
 }

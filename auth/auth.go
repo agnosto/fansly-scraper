@@ -8,7 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	//"github.com/agnosto/fansly-scraper/headers"
+
+	"github.com/agnosto/fansly-scraper/headers"
 )
 
 type Config struct {
@@ -56,14 +57,8 @@ type FollowedModel struct {
 	TimelineStats TimelineStats `json:"timelineStats"`
 }
 
-// Login retrieves the user's account information using the provided auth token and user agent.
-func Login(authToken string, userAgent string) (*AccountInfo, error) {
-	// Create the headers
-	// headers := NewHeaders(authToken, userAgent)
-	headerMap := map[string]string{
-		"Authorization": authToken,
-		"User-Agent":    userAgent,
-	}
+// Login retrieves the user's account information using the provided headers.
+func Login(fanslyHeaders *headers.FanslyHeaders) (*AccountInfo, error) {
 	// Create a new HTTP client
 	client := &http.Client{}
 
@@ -73,10 +68,8 @@ func Login(authToken string, userAgent string) (*AccountInfo, error) {
 		return nil, err
 	}
 
-	// Set the headers
-	for key, value := range headerMap {
-		req.Header.Add(key, value)
-	}
+	// Set the headers using the FanslyHeaders struct
+	fanslyHeaders.AddHeadersToRequest(req, true)
 
 	// Send the HTTP request and get the response
 	resp, err := client.Do(req)
@@ -91,7 +84,6 @@ func Login(authToken string, userAgent string) (*AccountInfo, error) {
 	}
 
 	// Decode the JSON response
-	// var accountInfo AccountInfo
 	var apiResponse ApiResponse
 	err = json.NewDecoder(resp.Body).Decode(&apiResponse)
 	if err != nil {
@@ -99,16 +91,10 @@ func Login(authToken string, userAgent string) (*AccountInfo, error) {
 	}
 
 	accountInfo := &apiResponse.Response.Account
-
 	return accountInfo, nil
 }
 
-func GetFollowedUsers(userId string, authToken string, userAgent string) ([]FollowedModel, error) {
-	headerMap := map[string]string{
-		"Authorization": authToken,
-		"User-Agent":    userAgent,
-	}
-
+func GetFollowedUsers(userId string, fanslyHeaders *headers.FanslyHeaders) ([]FollowedModel, error) {
 	// Get List of followed account IDs with pagination
 	client := &http.Client{}
 
@@ -129,18 +115,16 @@ func GetFollowedUsers(userId string, authToken string, userAgent string) ([]Foll
 			return nil, err
 		}
 
-		for key, value := range headerMap {
-			req.Header.Add(key, value)
-		}
+		// Set the headers using the FanslyHeaders struct
+		fanslyHeaders.AddHeadersToRequest(req, true)
 
 		// Use exponential backoff for retries
 		var resp *http.Response
 		maxRetries := 5
 		retryDelay := 1 * time.Second
 
-		for retry := range maxRetries {
+		for retry := 0; retry < maxRetries; retry++ {
 			resp, err = client.Do(req)
-
 			if err != nil {
 				return nil, err
 			}
@@ -176,7 +160,6 @@ func GetFollowedUsers(userId string, authToken string, userAgent string) ([]Foll
 
 		err = json.NewDecoder(resp.Body).Decode(&followingResponse)
 		resp.Body.Close()
-
 		if err != nil {
 			return nil, err
 		}
@@ -210,7 +193,6 @@ func GetFollowedUsers(userId string, authToken string, userAgent string) ([]Foll
 		for j, accountId := range batch {
 			batchIDsSlice[j] = accountId.AccountId
 		}
-
 		idsParam := strings.Join(batchIDsSlice, ",")
 
 		// Make request for this batch
@@ -220,18 +202,16 @@ func GetFollowedUsers(userId string, authToken string, userAgent string) ([]Foll
 			return nil, err
 		}
 
-		for key, value := range headerMap {
-			req.Header.Add(key, value)
-		}
+		// Set the headers using the FanslyHeaders struct
+		fanslyHeaders.AddHeadersToRequest(req, true)
 
 		// Use exponential backoff for retries
 		var resp *http.Response
 		maxRetries := 5
 		retryDelay := 1 * time.Second
 
-		for retry := range maxRetries {
+		for retry := 0; retry < maxRetries; retry++ {
 			resp, err = client.Do(req)
-
 			if err != nil {
 				return nil, err
 			}
@@ -267,7 +247,6 @@ func GetFollowedUsers(userId string, authToken string, userAgent string) ([]Foll
 
 		err = json.NewDecoder(resp.Body).Decode(&modelsResponse)
 		resp.Body.Close()
-
 		if err != nil {
 			return nil, err
 		}
