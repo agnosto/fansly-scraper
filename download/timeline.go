@@ -22,6 +22,9 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/agnosto/fansly-scraper/config"
+	"github.com/agnosto/fansly-scraper/db"
+	"github.com/agnosto/fansly-scraper/db/repository"
+	"github.com/agnosto/fansly-scraper/db/service"
 	"github.com/agnosto/fansly-scraper/logger"
 	"github.com/agnosto/fansly-scraper/posts"
 
@@ -44,6 +47,7 @@ type Downloader struct {
 	progressBar     *progressbar.ProgressBar
 	logMu           sync.Mutex
 	ffmpegAvailable bool
+	fileService     *service.FileService
 }
 
 func (w logWriter) Write(p []byte) (n int, err error) {
@@ -55,23 +59,24 @@ func (w logWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+func (d *Downloader) fileExists(filePath string) bool {
+	return d.fileService.FileExists(filePath)
+}
+
+func (d *Downloader) saveFileHash(modelName string, hash, path, fileType string) error {
+	return d.fileService.SaveFile(modelName, hash, path, fileType)
+}
+
 func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error) {
-	db, err := sql.Open("sqlite", filepath.Join(cfg.Options.SaveLocation, "downloads.db"))
+	// Initialize database
+	database, err := db.NewDatabase(cfg.Options.SaveLocation)
 	if err != nil {
-		logger.Logger.Printf("Error: %v", err)
-		return nil, err
+		logger.Logger.Printf("Error initializing database: %v", err)
+		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
 
-	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS files (
-        model TEXT NOT NULL,
-        hash TEXT PRIMARY KEY,
-        path TEXT NOT NULL,
-        file_type TEXT NOT NULL
-    )`)
-	if err != nil {
-		logger.Logger.Printf("Error: %v", err)
-		return nil, err
-	}
+	fileRepo := repository.NewFileRepository(database.DB)
+	fileService := service.NewFileService(fileRepo)
 
 	fanslyHeaders, err := headers.NewFanslyHeaders(cfg)
 	if err != nil {
@@ -79,7 +84,6 @@ func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error
 	}
 
 	limiter := rate.NewLimiter(rate.Every(2*time.Second), 3)
-
 	bar := progressbar.NewOptions(-1,
 		progressbar.OptionSetWriter(os.Stderr),
 		progressbar.OptionEnableColorCodes(true),
@@ -98,7 +102,7 @@ func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error
 	)
 
 	return &Downloader{
-		db:              db,
+		fileService:     fileService,
 		authToken:       cfg.Account.AuthToken,
 		userAgent:       cfg.Account.UserAgent,
 		saveLocation:    cfg.Options.SaveLocation,
@@ -540,6 +544,7 @@ func (d *Downloader) downloadRegularFile(url, filePath string, modelName string,
 	return d.saveFileHash(modelName, hashString, filePath, fileType)
 }
 
+/*
 func (d *Downloader) fileExists(filePath string) bool {
 	var count int
 	err := d.db.QueryRow("SELECT COUNT(*) FROM files WHERE path = ?", filePath).Scan(&count)
@@ -550,6 +555,7 @@ func (d *Downloader) fileExists(filePath string) bool {
 	}
 	return count > 0
 }
+*/
 
 func (d *Downloader) hashExistingFile(filePath string) (string, error) {
 	f, err := os.Open(filePath)
@@ -566,10 +572,12 @@ func (d *Downloader) hashExistingFile(filePath string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+/*
 func (d *Downloader) saveFileHash(modelName string, hash, path, fileType string) error {
 	_, err := d.db.Exec("INSERT OR REPLACE INTO files (model, hash, path, file_type) VALUES (?, ?, ?, ?)", modelName, hash, path, fileType)
 	return err
 }
+*/
 
 func (d *Downloader) Close() error {
 	return d.db.Close()

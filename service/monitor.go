@@ -1,7 +1,7 @@
 package service
 
 import (
-	"database/sql"
+	//"database/sql"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -22,6 +22,9 @@ import (
 
 	"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/core"
+	"github.com/agnosto/fansly-scraper/db"
+	"github.com/agnosto/fansly-scraper/db/repository"
+	"github.com/agnosto/fansly-scraper/db/service"
 	"github.com/agnosto/fansly-scraper/logger"
 	"github.com/agnosto/fansly-scraper/notifications"
 	"github.com/agnosto/fansly-scraper/utils"
@@ -39,6 +42,7 @@ type MonitoringService struct {
 	isTUI            bool
 	notificationSvc  *notifications.NotificationService
 	chatRecorder     *ChatRecorder
+	fileService      *service.FileService
 }
 
 func (ms *MonitoringService) GetRecordingsPath() string {
@@ -62,18 +66,30 @@ func NewMonitoringService(storagePath string, logger *log.Logger) *MonitoringSer
 		cfg = config.CreateDefaultConfig()
 	}
 
+	var fileService *service.FileService
+	database, err := db.NewDatabase(filepath.Dir(storagePath))
+	if err != nil {
+		logger.Printf("Error initializing database: %v", err)
+		// Continue with nil fileService, we'll check for nil before using
+	} else {
+		fileRepo := repository.NewFileRepository(database.DB)
+		fileService = service.NewFileService(fileRepo)
+		logger.Printf("Database initialized successfully for monitoring service")
+	}
+
 	mt := &MonitoringService{
 		activeMonitors:   make(map[string]string),
 		activeRecordings: make(map[string]bool),
 		activeMonitoring: make(map[string]bool),
 		storagePath:      storagePath,
-		//recordingsPath:   storagePath,
-		recordingsPath:  filepath.Join(filepath.Dir(storagePath), "active_recordings"),
-		stopChan:        make(chan struct{}),
-		logger:          logger,
-		isTUI:           false,
-		notificationSvc: notifications.NewNotificationService(cfg),
+		recordingsPath:   filepath.Join(filepath.Dir(storagePath), "active_recordings"),
+		stopChan:         make(chan struct{}),
+		logger:           logger,
+		isTUI:            false,
+		notificationSvc:  notifications.NewNotificationService(cfg),
+		fileService:      fileService,
 	}
+
 	return mt
 }
 
@@ -90,55 +106,45 @@ func (ms *MonitoringService) StartMonitoring() {
 	}
 }
 
-func (ms *MonitoringService) saveLiveRecording(modelName, filename /*streamID*/ string) error {
-	cfg, err := config.LoadConfig(config.GetConfigPath())
-	if err != nil {
-		log.Fatal(err)
+func (ms *MonitoringService) saveLiveRecording(modelName, filename string) error {
+	if ms.fileService == nil {
+		return fmt.Errorf("file service not initialized")
 	}
 
-	/*finalFilename := filename
-	if cfg.LiveSettings.FFmpegConvert {
-		finalFilename = strings.TrimSuffix(filename, cfg.LiveSettings.VODsFileExtension) + ".mp4"
-	}*/
+	// Check if file exists
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		return fmt.Errorf("file does not exist: %s", filename)
+	}
 
 	// Calculate file hash
+	ms.logger.Printf("Calculating hash for live recording: %s", filename)
 	hash, err := utils.HashMediaFile(filename)
 	if err != nil {
 		return fmt.Errorf("error calculating file hash: %v", err)
 	}
 
-	db, err := sql.Open("sqlite", filepath.Join(cfg.Options.SaveLocation, "downloads.db"))
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	_, err = db.Exec(`INSERT INTO files (model, hash, path, file_type) VALUES (?, ?, ?, ?)`,
-		modelName, hash, filename, "livestream")
-	return err
+	ms.logger.Printf("Saving live recording to database: %s with hash %s", filename, hash)
+	return ms.fileService.SaveFile(modelName, hash, filename, "livestream")
 }
 
 func (ms *MonitoringService) saveContactSheet(modelName, filename string) error {
-	cfg, err := config.LoadConfig(config.GetConfigPath())
-	if err != nil {
-		return err
+	if ms.fileService == nil {
+		return fmt.Errorf("file service not initialized")
 	}
 
+	// Check if file exists
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		return fmt.Errorf("contact sheet file does not exist: %s", filename)
+	}
+
+	ms.logger.Printf("Calculating hash for contact sheet: %s", filename)
 	hash, err := utils.HashMediaFile(filename)
 	if err != nil {
 		return fmt.Errorf("error calculating contact sheet hash: %v", err)
 	}
 
-	db, err := sql.Open("sqlite", filepath.Join(cfg.Options.SaveLocation, "downloads.db"))
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	_, err = db.Exec(`INSERT INTO files (model, hash, path, file_type) VALUES (?, ?, ?, ?)`,
-		modelName, hash, filename, "contact_sheet")
-
-	return err
+	ms.logger.Printf("Saving contact sheet to database: %s with hash %s", filename, hash)
+	return ms.fileService.SaveFile(modelName, hash, filename, "contact_sheet")
 }
 
 func (ms *MonitoringService) loadState() {
@@ -421,39 +427,78 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 
 		finalFilename := recordedFilename
 		var conversionSuccess bool
+
+		// Check if the original file exists
+		if _, err := os.Stat(recordedFilename); os.IsNotExist(err) {
+			ms.logger.Printf("Error: Original recording file not found for %s: %s", username, recordedFilename)
+			return
+		} else if err != nil {
+			ms.logger.Printf("Error checking original file for %s: %v", username, err)
+			return
+		}
+
 		if cfg.LiveSettings.FFmpegConvert {
 			mp4Filename := strings.TrimSuffix(recordedFilename, cfg.LiveSettings.VODsFileExtension) + ".mp4"
 			ms.logger.Printf("Starting MP4 conversion for %s", username)
 			if err := ms.convertToMP4(recordedFilename, mp4Filename); err != nil {
 				ms.logger.Printf("Error converting to MP4 for %s: %v", username, err)
-				return
-			}
-			finalFilename = mp4Filename
-			conversionSuccess = true
-			ms.logger.Printf("MP4 conversion complete for %s", username)
-			if err := os.Remove(recordedFilename); err != nil && !os.IsNotExist(err) {
-				ms.logger.Printf("Error deleting original file for %s: %v", username, err)
+				// Don't return, try to save the original file instead
+				ms.logger.Printf("Will attempt to save original file for %s", username)
+				conversionSuccess = true
+			} else {
+				finalFilename = mp4Filename
+				conversionSuccess = true
+				ms.logger.Printf("MP4 conversion complete for %s", username)
+				if err := os.Remove(recordedFilename); err != nil && !os.IsNotExist(err) {
+					ms.logger.Printf("Error deleting original file for %s: %v", username, err)
+				}
 			}
 		} else {
 			conversionSuccess = true
 		}
 
-		if cfg.LiveSettings.GenerateContactSheet {
-			// For contact sheet generation, use MP4 if converted, otherwise use original
-			sourceFile := finalFilename
-			contactSheetFilename := strings.TrimSuffix(sourceFile, filepath.Ext(sourceFile)) + "_contact_sheet.jpg"
-			if err := ms.generateContactSheet(sourceFile); err != nil {
-				ms.logger.Printf("Error generating contact sheet for %s: %v", username, err)
-			} else if err := ms.saveContactSheet(username, contactSheetFilename); err != nil {
-				ms.logger.Printf("Error saving contact sheet info for %s: %v", username, err)
-			}
-		}
-
 		// Only save to database if we have a valid file
 		if conversionSuccess {
-			if err := ms.saveLiveRecording(username, finalFilename); err != nil {
-				ms.logger.Printf("Error saving live recording info for %s: %v", username, err)
+			// Check if the final file exists
+			if _, err := os.Stat(finalFilename); os.IsNotExist(err) {
+				ms.logger.Printf("Error: Final file not found for %s: %s", username, finalFilename)
+				return
+			} else if err != nil {
+				ms.logger.Printf("Error checking final file for %s: %v", username, err)
+				return
 			}
+
+			// Save the livestream recording to database
+			ms.logger.Printf("Attempting to save live recording info to database for %s: %s", username, finalFilename)
+			if err := ms.saveLiveRecording(username, finalFilename); err != nil {
+				ms.logger.Printf("Error saving live recording info for %s to database: %v", username, err)
+			} else {
+				ms.logger.Printf("Successfully saved live recording info for %s to database", username)
+			}
+
+			// Generate and save contact sheet if enabled
+			if cfg.LiveSettings.GenerateContactSheet {
+				// For contact sheet generation, use MP4 if converted, otherwise use original
+				sourceFile := finalFilename
+				contactSheetFilename := strings.TrimSuffix(sourceFile, filepath.Ext(sourceFile)) + "_contact_sheet.jpg"
+
+				if err := ms.generateContactSheet(sourceFile); err != nil {
+					ms.logger.Printf("Error generating contact sheet for %s: %v", username, err)
+				} else {
+					// Check if contact sheet file exists
+					if _, err := os.Stat(contactSheetFilename); os.IsNotExist(err) {
+						ms.logger.Printf("Error: Contact sheet file not found for %s: %s", username, contactSheetFilename)
+					} else {
+						ms.logger.Printf("Attempting to save contact sheet info to database for %s: %s", username, contactSheetFilename)
+						if err := ms.saveContactSheet(username, contactSheetFilename); err != nil {
+							ms.logger.Printf("Error saving contact sheet info for %s to database: %v", username, err)
+						} else {
+							ms.logger.Printf("Successfully saved contact sheet info for %s to database", username)
+						}
+					}
+				}
+			}
+
 			ms.notificationSvc.NotifyLiveEnd(username, modelID, finalFilename)
 		}
 	}()
@@ -529,6 +574,9 @@ func (ms *MonitoringService) Shutdown() {
 	if ms.chatRecorder != nil {
 		ms.chatRecorder.StopAllRecordings()
 	}
+
+	time.Sleep(2 * time.Second)
+
 	//ms.mu.Lock()
 	//defer ms.mu.Unlock()
 	//ms.saveState()
