@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"strconv"
 
 	"log"
 
@@ -519,18 +520,65 @@ func (ms *MonitoringService) generateContactSheet(mp4Filename string) error {
 	contactSheetFilename := strings.TrimSuffix(mp4Filename, ".mp4") + "_contact_sheet.jpg"
 
 	if cfg.LiveSettings.UseMTForContactSheet {
+		ms.logger.Printf("Using MT for contact sheet generation")
 		cmd := exec.Command("mt", "--columns=4", "--numcaps=24", "--header-meta", "--fast",
 			"--output="+contactSheetFilename, mp4Filename)
 		return cmd.Run()
 	}
 
+	ms.logger.Printf("Using FFmpeg for contact sheet generation")
+	durationCmd := exec.Command(
+		"ffprobe",
+		"-v", "error",
+		"-show_entries", "format=duration",
+		"-of", "default=noprint_wrappers=1:nokey=1",
+		mp4Filename,
+	)
+
+	durationOutput, err := durationCmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to get video duration: %w", err)
+	}
+
+	// Parse duration and calculate interval
+	durationStr := strings.TrimSpace(string(durationOutput))
+	duration, err := strconv.ParseFloat(durationStr, 64)
+	if err != nil {
+		return fmt.Errorf("failed to parse duration: %w", err)
+	}
+
+	// Define grid dimensions
+	gridWidth := 4
+	gridHeight := 6
+	totalFrames := gridWidth * gridHeight
+
+	// Calculate interval between frames
+	interval := duration / float64(totalFrames)
+
+	// Build the complex filter for ffmpeg
+	vfFilter := fmt.Sprintf(
+		"select='if(eq(0,n),1,gte(t-prev_selected_t,%f))',"+
+			"setpts=PTS-STARTPTS,"+
+			"scale=640:360,"+
+			"drawtext=text='%%{pts\\:hms}':x=w-tw-5:y=h-th-5:fontsize=14:fontcolor=white:box=1:boxcolor=black@1.0:boxborderw=5,"+
+			"tile=%dx%d",
+		interval, gridWidth, gridHeight,
+	)
+
+	// Run ffmpeg command
 	cmd := exec.Command(
 		"ffmpeg",
 		"-i", mp4Filename,
-		"-vf", "select='not(mod(n,300))',scale=320:180,tile=4x6",
+		"-vf", vfFilter,
 		"-frames:v", "1",
+		"-q:v", "1",
 		contactSheetFilename,
 	)
+
+	// For debugging
+	//ms.logger.Printf("Running ffmpeg command: %v", cmd.Args)
+	ms.logger.Printf("Contact sheet generation complete for %s", mp4Filename)
+
 	return cmd.Run()
 }
 
@@ -573,7 +621,7 @@ func (ms *MonitoringService) Shutdown() {
 		ms.chatRecorder.StopAllRecordings()
 	}
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	//ms.mu.Lock()
 	//defer ms.mu.Unlock()
