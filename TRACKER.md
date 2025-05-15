@@ -34,14 +34,13 @@
 - [x] Properly handle monitoring in TUI
 - [x] Notifications for monitored creators livestreams
 - [x] Handle displaying all followed creators (in cases of people who follow {original limit}+)
-
+- [x] Standardize DB handling
+- [x] Handle hashing and db storing of livestreams, handling post processing cases
 
 ## ToDo:
 
 - [ ] Add option to limit resolution for downloading (post and livestreams)
 - [ ] Archive metadata for downloaded post
-- [ ] Standardize DB handling
-- [ ] Handle hashing and db storing of livestreams, handling post processing cases
 - [ ] Properly handle live status in monitoring TUI 
     - [ ] Update to offline once offline
     - [ ] Update status regardless of monitoring status
@@ -50,9 +49,9 @@
 - [ ] Properly handle going back during post fetching to cancel
 - [ ] More testing for timeline scraping (not subbed to any models atm)
 - [ ] I guess also save a version of models pfp & banner
-- [ ] Add simple web dashboard to view images and watch videos/lives (was contemplating on adding but maybe down the line)
 
 ## Limbo:
 
 - [ ] Rethink about live monitoring (already have [this](https://github.com/agnosto/fansly-recorder) for recording lives, but might want to have this project use [services](https://github.com/kardianos/service) for managing lives? not really sure)
 - [ ] Implement message post (un)liking (ig if I really want it to be all-in-one)
+- [ ] Add simple web dashboard to view images and watch videos/lives (was contemplating on adding but maybe down the line)
