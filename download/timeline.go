@@ -15,8 +15,6 @@ import (
 	"sync"
 	"time"
 
-	//"strconv"
-
 	"github.com/dustin/go-humanize"
 	"github.com/schollz/progressbar/v3"
 	"golang.org/x/time/rate"
@@ -29,7 +27,6 @@ import (
 	"github.com/agnosto/fansly-scraper/posts"
 
 	"github.com/agnosto/fansly-scraper/headers"
-	_ "modernc.org/sqlite"
 )
 
 type logWriter struct {

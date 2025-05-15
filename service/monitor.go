@@ -1,7 +1,6 @@
 package service
 
 import (
-	//"database/sql"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -18,7 +17,6 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	_ "modernc.org/sqlite"
 
 	"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/core"
@@ -67,7 +65,7 @@ func NewMonitoringService(storagePath string, logger *log.Logger) *MonitoringSer
 	}
 
 	var fileService *service.FileService
-	database, err := db.NewDatabase(filepath.Dir(storagePath))
+	database, err := db.NewDatabase(cfg.Options.SaveLocation)
 	if err != nil {
 		logger.Printf("Error initializing database: %v", err)
 		// Continue with nil fileService, we'll check for nil before using
