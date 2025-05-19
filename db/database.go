@@ -8,10 +8,10 @@ import (
 
 	"github.com/agnosto/fansly-scraper/db/models"
 	"github.com/agnosto/fansly-scraper/logger"
-	"gorm.io/driver/sqlite"
+	//"gorm.io/driver/sqlite"
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
-	_ "modernc.org/sqlite"
 )
 
 // Database represents the database connection
