@@ -14,6 +14,7 @@ ffmpeg_convert = true # Convert to MP4 after recording
 generate_contact_sheet = true # Generate preview thumbnails
 filename_template = "{model_username}_{date}_{streamId}_{streamVersion}" # Available variables: model_username, date, streamId, streamVersion
 date_format = "20060102_150405" # Default format 
+record_chat = true
 
 [notifications]
   enabled = true
