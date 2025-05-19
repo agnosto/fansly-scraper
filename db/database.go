@@ -11,6 +11,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
+	_ "modernc.org/sqlite"
 )
 
 // Database represents the database connection
@@ -21,7 +22,6 @@ type Database struct {
 // NewDatabase creates a new database connection
 func NewDatabase(saveLocation string) (*Database, error) {
 	dbPath := filepath.Join(saveLocation, "downloads.db")
-
 	// Check if the database exists and has the old schema
 	needsMigration, err := checkOldSchema(dbPath)
 	if err != nil {
@@ -40,7 +40,6 @@ func NewDatabase(saveLocation string) (*Database, error) {
 			logConfig,
 		),
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
@@ -73,8 +72,8 @@ func checkOldSchema(dbPath string) (bool, error) {
 	// Check if the files table exists with the old schema
 	var count int
 	err = sqlDB.QueryRow(`SELECT COUNT(*) FROM sqlite_master 
-                         WHERE type='table' AND name='files' 
-                         AND sql LIKE '%hash TEXT PRIMARY KEY%'`).Scan(&count)
+                          WHERE type='table' AND name='files' 
+                          AND sql LIKE '%hash TEXT PRIMARY KEY%'`).Scan(&count)
 	if err != nil {
 		return false, err
 	}
