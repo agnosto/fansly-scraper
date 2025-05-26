@@ -39,6 +39,7 @@
 
 ## ToDo:
 
+- [ ] Add option for ignoring certain posts (would probably be a list of ids)
 - [ ] Add option to limit resolution for downloading (post and livestreams)
 - [ ] Archive metadata for downloaded post
 - [ ] Properly handle live status in monitoring TUI 
