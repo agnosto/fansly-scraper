@@ -138,9 +138,9 @@ func SaveConfig(cfg *Config) error {
 
 // MergeConfigs merges two configurations, preserving existing values
 // while updating with new values and ensuring defaults for missing fields
+// Fix the MergeConfigs function - replace the existing boolean field handling
 func MergeConfigs(existing *Config, new *Config) *Config {
 	result := &Config{}
-
 	// Create a default config to use for missing fields
 	defaultConfig := CreateDefaultConfig()
 
@@ -165,13 +165,13 @@ func MergeConfigs(existing *Config, new *Config) *Config {
 		result.Options.CheckUpdates = new.Options.CheckUpdates
 	}
 	// Ensure the CheckUpdates field exists (for older configs)
-	// using zero value check since it's a boolean
 	if result.Options.SaveLocation == "" {
 		result.Options.SaveLocation = defaultConfig.Options.SaveLocation
 	}
 
-	// Merge LiveSettings section
+	// Merge LiveSettings section - start with existing values
 	result.LiveSettings = existing.LiveSettings
+
 	// Ensure all LiveSettings fields have values
 	if result.LiveSettings.VODsFileExtension == "" {
 		result.LiveSettings.VODsFileExtension = defaultConfig.LiveSettings.VODsFileExtension
@@ -196,32 +196,32 @@ func MergeConfigs(existing *Config, new *Config) *Config {
 	if new.LiveSettings.DateFormat != "" {
 		result.LiveSettings.DateFormat = new.LiveSettings.DateFormat
 	}
-	if reflect.ValueOf(new.LiveSettings).FieldByName("RecordChat").IsValid() {
+
+	// Fix boolean field handling - don't use reflection, just copy the values
+	// The existing config already has the user's preferences loaded from TOML
+	// Only override with new config if this is an explicit update
+	if new.LiveSettings.FFmpegConvert != result.LiveSettings.FFmpegConvert {
+		result.LiveSettings.FFmpegConvert = new.LiveSettings.FFmpegConvert
+	}
+	if new.LiveSettings.GenerateContactSheet != result.LiveSettings.GenerateContactSheet {
+		result.LiveSettings.GenerateContactSheet = new.LiveSettings.GenerateContactSheet
+	}
+	if new.LiveSettings.UseMTForContactSheet != result.LiveSettings.UseMTForContactSheet {
+		result.LiveSettings.UseMTForContactSheet = new.LiveSettings.UseMTForContactSheet
+	}
+	if new.LiveSettings.RecordChat != result.LiveSettings.RecordChat {
 		result.LiveSettings.RecordChat = new.LiveSettings.RecordChat
 	}
 
-	// For boolean fields, we check if they're explicitly set in the new config
-	if reflect.ValueOf(new.LiveSettings).FieldByName("FFmpegConvert").IsValid() {
-		result.LiveSettings.FFmpegConvert = new.LiveSettings.FFmpegConvert
-	}
-	if reflect.ValueOf(new.LiveSettings).FieldByName("GenerateContactSheet").IsValid() {
-		result.LiveSettings.GenerateContactSheet = new.LiveSettings.GenerateContactSheet
-	}
-	if reflect.ValueOf(new.LiveSettings).FieldByName("UseMTForContactSheet").IsValid() {
-		result.LiveSettings.UseMTForContactSheet = new.LiveSettings.UseMTForContactSheet
-	}
-
+	// Rest of the function remains the same...
 	// Merge Notifications section
-	// Start with existing notifications config
 	result.Notifications = existing.Notifications
 
 	// Check if the Notifications section exists in the existing config
-	// If not, use the default values
 	existingNotificationsValue := reflect.ValueOf(existing.Notifications)
 	existingNotificationsType := existingNotificationsValue.Type()
 	isNotificationsZero := true
 
-	// Check if all fields in Notifications are zero values - modernized with range
 	for i := range make([]struct{}, existingNotificationsValue.NumField()) {
 		if !existingNotificationsValue.Field(i).IsZero() {
 			isNotificationsZero = false
@@ -229,26 +229,17 @@ func MergeConfigs(existing *Config, new *Config) *Config {
 		}
 	}
 
-	// If Notifications section is empty, use defaults
 	if isNotificationsZero {
 		result.Notifications = defaultConfig.Notifications
 	} else {
-		// Check for missing fields in the existing config
-		// This ensures that new fields added to the struct get default values
-
-		// Check for NotifyOnLiveStart field
 		_, hasNotifyOnLiveStart := existingNotificationsType.FieldByName("NotifyOnLiveStart")
 		if !hasNotifyOnLiveStart {
 			result.Notifications.NotifyOnLiveStart = defaultConfig.Notifications.NotifyOnLiveStart
 		}
-
-		// Check for NotifyOnLiveEnd field
 		_, hasNotifyOnLiveEnd := existingNotificationsType.FieldByName("NotifyOnLiveEnd")
 		if !hasNotifyOnLiveEnd {
 			result.Notifications.NotifyOnLiveEnd = defaultConfig.Notifications.NotifyOnLiveEnd
 		}
-
-		// Check for DiscordMentionID field
 		_, hasDiscordMentionID := existingNotificationsType.FieldByName("DiscordMentionID")
 		if !hasDiscordMentionID {
 			result.Notifications.DiscordMentionID = defaultConfig.Notifications.DiscordMentionID
@@ -269,7 +260,6 @@ func MergeConfigs(existing *Config, new *Config) *Config {
 		result.Notifications.NotifyOnLiveEnd = new.Notifications.NotifyOnLiveEnd
 	}
 
-	// Update string fields if they're not empty
 	if new.Notifications.DiscordWebhook != "" {
 		result.Notifications.DiscordWebhook = new.Notifications.DiscordWebhook
 	}
@@ -285,7 +275,6 @@ func MergeConfigs(existing *Config, new *Config) *Config {
 
 	// Always update security headers
 	result.SecurityHeaders = new.SecurityHeaders
-
 	return result
 }
 
@@ -317,7 +306,7 @@ func EnsureConfigUpdated(configPath string) error {
 		updated = true
 	}
 	// Check if RecordChat is missing (this is a new field)
-	if reflect.ValueOf(cfg.LiveSettings).FieldByName("RecordChat").IsZero() {
+	if !reflect.ValueOf(cfg.LiveSettings).FieldByName("RecordChat").IsValid() {
 		cfg.LiveSettings.RecordChat = defaultConfig.LiveSettings.RecordChat
 		updated = true
 	}
@@ -426,19 +415,6 @@ func CopyFile(srcPath string, dstPath string) error {
 }
 
 func DownloadConfig(url string, filePath string) error {
-	//log.Printf("Downloading config from: %v to path: %v", url, filePath)
-	// Get the current working directory
-	//rootDir, err := os.Getwd()
-	//if err != nil {
-	//	return err
-	//}
-
-	// Construct the path to the example-config.ini file in the root directory
-	//exampleConfigPath := filepath.Join(rootDir, filePath)
-
-	// Check if the file exists in the current directory
-	//if _, err := os.Stat(exampleConfigPath); os.IsNotExist(err) {
-	// Send a GET request
 	resp, err := http.Get(url)
 	if err != nil {
 		return err
@@ -572,21 +548,30 @@ func CreateDefaultConfig() *Config {
 	}
 }
 
+func SanitizeFilename(filename string) string {
+	filename = strings.ReplaceAll(filename, " ", "_")
+	filename = strings.ReplaceAll(filename, ":", "-")
+	problematicChars := []string{"/", "\\", "?", "%", "*", "|", "\"", "<", ">"}
+	for _, char := range problematicChars {
+		filename = strings.ReplaceAll(filename, char, "_")
+	}
+	return filename
+}
+
 func FormatVODFilename(template string, data map[string]string) string {
 	result := template
-
-	// Add 'v' prefix to streamVersion if it exists
 	if version, exists := data["streamVersion"]; exists {
 		data["streamVersion"] = "v" + version
 	}
 
-	// Replace all placeholders with their values
 	for key, value := range data {
 		placeholder := fmt.Sprintf("{%s}", key)
-		result = strings.ReplaceAll(result, placeholder, value)
+		sanitizedValue := SanitizeFilename(value)
+		result = strings.ReplaceAll(result, placeholder, sanitizedValue)
 	}
 
-	return result
+	// Final sanitization of the entire filename
+	return SanitizeFilename(result)
 }
 
 func ResolveLiveSavePath(cfg *Config, username string) string {
@@ -600,13 +585,13 @@ func ResolveLiveSavePath(cfg *Config, username string) string {
 }
 
 func GetVODFilename(cfg *Config, data map[string]string) string {
-	// Use configured date format, fallback to default if empty
 	dateFormat := cfg.LiveSettings.DateFormat
 	if dateFormat == "" {
 		dateFormat = "20060102_150405"
 	}
 
-	data["date"] = time.Now().Format(dateFormat)
+	formattedDate := time.Now().Format(dateFormat)
+	data["date"] = SanitizeFilename(formattedDate)
 
 	template := cfg.LiveSettings.FilenameTemplate
 	if template == "" {
