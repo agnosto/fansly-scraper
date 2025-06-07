@@ -45,6 +45,7 @@ type Downloader struct {
 	logMu           sync.Mutex
 	ffmpegAvailable bool
 	fileService     *service.FileService
+	cfg             *config.Config
 }
 
 func (w logWriter) Write(p []byte) (n int, err error) {
@@ -108,6 +109,7 @@ func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error
 		limiter:         limiter,
 		progressBar:     bar,
 		ffmpegAvailable: ffmpegAvailable,
+		cfg:             cfg,
 	}, nil
 }
 
@@ -264,7 +266,7 @@ func (d *Downloader) downloadMediaItem(ctx context.Context, accountMedia posts.A
 	}
 
 	// Check if there's a preview with valid locations and download it
-	if accountMedia.Preview != nil && hasValidLocations(*accountMedia.Preview) {
+	if !d.cfg.Options.SkipPreviews && accountMedia.Preview != nil && hasValidLocations(*accountMedia.Preview) {
 		err := d.downloadSingleItem(ctx, *accountMedia.Preview, baseDir, post.ID, modelName, true)
 		if err != nil {
 			logger.Logger.Printf("[ERROR] [%s] Failed to download preview item for media item %s : %v", modelName, accountMedia.ID, err)
