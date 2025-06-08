@@ -77,7 +77,7 @@ func (d *Downloader) downloadMessageMediaItem(ctx context.Context, accountMedia 
 	}
 
 	// Download preview if it exists
-	if accountMedia.Preview != nil {
+	if !d.cfg.Options.SkipPreviews && accountMedia.Preview != nil {
 		err = d.downloadSingleItem(ctx, *accountMedia.Preview, baseDir, accountMedia.ID, modelName, true)
 		if err != nil {
 			return fmt.Errorf("error downloading preview: %v", err)

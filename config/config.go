@@ -41,6 +41,7 @@ type OptionsConfig struct {
 	SaveLocation string `toml:"save_location"`
 	M3U8Download bool   `toml:"m3u8_dl"`
 	CheckUpdates bool   `toml:"check_updates"`
+	SkipPreviews bool   `toml:"skip_previews"`
 }
 
 type NotificationsConfig struct {
@@ -168,6 +169,7 @@ func CreateDefaultConfig() *Config {
 			SaveLocation: "/path/to/save/content/to",
 			M3U8Download: false,
 			CheckUpdates: false,
+			SkipPreviews: true,
 		},
 		LiveSettings: LiveSettingsConfig{
 			SaveLocation:         "", // Empty means use default path

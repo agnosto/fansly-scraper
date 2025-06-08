@@ -6,6 +6,7 @@ user_agent = ""
 save_location = "/path/to/save/content/to" # On windows replace any \ with / 
 m3u8_dl = false # set true if you have ffmpeg and want instances of it spawned to try to save higher quality videos
 check_updates = true
+skip_previews = false
 
 [live_settings]
 save_location = "" # Optional: Set custom path for livestream recordings. If empty, uses default path

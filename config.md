@@ -8,11 +8,9 @@
 Where the config file is located
 
 ### Windows:
-
 `%APPDATA%\fansly-scraper\config.toml`
 
 ### Linux and Macos:
-
 `~/.config/fansly-scraper/config.toml`
 
 Note: If a `config.toml` file exists in the same directory as the executable, that file will be used instead.
@@ -20,6 +18,7 @@ Note: If a `config.toml` file exists in the same directory as the executable, th
 This document outlines available options for the Scraper.
 
 ## Account Settings
+
 | Setting | Description | Required | Example |
 |---------|-------------|----------|---------|
 | auth_token | Your Fansly authentication token | Yes | "xxxxxx" |
@@ -29,8 +28,10 @@ This document outlines available options for the Scraper.
 <summary><strong>Getting your token</strong></summary>
 
 ### Method 1 (Recommended) special thanks to [prof79](https://github.com/prof79/)'s wiki for this:
+
 1. Go to [fansly](https://fansly.com) and login and open devtools (ctrl+shift+i / F12)
 2. In devtools, go to the Console Tab and Paste the following: 
+
 ```javascript
 console.clear(); // cleanup console
 const activeSession = localStorage.getItem("session_active_session"); // get required key
@@ -43,17 +44,30 @@ console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weigh
 1. Go to [fansly](https://fansly.com) and login and open devtools (ctrl+shift+i / F12)
 2. Click on `Storage` and then `Local Storage`
 3. Look for `session_active_session` and copy the `token` value
+
 </details>
 
 ## Options
+
 | Setting | Description | Default | Example |
 |---------|-------------|---------|---------|
 | save_location | Base directory for downloads, on windows replace backslashes ("\\") in the path with forward slashes ("/") | Required | "/home/user/content" |
 | m3u8_dl | Use m3u8 downloader for saving content | false | true/false |
-| check_updates | Check for new updates on launch |false | true/false |
+| check_updates | Check for new updates on launch | false | true/false |
+| skip_previews | Skip downloading preview images/videos for posts and messages | true | true/false |
 
+### Preview Files
+
+Preview files are typically lower quality or shorter versions of the main media content. They are often used as thumbnails or quick previews on the platform. When `skip_previews` is set to `true`, only the main media files will be downloaded, which can:
+
+- Save storage space
+- Reduce download time
+- Avoid duplicate/similar content
+
+Preview files are usually named with a `_preview` suffix (e.g., `postid_mediaid_preview.jpg`).
 
 ## Live Settings
+
 | Setting | Description | Default | Example |
 |---------|-------------|---------|---------|
 | save_location | Custom path for livestreams | Empty (uses save_location from Options) | "/home/user/streams" |
@@ -63,7 +77,7 @@ console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weigh
 | use_mt_for_contact_sheet | Use [mt](https://github.com/mutschler/mt) for better thumbnails if its installed | false | true/false |
 | filename_template | Template for file naming | See below | "{model_username}_{date}" |
 | date_format | Date format in filenames | "20060102_150405" | "2006-01-02_15:04:05" |
-| record_chat | Save chat messages from streams to a json file* | true | true/false|
+| record_chat | Save chat messages from streams to a json file* | true | true/false |
 
 ### Recorded chat
 
@@ -72,6 +86,7 @@ Chat messages are saved in a json format to be compatible with the player from t
 It allows you to play local videos with the chat to have full context of streams with timestamps of the messages (as close as possible). Any empty messages are most likely tips that had no messages associated with it, I may also save those as the amount tipped.
 
 ### Video File Extensions
+
 Common options for `vods_file_extension`:
 - `.ts` - Transport Stream (recommended for live recordings)
 - `.mp4` - Most widely supported video format
@@ -83,12 +98,14 @@ Common options for `vods_file_extension`:
 Note: `.ts` is recommended for live recordings as it handles interruptions better and can be played directly in VLC/MPV players.
 
 ### Filename Template Variables
+
 - `{model_username}`: Creator's username
 - `{date}`: Recording date/time
 - `{streamId}`: Unique stream identifier
 - `{streamVersion}`: Stream version (automatically prefixed with 'v')
 
 ### Date Format Options
+
 The date format uses Go's time formatting syntax:
 - `2006`: Year
 - `01`: Month
@@ -141,8 +158,8 @@ To set up Telegram notifications:
 3. Get your chat ID (you can use [userinfobot](https://t.me/userinfobot) or send a message to your bot and check `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`)
 4. Add the bot token to `telegram_bot_token` and chat ID to `telegram_chat_id`
 
-
 ## Security Headers
+
 These are automatically managed by the application:
 - `device_id`: Unique device identifier
 - `session_id`: Current session ID

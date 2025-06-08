@@ -67,7 +67,7 @@ func EnsureConfigExists(configPath string) error {
 // EnsureConfigUpdated checks if the config file has all the latest fields and updates it with defaults if needed.
 func EnsureConfigUpdated(configPath string) error {
 	// Read the raw TOML file to check which fields are actually present
-	var rawConfig map[string]interface{}
+	var rawConfig map[string]any
 	_, err := toml.DecodeFile(configPath, &rawConfig)
 	if err != nil {
 		return err
@@ -93,6 +93,17 @@ func EnsureConfigUpdated(configPath string) error {
 			isUpdated = true
 		}
 
+		// Check if SkipPreviews field exists in the raw TOML
+		if optionsMap, ok := rawConfig["options"].(map[string]any); ok {
+			if _, exists := optionsMap["skip_previews"]; !exists {
+				cfg.Options.SkipPreviews = defaultConfig.Options.SkipPreviews
+				isUpdated = true
+			}
+		} else {
+			// If options section doesn't exist at all, add the field
+			cfg.Options.SkipPreviews = defaultConfig.Options.SkipPreviews
+			isUpdated = true
+		}
 	}
 
 	// Use reflection to generically check for missing fields.
@@ -102,7 +113,7 @@ func EnsureConfigUpdated(configPath string) error {
 		isUpdated = true
 	} else {
 		// Check for specific fields added in later versions using raw TOML
-		if notificationsMap, ok := rawConfig["notifications"].(map[string]interface{}); ok {
+		if notificationsMap, ok := rawConfig["notifications"].(map[string]any); ok {
 			if _, exists := notificationsMap["notify_on_live_start"]; !exists {
 				cfg.Notifications.NotifyOnLiveStart = defaultConfig.Notifications.NotifyOnLiveStart
 				isUpdated = true
@@ -133,7 +144,7 @@ func EnsureConfigUpdated(configPath string) error {
 		}
 
 		// Check for RecordChat field in raw TOML
-		if liveSettingsMap, ok := rawConfig["live_settings"].(map[string]interface{}); ok {
+		if liveSettingsMap, ok := rawConfig["live_settings"].(map[string]any); ok {
 			if _, exists := liveSettingsMap["record_chat"]; !exists {
 				cfg.LiveSettings.RecordChat = defaultConfig.LiveSettings.RecordChat
 				isUpdated = true
