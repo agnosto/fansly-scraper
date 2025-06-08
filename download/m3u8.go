@@ -387,8 +387,6 @@ func combineSegments(segmentFiles []string, outputFile string, segmentDir string
 		"-safe", "0",
 		"-i", tempFile.Name(),
 		"-c", "copy",
-		"-f", "mpegts",
-		"-i", "pipe:0",
 		outputFile,
 	}
 	cmd := exec.Command("ffmpeg", args...)
