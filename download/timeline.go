@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -283,11 +284,7 @@ func (d *Downloader) downloadMediaItem(ctx context.Context, accountMedia posts.A
 }
 
 func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaItem, baseDir string, identifier string, modelName string, isPreview bool) error {
-	var bestMedia *posts.MediaItem
-	var bestHeight int
-	var bestMetadata map[string]string
-	var mediaUrl string
-	var fileType string
+	var mediaItems = []posts.MediaItem{}
 
 	getMediaType := func(mimetype string) string {
 		switch {
@@ -307,10 +304,7 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 	processMediaItem := func(mediaItem posts.MediaItem) {
 		// First, try to use the main media item if it has a location
 		if len(mediaItem.Locations) > 0 {
-			bestMedia = &mediaItem
-			bestHeight = mediaItem.Height
-			bestMetadata = mediaItem.Locations[0].Metadata
-			mediaUrl = mediaItem.Locations[0].Location
+			mediaItems = append(mediaItems, mediaItem)
 		}
 
 		// Process all variants
@@ -324,51 +318,29 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 
 			// Only consider variants of the same type as the main item
 			if variantType == mainType && len(variant.Locations) > 0 {
-				if bestMedia == nil || variant.Height > bestHeight {
-					bestMedia = &posts.MediaItem{
-						ID:        variant.ID,
-						Type:      variant.Type,
-						Height:    variant.Height,
-						Mimetype:  variant.Mimetype,
-						Locations: variant.Locations,
-					}
-					bestHeight = variant.Height
-					bestMetadata = variant.Locations[0].Metadata
-					mediaUrl = variant.Locations[0].Location
-				}
-			}
-		}
-
-		// Special handling for M3U8 files if enabled
-		if d.M3U8Download && d.ffmpegAvailable && mainType == "video" {
-			for _, variant := range mediaItem.Variants {
-				if variant.Mimetype == "application/vnd.apple.mpegurl" && len(variant.Locations) > 0 {
-					if bestMedia == nil || variant.Height > bestHeight {
-						bestMedia = &posts.MediaItem{
-							ID:        variant.ID,
-							Type:      variant.Type,
-							Height:    variant.Height,
-							Mimetype:  variant.Mimetype,
-							Locations: variant.Locations,
-						}
-						bestHeight = variant.Height
-						bestMetadata = variant.Locations[0].Metadata
-						mediaUrl = variant.Locations[0].Location
-					}
-				}
+				mediaItems = append(mediaItems, posts.MediaItem{
+					ID:        variant.ID,
+					Type:      variant.Type,
+					Height:    variant.Height,
+					Mimetype:  variant.Mimetype,
+					Locations: variant.Locations,
+				})
 			}
 		}
 	}
 
 	processMediaItem(item)
-	//logger.Logger.Printf("[INFO] [%s] BestMedia URL: %v", modelName, mediaUrl)
-	//log.Printf("[BEST MEDIA] URL IS: %v", mediaUrl)
 
-	if bestMedia == nil || mediaUrl == "" {
+	if len(mediaItems) == 0 {
 		d.progressBar.Describe(fmt.Sprintf("[red]No suitable media found[reset] for item %s", item.ID))
 		return nil
 	}
 
+	sort.Slice(mediaItems, func(i, j int) bool {
+		return mediaItems[j].Height < mediaItems[i].Height
+	})
+
+	var fileType string
 	var subDir string
 	switch {
 	case strings.HasPrefix(item.Mimetype, "image/"):
@@ -390,69 +362,83 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 		return fmt.Errorf("unknown media type: %s", item.Mimetype)
 	}
 
-	parsedURL, err := url.Parse(mediaUrl)
-	if err != nil {
-		return fmt.Errorf("error parsing URL: %v", err)
-	}
-	ext := filepath.Ext(parsedURL.Path)
-
-	if strings.HasSuffix(mediaUrl, ".m3u8") {
-		ext = ".mp4" // We'll still save as .mp4 even though it's originally m3u8
-	}
-
-	previewSuffix := ""
+	suffix := ""
 	if isPreview {
-		previewSuffix = "_preview"
+		suffix = "_preview"
 	}
-	fileName := fmt.Sprintf("%s_%s%s%s", identifier, bestMedia.ID, previewSuffix, ext)
-	filePath := filepath.Join(baseDir, subDir, fileName)
-	//log.Printf("[INFO] [DLSingleItem] FILENAME: %v", fileName)
 
-	if d.fileExists(filePath) {
-		if _, err := os.Stat(filePath); os.IsNotExist(err) {
-			d.progressBar.Describe(fmt.Sprintf("[yellow]File missing[reset], Redownloading %s", fileName))
-		} else {
-			d.progressBar.Describe(fmt.Sprintf("[red]File Exists[reset], Skipping %s", fileName))
-			//log.Printf("File already exists, skipping: %s\n", filePath)
+	for _, media := range mediaItems {
+		mediaUrl := media.Locations[0].Location
+
+		parsedURL, err := url.Parse(mediaUrl)
+		if err != nil {
+			return fmt.Errorf("error parsing URL: %v", err)
+		}
+
+		logger.Logger.Printf("Trying to download (%s) %s", media.Mimetype, mediaUrl)
+
+		ext := filepath.Ext(parsedURL.Path)
+		if strings.HasSuffix(mediaUrl, ".m3u8") {
+			ext = ".mp4" // We'll still save as .mp4 even though it's originally m3u8
+		}
+
+		fileName := fmt.Sprintf("%s_%s%s%s", identifier, media.ID, suffix, ext)
+		filePath := filepath.Join(baseDir, subDir, fileName)
+
+		if d.fileExists(filePath) {
+			if _, err := os.Stat(filePath); os.IsNotExist(err) {
+				d.progressBar.Describe(fmt.Sprintf("[yellow]File missing[reset], Redownloading %s", fileName))
+			} else {
+				d.progressBar.Describe(fmt.Sprintf("[red]File Exists[reset], Skipping %s", fileName))
+				return nil
+			}
+		}
+
+		// Check if the file actually exists on the filesystem
+		if _, err := os.Stat(filePath); err == nil {
+			d.progressBar.Describe(fmt.Sprintf("[yellow]No DB Record[reset], Adding %s", fileName))
+			//log.Printf("File exists on filesystem but not in DB, adding to DB: %s\n", filePath)
+			hashString, err := d.hashExistingFile(filePath)
+			if err != nil {
+				logger.Logger.Printf("[ERROR] failed to hash existing file %s: %v", filePath, err)
+				return fmt.Errorf("error hashing existing file: %v", err)
+			}
+			err = d.saveFileHash(modelName, hashString, filePath, fileType)
+			if err != nil {
+				logger.Logger.Printf("[ERROR] failed to save hash for existing file %s: %v", filePath, err)
+				return fmt.Errorf("error saving hash for existing file: %v", err)
+			}
 			return nil
 		}
-	}
 
-	// Check if the file actually exists on the filesystem
-	if _, err := os.Stat(filePath); err == nil {
-		d.progressBar.Describe(fmt.Sprintf("[yellow]No DB Record[reset], Adding %s", fileName))
-		//log.Printf("File exists on filesystem but not in DB, adding to DB: %s\n", filePath)
-		hashString, err := d.hashExistingFile(filePath)
-		if err != nil {
-			logger.Logger.Printf("[ERROR] failed to hash existing file %s: %v", filePath, err)
-			return fmt.Errorf("error hashing existing file: %v", err)
+		d.progressBar.Describe(fmt.Sprintf("[green]Downloading[reset] %s", fileName))
+
+		if media.Mimetype == "application/vnd.apple.mpegurl" && d.ffmpegAvailable {
+			fullUrl := mediaUrl
+			metadata := media.Locations[0].Metadata
+			if metadata != nil {
+				fullUrl += fmt.Sprintf("?ngsw-bypass=true&Policy=%s&Key-Pair-Id=%s&Signature=%s",
+					url.QueryEscape(metadata["Policy"]),
+					url.QueryEscape(metadata["Key-Pair-Id"]),
+					url.QueryEscape(metadata["Signature"]))
+			}
+			err = d.DownloadM3U8(ctx, modelName, fullUrl, filePath, identifier)
+			if err != nil {
+				logger.Logger.Printf("[ERROR] %v", err)
+				continue
+			}
+			return nil
 		}
-		err = d.saveFileHash(modelName, hashString, filePath, fileType)
+
+		err = d.downloadRegularFile(mediaUrl, filePath, modelName, fileType)
 		if err != nil {
-			logger.Logger.Printf("[ERROR] failed to save hash for existing file %s: %v", filePath, err)
-			return fmt.Errorf("error saving hash for existing file: %v", err)
+			logger.Logger.Printf("[ERROR] %v", err)
+			continue
 		}
 		return nil
 	}
 
-	d.progressBar.Describe(fmt.Sprintf("[green]Downloading[reset] %s", fileName))
-
-	if strings.HasSuffix(mediaUrl, ".m3u8") && d.ffmpegAvailable {
-		fullUrl := mediaUrl
-		if bestMetadata != nil {
-			fullUrl += fmt.Sprintf("?ngsw-bypass=true&Policy=%s&Key-Pair-Id=%s&Signature=%s",
-				url.QueryEscape(bestMetadata["Policy"]),
-				url.QueryEscape(bestMetadata["Key-Pair-Id"]),
-				url.QueryEscape(bestMetadata["Signature"]))
-		}
-		return d.DownloadM3U8(ctx, modelName, fullUrl, filePath, identifier)
-	}
-
-	d.downloadRegularFile(mediaUrl, filePath, modelName, fileType)
-
-	//log.Printf("Downloaded: %s\n", filePath)
-
-	return nil
+	return fmt.Errorf("unable to find suitable media item")
 }
 
 func (d *Downloader) downloadWithRetry(url string) (*http.Response, error) {

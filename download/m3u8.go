@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+
 	//"path"
 	"path/filepath"
 	"strconv"
@@ -17,7 +18,9 @@ import (
 	"sync"
 
 	"context"
+
 	"golang.org/x/sync/semaphore"
+
 	//"github.com/grafov/m3u8"
 
 	//"github.com/agnosto/fansly-scraper/config"
@@ -57,6 +60,10 @@ func (d *Downloader) DownloadM3U8(ctx context.Context, modelName string, m3u8URL
 	segmentURLs, err := parseM3U8Playlist(playlistContent, m3u8URL, cookies)
 	if err != nil {
 		return err
+	}
+
+	if len(segmentURLs) == 0 {
+		return fmt.Errorf("could not parse segment urls")
 	}
 
 	segmentDir := filepath.Join(filepath.Dir(savePath), "segments_"+postID)
