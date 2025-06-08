@@ -37,15 +37,7 @@ func main() {
 
 	isCliMode := flags.Username != "" || flags.Monitor != "" || subcommand != ""
 
-	err := config.EnsureConfigExists(config.GetConfigPath())
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = config.EnsureConfigUpdated(config.GetConfigPath())
-	if err != nil {
-		log.Printf("Warning: Error updating config: %v", err)
-	}
+	config.VerifyConfigOnStartup()
 
 	if flags.Version {
 		fmt.Printf("Fansly Scraper version %s\n", version)

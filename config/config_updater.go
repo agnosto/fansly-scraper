@@ -1,0 +1,273 @@
+package config
+
+import (
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"reflect"
+
+	"github.com/BurntSushi/toml"
+)
+
+// VerifyConfigOnStartup runs all checks to ensure a valid config file exists and is updated.
+// This should be called when the application starts.
+func VerifyConfigOnStartup() {
+	configPath := GetConfigPath()
+	err := EnsureConfigExists(configPath)
+	if err != nil {
+		log.Printf("Error ensuring config exists: %v", err)
+	}
+
+	err = EnsureConfigUpdated(configPath)
+	if err != nil {
+		log.Printf("Error updating config: %v", err)
+	}
+}
+
+// EnsureConfigExists checks if a config file is present. If not, it attempts to create one
+// by copying an example, creating a default, or downloading it from the repo.
+func EnsureConfigExists(configPath string) error {
+	if _, err := os.Stat(filepath.Dir(configPath)); os.IsNotExist(err) {
+		err = os.MkdirAll(filepath.Dir(configPath), os.ModePerm)
+		if err != nil {
+			return err
+		}
+	}
+
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		// Config doesn't exist, check for local example-config.toml
+		if _, err := os.Stat("example-config.toml"); err == nil {
+			err = copyFile("example-config.toml", configPath)
+			if err == nil {
+				return nil // Successfully copied example config
+			}
+			log.Printf("Failed to copy example config: %v. Trying next method.", err)
+		}
+
+		// Try to create a default config
+		defaultConfig := CreateDefaultConfig()
+		err = SaveConfig(defaultConfig)
+		if err == nil {
+			return nil // Successfully created default config
+		}
+		log.Printf("Failed to create default config: %v. Trying next method.", err)
+
+		// Last resort: try to download config from GitHub
+		err = downloadFile("https://raw.githubusercontent.com/agnosto/fansly-scraper/main/example-config.toml", configPath)
+		if err != nil {
+			return fmt.Errorf("all methods to create a config failed. Last error: %v", err)
+		}
+	}
+	return nil
+}
+
+// EnsureConfigUpdated checks if the config file has all the latest fields and updates it with defaults if needed.
+func EnsureConfigUpdated(configPath string) error {
+	// Read the raw TOML file to check which fields are actually present
+	var rawConfig map[string]interface{}
+	_, err := toml.DecodeFile(configPath, &rawConfig)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		// If loading fails, it might be an invalid format. We can't safely update it.
+		return err
+	}
+
+	// Create a pristine default config to source missing values from.
+	defaultConfig := CreateDefaultConfig()
+	isUpdated := false
+
+	if reflect.DeepEqual(cfg.Options, OptionsConfig{}) {
+		cfg.Options = defaultConfig.Options
+		isUpdated = true
+	} else {
+		// Check for specific fields added in later versions
+		if cfg.Options.SaveLocation == "" {
+			cfg.Options.SaveLocation = defaultConfig.Options.SaveLocation
+			isUpdated = true
+		}
+
+	}
+
+	// Use reflection to generically check for missing fields.
+	// This makes it easier to add new fields in the future.
+	if reflect.DeepEqual(cfg.Notifications, NotificationsConfig{}) {
+		cfg.Notifications = defaultConfig.Notifications
+		isUpdated = true
+	} else {
+		// Check for specific fields added in later versions using raw TOML
+		if notificationsMap, ok := rawConfig["notifications"].(map[string]interface{}); ok {
+			if _, exists := notificationsMap["notify_on_live_start"]; !exists {
+				cfg.Notifications.NotifyOnLiveStart = defaultConfig.Notifications.NotifyOnLiveStart
+				isUpdated = true
+			}
+			if _, exists := notificationsMap["notify_on_live_end"]; !exists {
+				cfg.Notifications.NotifyOnLiveEnd = defaultConfig.Notifications.NotifyOnLiveEnd
+				isUpdated = true
+			}
+		}
+	}
+
+	if reflect.DeepEqual(cfg.LiveSettings, LiveSettingsConfig{}) {
+		cfg.LiveSettings = defaultConfig.LiveSettings
+		isUpdated = true
+	} else {
+		// Check for specific fields added in later versions
+		if cfg.LiveSettings.VODsFileExtension == "" {
+			cfg.LiveSettings.VODsFileExtension = defaultConfig.LiveSettings.VODsFileExtension
+			isUpdated = true
+		}
+		if cfg.LiveSettings.FilenameTemplate == "" {
+			cfg.LiveSettings.FilenameTemplate = defaultConfig.LiveSettings.FilenameTemplate
+			isUpdated = true
+		}
+		if cfg.LiveSettings.DateFormat == "" {
+			cfg.LiveSettings.DateFormat = defaultConfig.LiveSettings.DateFormat
+			isUpdated = true
+		}
+
+		// Check for RecordChat field in raw TOML
+		if liveSettingsMap, ok := rawConfig["live_settings"].(map[string]interface{}); ok {
+			if _, exists := liveSettingsMap["record_chat"]; !exists {
+				cfg.LiveSettings.RecordChat = defaultConfig.LiveSettings.RecordChat
+				isUpdated = true
+			}
+		}
+	}
+
+	if isUpdated {
+		//log.Println("Config file has been updated with new default values.")
+		// Save the updated config. Use the simple SaveConfig which now just encodes.
+		file, err := os.Create(configPath)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		return toml.NewEncoder(file).Encode(cfg)
+	}
+
+	return nil
+}
+
+// MergeConfigs merges a new configuration into an existing one.
+// It prioritizes values from the new config but fills in missing/default values from the existing and default configs.
+func MergeConfigs(existing, new *Config) *Config {
+	result := &Config{}
+	defaultConfig := CreateDefaultConfig()
+
+	// Merge Account: Always take new values if they are not empty.
+	result.Account = existing.Account
+	if new.Account.AuthToken != "" {
+		result.Account.AuthToken = new.Account.AuthToken
+	}
+	if new.Account.UserAgent != "" {
+		result.Account.UserAgent = new.Account.UserAgent
+	}
+
+	// Merge Options
+	result.Options = existing.Options
+	if new.Options.SaveLocation != "" {
+		result.Options.SaveLocation = new.Options.SaveLocation
+	}
+	result.Options.CheckUpdates = new.Options.CheckUpdates
+	result.Options.M3U8Download = new.Options.M3U8Download
+	result.Options.SkipPreviews = new.Options.SkipPreviews
+
+	// Merge LiveSettings
+	result.LiveSettings = existing.LiveSettings
+	if new.LiveSettings.SaveLocation != "" {
+		result.LiveSettings.SaveLocation = new.LiveSettings.SaveLocation
+	}
+	if new.LiveSettings.VODsFileExtension != "" {
+		result.LiveSettings.VODsFileExtension = new.LiveSettings.VODsFileExtension
+	} else if result.LiveSettings.VODsFileExtension == "" {
+		result.LiveSettings.VODsFileExtension = defaultConfig.LiveSettings.VODsFileExtension
+	}
+	if new.LiveSettings.FilenameTemplate != "" {
+		result.LiveSettings.FilenameTemplate = new.LiveSettings.FilenameTemplate
+	} else if result.LiveSettings.FilenameTemplate == "" {
+		result.LiveSettings.FilenameTemplate = defaultConfig.LiveSettings.FilenameTemplate
+	}
+	if new.LiveSettings.DateFormat != "" {
+		result.LiveSettings.DateFormat = new.LiveSettings.DateFormat
+	} else if result.LiveSettings.DateFormat == "" {
+		result.LiveSettings.DateFormat = defaultConfig.LiveSettings.DateFormat
+	}
+
+	// For booleans, we can just assign the value from the new config,
+	// as it represents the most recent state.
+	result.LiveSettings.FFmpegConvert = new.LiveSettings.FFmpegConvert
+	result.LiveSettings.GenerateContactSheet = new.LiveSettings.GenerateContactSheet
+	result.LiveSettings.UseMTForContactSheet = new.LiveSettings.UseMTForContactSheet
+	result.LiveSettings.RecordChat = new.LiveSettings.RecordChat
+
+	// Merge Notifications
+	result.Notifications = existing.Notifications
+	result.Notifications.Enabled = new.Notifications.Enabled
+	result.Notifications.SystemNotify = new.Notifications.SystemNotify
+	result.Notifications.NotifyOnLiveStart = new.Notifications.NotifyOnLiveStart
+	result.Notifications.NotifyOnLiveEnd = new.Notifications.NotifyOnLiveEnd
+	if new.Notifications.DiscordWebhook != "" {
+		result.Notifications.DiscordWebhook = new.Notifications.DiscordWebhook
+	}
+	if new.Notifications.DiscordMentionID != "" {
+		result.Notifications.DiscordMentionID = new.Notifications.DiscordMentionID
+	}
+	if new.Notifications.TelegramBotToken != "" {
+		result.Notifications.TelegramBotToken = new.Notifications.TelegramBotToken
+	}
+	if new.Notifications.TelegramChatID != "" {
+		result.Notifications.TelegramChatID = new.Notifications.TelegramChatID
+	}
+
+	// Security Headers are always taken from the new config.
+	result.SecurityHeaders = new.SecurityHeaders
+
+	return result
+}
+
+// copyFile is a simple utility to copy a file from a source to a destination.
+func copyFile(srcPath, dstPath string) error {
+	srcFile, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dstPath)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	_, err = io.Copy(dstFile, srcFile)
+	return err
+}
+
+// downloadFile is a simple utility to download a file from a URL.
+func downloadFile(url, filePath string) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("bad status: %s", resp.Status)
+	}
+
+	out, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	return err
+}
