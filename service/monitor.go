@@ -603,6 +603,8 @@ func (ms *MonitoringService) Run() {
 
 func (ms *MonitoringService) checkModels() {
 	ms.mu.Lock()
+	ms.loadState()
+
 	models := make([]struct{ id, username string }, 0, len(ms.activeMonitors))
 	for modelID, username := range ms.activeMonitors {
 		models = append(models, struct{ id, username string }{modelID, username})
