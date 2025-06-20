@@ -1,7 +1,7 @@
 # Configuration Guide
 
 > [!WARNING]
-> If the config file is fully setup prior to the security headers getting populated, it may reset the Live Settings to defaults/empty. It is recommended for the time being to set your auth_token and user_agent first and run the script to populate those fields and then continue on. You can view an example config file [here](./example-config.toml)
+> When updating the application, some settings might be reset to their default values if they were not present in the new version's default configuration. Notably, `skip_previews` might reset to `true`. Please review your settings, especially in the `[options]` section, after an update. You can view an example config file [here](./example-config.toml)
 
 ## Location
 
@@ -55,6 +55,26 @@ console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weigh
 | m3u8_dl | Use m3u8 downloader for saving content | false | true/false |
 | check_updates | Check for new updates on launch | false | true/false |
 | skip_previews | Skip downloading preview images/videos for posts and messages | true | true/false |
+| use_content_as_filename | Generate human-readable filenames from post/message content. | false | true/false |
+| content_filename_template | Template for readable filenames. See variables below. | "{date}-{content}_{index}" | "{date}-{content}" |
+
+### Readable Filenames
+
+When use_content_as_filename is set to true, the scraper will generate filenames based on the content of a post or message, making your archive much easier to browse.
+
+- For Timeline Posts & Messages with Text: The filename is generated using the content_filename_template.
+- For Purchases, Stories, or content without text: A fallback template ({date}_{model_name}_{mediaId}_{index}) is used automatically to ensure files are still well-organized.
+- If use_content_as_filename is false: The original ID-based naming scheme ({postId}_{mediaId}) is used.
+
+#### Available Template Variables:
+
+- {date}: The date the content was posted (YYYYMMDD format).
+- {content}: The first 45 characters of the post/message text, sanitized for filesystem safety.
+- {index}: A number (0, 1, 2...) for each piece of media in a single post/message.
+- {postId}: The unique ID of the post or message.
+- {mediaId}: The unique ID of the media file.
+- {model_name}: The username of the content creator.
+
 
 ### Preview Files
 
