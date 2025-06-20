@@ -119,13 +119,10 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 	defer cancel()
 
 	timelinePosts, err := posts.GetAllTimelinePosts(modelId, d.headers)
-	//log.Printf("Got all timeline posts for %v", modelName)
-	//log.Printf("[TimelinePosts] Info: %v", timelinePosts)
 	if err != nil {
 		logger.Logger.Printf("[ERROR] [%s] Failed to get timeline posts: %v", modelName, err)
 		return err
 	}
-	//log.Printf("Retrieved %d posts for %s", len(timelinePosts), modelName)
 
 	baseDir := filepath.Join(d.saveLocation, strings.ToLower(modelName), "timeline")
 	for _, subDir := range []string{"images", "videos", "audios"} {
@@ -134,58 +131,10 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 		}
 	}
 
-	/*
-	   parsingBar := progressbar.NewOptions(len(timelinePosts),
-	       progressbar.OptionSetWriter(os.Stderr),
-	       progressbar.OptionEnableColorCodes(true),
-	       progressbar.OptionSetDescription("[cyan]Parsing Posts for Media[reset]"),
-	       progressbar.OptionSetWidth(40),
-	       progressbar.OptionThrottle(15*time.Millisecond),
-	       progressbar.OptionShowCount(),
-	       progressbar.OptionShowIts(),
-	       progressbar.OptionSpinnerType(14),
-	       progressbar.OptionFullWidth(),
-	   )
-
-
-	   var totalItems int
-	   var mu sync.Mutex
-	   semaphore := make(chan struct{}, 10)
-
-	   var wg sync.WaitGroup
-	   for _, post := range timelinePosts {
-	       wg.Add(1)
-	       go func(post posts.Post) {
-	           defer wg.Done()
-	           semaphore <- struct{}{} // Acquire semaphore
-	           defer func() { <-semaphore }() // Release semaphore
-
-	           accountMediaItems, err := posts.GetPostMedia(post.ID, d.authToken, d.userAgent)
-	           if err != nil {
-	               log.Printf("Error fetching media for post %s: %v", post.ID, err)
-	               return
-	           }
-
-	           mu.Lock()
-	           totalItems += len(accountMediaItems)
-	           mu.Unlock()
-
-	           parsingBar.Add(1)
-	       }(post)
-	   }
-	   wg.Wait()
-	   parsingBar.Finish()
-	   parsingBar.Clear()
-	*/
-	// ^ This can be used to get a total amount of media items to use for the progress bar.
-	// It does make the entire process take longer. (was too stupid and lazy to redo
-	// the function below, to just use the items returned from it.)
-
 	d.progressBar = progressbar.NewOptions(-1,
 		progressbar.OptionSetWriter(os.Stderr),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionUseANSICodes(true),
-		//progressbar.OptionShowBytes(true),
 		progressbar.OptionSetPredictTime(true),
 		progressbar.OptionSetDescription("[green]Downloading[reset]"),
 		progressbar.OptionSetWidth(40),
@@ -195,9 +144,6 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 		progressbar.OptionSpinnerType(14),
 		progressbar.OptionFullWidth(),
 	)
-
-	//customLogWriter := logWriter{d: d}
-	//log.SetOutput(io.MultiWriter(os.Stderr, customLogWriter))
 
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, 10)
@@ -210,29 +156,20 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 			defer func() { <-semaphore }()
 
 			accountMediaItems, err := posts.GetPostMedia(post.ID, d.headers)
-			//log.Printf("Getting Media Items for Post: %v", post.ID)
 			if err != nil {
 				logger.Logger.Printf("[ERROR] [%s] Failed to fetch media for post %s: %v", modelName, post.ID, err)
-				//log.Printf("Error fetching media for post %s: %v", post.ID, err)
-				//if err.Error() == "rate limiter error: context canceled" {
-				// This error indicates that the context was canceled, possibly due to the user stopping the process
-				//    return
-				//}
-
 				return
 			}
 
-			for _, accountMedia := range accountMediaItems {
-				//log.Printf("[ACCOUNT MEDIA]: %v", accountMedia)
-				//log.Printf("Downloading media item %d/%d for post %d/%d: %v", j+1, len(accountMediaItems), i+1, totalItems, accountMedia.ID)
-				err = d.downloadMediaItem(ctx, accountMedia, baseDir, post, modelName)
-				//log.Printf("Downloading Media Item: %v", accountMedia.ID)
+			// Corrected loop: Call downloadMediaItem for each AccountMedia object.
+			// The index `i` is passed for filename generation.
+			for i, accountMedia := range accountMediaItems {
+				err = d.downloadMediaItem(ctx, accountMedia, baseDir, modelName, post, i)
 				if err != nil {
 					logger.Logger.Printf("[ERROR] [%s] Failed to download media item %s: %v", modelName, accountMedia.ID, err)
-					//log.Printf("Error downloading media item %s: %v", accountMedia.ID, err)
 					continue
 				}
-				d.progressBar.Add(1)
+				d.progressBar.Add(1) // Increment after processing one AccountMedia (main + preview)
 			}
 		}(post)
 	}
@@ -240,11 +177,10 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 	d.progressBar.Finish()
 	d.progressBar.Clear()
 	fmt.Print("\033[2K\r")
-	//wg.Wait()
 	return nil
 }
 
-func (d *Downloader) downloadMediaItem(ctx context.Context, accountMedia posts.AccountMedia, baseDir string, post posts.Post, modelName string) error {
+func (d *Downloader) downloadMediaItem(ctx context.Context, accountMedia posts.AccountMedia, baseDir, modelName string, contentSource any, index int) error {
 	hasValidLocations := func(item posts.MediaItem) bool {
 		if len(item.Locations) > 0 {
 			return true
@@ -257,25 +193,24 @@ func (d *Downloader) downloadMediaItem(ctx context.Context, accountMedia posts.A
 		return false
 	}
 
-	// Download main media if it has valid locations
 	if hasValidLocations(accountMedia.Media) {
-		err := d.downloadSingleItem(ctx, accountMedia.Media, baseDir, post.ID, modelName, false)
+		// Use `contentSource` which can be a post, message, or anything else
+		err := d.downloadSingleItem(ctx, accountMedia.Media, baseDir, modelName, false, contentSource, index)
 		if err != nil {
 			logger.Logger.Printf("[ERROR] [%s] Failed to download main media item %s: %v", modelName, accountMedia.ID, err)
 			return fmt.Errorf("error downloading main media: %v", err)
 		}
 	}
 
-	// Check if there's a preview with valid locations and download it
 	if !d.cfg.Options.SkipPreviews && accountMedia.Preview != nil && hasValidLocations(*accountMedia.Preview) {
-		err := d.downloadSingleItem(ctx, *accountMedia.Preview, baseDir, post.ID, modelName, true)
+		// Use `contentSource` here as well
+		err := d.downloadSingleItem(ctx, *accountMedia.Preview, baseDir, modelName, true, contentSource, index)
 		if err != nil {
 			logger.Logger.Printf("[ERROR] [%s] Failed to download preview item for media item %s : %v", modelName, accountMedia.ID, err)
 			return fmt.Errorf("error downloading preview: %v", err)
 		}
 	}
 
-	// If neither main media nor preview has valid locations, log a warning
 	if !hasValidLocations(accountMedia.Media) && (accountMedia.Preview == nil || !hasValidLocations(*accountMedia.Preview)) {
 		d.progressBar.Describe(fmt.Sprintf("[yellow]No valid media or preview locations[reset] for item %s", accountMedia.ID))
 	}
@@ -283,7 +218,72 @@ func (d *Downloader) downloadMediaItem(ctx context.Context, accountMedia posts.A
 	return nil
 }
 
-func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaItem, baseDir string, identifier string, modelName string, isPreview bool) error {
+func (d *Downloader) generateFilename(bestMedia posts.MediaItem, contentSource any, index int, isPreview bool, ext string) string {
+	var date int64
+	var textContent string
+	var sourceID string
+
+	if contentSource != nil {
+		switch v := contentSource.(type) {
+		case posts.Post:
+			textContent = v.Content
+			date = v.CreatedAt
+			sourceID = v.ID
+		case posts.Message:
+			textContent = v.Content
+			date = v.CreatedAt
+			sourceID = v.ID
+		}
+	}
+
+	// Use content-based filename if enabled and content is available
+	if d.cfg.Options.UseContentAsFilename && textContent != "" {
+		dateStr := time.Unix(date, 0).Format("20060102")
+
+		// Sanitize and truncate content
+		cleanContent := strings.ReplaceAll(textContent, "\n", " ")
+		runes := []rune(cleanContent)
+		if len(runes) > 50 {
+			runes = runes[:50]
+		}
+		cleanContent = string(runes)
+
+		template := d.cfg.Options.ContentFilenameTemplate
+		if template == "" {
+			template = "{date}-{content}_{index}"
+		}
+
+		r := strings.NewReplacer(
+			"{date}", dateStr,
+			"{content}", cleanContent,
+			"{index}", fmt.Sprintf("%d", index),
+			"{postId}", sourceID,
+			"{mediaId}", bestMedia.ID,
+		)
+		baseName := r.Replace(template)
+
+		suffix := ""
+		if isPreview {
+			suffix = "_preview"
+		}
+		// Use the new robust SanitizeFilename function
+		return config.SanitizeFilename(baseName) + suffix + ext
+	}
+
+	// Fallback to old ID-based method
+	identifier := sourceID
+	if identifier == "" {
+		identifier = bestMedia.ID // Ultimate fallback
+	}
+
+	suffix := ""
+	if isPreview {
+		suffix = "_preview"
+	}
+	return fmt.Sprintf("%s_%s%s%s", identifier, bestMedia.ID, suffix, ext)
+}
+
+func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaItem, baseDir string, modelName string, isPreview bool, contentSource any, index int) error {
 	var mediaItems = []posts.MediaItem{}
 
 	getMediaType := func(mimetype string) string {
@@ -333,12 +333,10 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 		return nil
 	}
 
-	// Sort by quality (highest first)
 	sort.Slice(mediaItems, func(i, j int) bool {
 		return mediaItems[j].Height < mediaItems[i].Height
 	})
 
-	//Only take the highest quality item
 	bestMedia := mediaItems[0]
 
 	var fileType string
@@ -363,11 +361,6 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 		return fmt.Errorf("unknown media type: %s", item.Mimetype)
 	}
 
-	suffix := ""
-	if isPreview {
-		suffix = "_preview"
-	}
-
 	mediaUrl := bestMedia.Locations[0].Location
 	parsedURL, err := url.Parse(mediaUrl)
 	if err != nil {
@@ -381,7 +374,8 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 		ext = ".mp4"
 	}
 
-	fileName := fmt.Sprintf("%s_%s%s%s", identifier, bestMedia.ID, suffix, ext)
+	// Generate filename using the new centralized function
+	fileName := d.generateFilename(bestMedia, contentSource, index, isPreview, ext)
 	filePath := filepath.Join(baseDir, subDir, fileName)
 
 	if d.fileExists(filePath) {
@@ -393,7 +387,6 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 		}
 	}
 
-	// Check if the file actually exists on the filesystem
 	if _, err := os.Stat(filePath); err == nil {
 		d.progressBar.Describe(fmt.Sprintf("[yellow]No DB Record[reset], Adding %s", fileName))
 		hashString, err := d.hashExistingFile(filePath)
@@ -414,13 +407,19 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 	if bestMedia.Mimetype == "application/vnd.apple.mpegurl" && d.ffmpegAvailable {
 		fullUrl := mediaUrl
 		metadata := bestMedia.Locations[0].Metadata
+		var sourceID string
+		if p, ok := contentSource.(posts.Post); ok {
+			sourceID = p.ID
+		} else if m, ok := contentSource.(posts.Message); ok {
+			sourceID = m.ID
+		}
 		if metadata != nil {
 			fullUrl += fmt.Sprintf("?ngsw-bypass=true&Policy=%s&Key-Pair-Id=%s&Signature=%s",
 				url.QueryEscape(metadata["Policy"]),
 				url.QueryEscape(metadata["Key-Pair-Id"]),
 				url.QueryEscape(metadata["Signature"]))
 		}
-		return d.DownloadM3U8(ctx, modelName, fullUrl, filePath, identifier)
+		return d.DownloadM3U8(ctx, modelName, fullUrl, filePath, sourceID)
 	}
 
 	return d.downloadRegularFile(mediaUrl, filePath, modelName, fileType)
@@ -469,7 +468,6 @@ func (d *Downloader) downloadWithRetry(url string) (*http.Response, error) {
 }
 
 func (d *Downloader) downloadRegularFile(url, filePath string, modelName string, fileType string) error {
-	//log.Printf("[Download URL] URL: %v", url)
 	if err := d.limiter.Wait(context.Background()); err != nil {
 		return fmt.Errorf("rate limiter wait error: %v", err)
 	}
@@ -486,7 +484,6 @@ func (d *Downloader) downloadRegularFile(url, filePath string, modelName string,
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionUseANSICodes(true),
 		progressbar.OptionShowBytes(true),
-		//progressbar.OptionSetPredictTime(true),
 		progressbar.OptionSetDescription(fmt.Sprintf("[green]Downloading[reset] %s (%s)",
 			filepath.Base(filePath),
 			humanize.Bytes(uint64(resp.ContentLength)))),
@@ -514,19 +511,6 @@ func (d *Downloader) downloadRegularFile(url, filePath string, modelName string,
 	return d.saveFileHash(modelName, hashString, filePath, fileType)
 }
 
-/*
-func (d *Downloader) fileExists(filePath string) bool {
-	var count int
-	err := d.db.QueryRow("SELECT COUNT(*) FROM files WHERE path = ?", filePath).Scan(&count)
-	if err != nil {
-		logger.Logger.Printf("[ERROR] Failed checking if file exists in DB: %v", err)
-		//log.Printf("Error checking if file exists in DB: %v", err)
-		return false
-	}
-	return count > 0
-}
-*/
-
 func (d *Downloader) hashExistingFile(filePath string) (string, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -541,13 +525,6 @@ func (d *Downloader) hashExistingFile(filePath string) (string, error) {
 
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
-
-/*
-func (d *Downloader) saveFileHash(modelName string, hash, path, fileType string) error {
-	_, err := d.db.Exec("INSERT OR REPLACE INTO files (model, hash, path, file_type) VALUES (?, ?, ?, ?)", modelName, hash, path, fileType)
-	return err
-}
-*/
 
 func (d *Downloader) Close() error {
 	return d.db.Close()

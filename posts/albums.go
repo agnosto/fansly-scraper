@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"time"
+
 	"github.com/agnosto/fansly-scraper/headers"
 	"github.com/agnosto/fansly-scraper/logger"
 	"golang.org/x/time/rate"
-	"net/http"
-	"time"
 )
 
 type Album struct {
@@ -49,11 +50,12 @@ type AlbumContentResponse struct {
 	} `json:"response"`
 }
 
-func FetchPurchasedAlbums(fanslyHeaders *headers.FanslyHeaders) (string, error) {
+// FetchPurchasedAlbums now returns the full Album object.
+func FetchPurchasedAlbums(fanslyHeaders *headers.FanslyHeaders) (*Album, error) {
 	url := "https://apiv3.fansly.com/api/v1/uservault/albumsnew?accountId&ngsw-bypass=true"
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	fanslyHeaders.AddHeadersToRequest(req, true)
@@ -61,23 +63,23 @@ func FetchPurchasedAlbums(fanslyHeaders *headers.FanslyHeaders) (string, error) 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var albumsResp AlbumsResponse
 	err = json.NewDecoder(resp.Body).Decode(&albumsResp)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	for _, album := range albumsResp.Response.Albums {
 		if album.Type == 2007 { // 2007 is the type for purchases
-			return album.ID, nil
+			return &album, nil
 		}
 	}
 
-	return "", fmt.Errorf("no purchases album found")
+	return nil, fmt.Errorf("no purchases album found")
 }
 
 func FetchAlbumContent(albumID string, fanslyHeaders *headers.FanslyHeaders) (*AlbumContentResponse, error) {
@@ -104,10 +106,11 @@ func FetchAlbumContent(albumID string, fanslyHeaders *headers.FanslyHeaders) (*A
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close()
+		// No defer resp.Body.Close() inside the loop
 
 		var contentResp AlbumContentResponse
 		err = json.NewDecoder(resp.Body).Decode(&contentResp)
+		resp.Body.Close() // Close body after decoding
 		if err != nil {
 			return nil, err
 		}
@@ -122,19 +125,8 @@ func FetchAlbumContent(albumID string, fanslyHeaders *headers.FanslyHeaders) (*A
 		}
 	}
 
-	logger.Logger.Printf("Fetched allcontent for purchased album. AlbumContent count: %d, AccountMedia count: %d",
-		len(allContent.Response.AlbumContent),
-		len(allContent.Response.AggregationData.AccountMedia))
+	logger.Logger.Printf("Fetched %d purchased media items.", len(allContent.Response.AggregationData.AccountMedia))
 
-	if len(allContent.Response.AlbumContent) > 0 {
-		logger.Logger.Printf("Sample AlbumContent: %+v", allContent.Response.AlbumContent[0])
-	}
-
-	if len(allContent.Response.AggregationData.AccountMedia) > 0 {
-		logger.Logger.Printf("Sample AccountMedia: %+v", allContent.Response.AggregationData.AccountMedia[0])
-	}
-
-	logger.Logger.Printf("Fetched allcontent for purchased album %v", allContent)
 	return &allContent, nil
 }
 
@@ -168,9 +160,8 @@ func FetchAccountInfo(accountID string, fanslyHeaders *headers.FanslyHeaders) (s
 	}
 
 	if len(accountResp.Response) > 0 {
-		logger.Logger.Printf("Fetched username %s with accountId %s", accountResp.Response[0].Username, accountID)
 		return accountResp.Response[0].Username, nil
 	}
 
-	return "", nil
+	return "", fmt.Errorf("no account found for ID %s", accountID)
 }

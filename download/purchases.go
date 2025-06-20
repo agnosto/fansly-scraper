@@ -3,14 +3,15 @@ package download
 import (
 	"context"
 	"fmt"
-	"github.com/agnosto/fansly-scraper/logger"
-	"github.com/agnosto/fansly-scraper/posts"
-	"github.com/schollz/progressbar/v3"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/agnosto/fansly-scraper/logger"
+	"github.com/agnosto/fansly-scraper/posts"
+	"github.com/schollz/progressbar/v3"
 )
 
 type AccountInfo struct {
@@ -19,23 +20,28 @@ type AccountInfo struct {
 }
 
 func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
-	albumID, err := posts.FetchPurchasedAlbums(d.headers)
+	purchasedAlbum, err := posts.FetchPurchasedAlbums(d.headers)
 	if err != nil {
 		return fmt.Errorf("failed to fetch purchased albums: %v", err)
 	}
-	logger.Logger.Printf("Purchases Album ID: %s", albumID)
+	albumID := purchasedAlbum.ID
+	logger.Logger.Printf("Purchases Album ID: %s, Title: %s", albumID, purchasedAlbum.Title)
 
 	content, err := posts.FetchAlbumContent(albumID, d.headers)
 	if err != nil {
 		return fmt.Errorf("error fetching content for album %s: %v", albumID, err)
 	}
-	logger.Logger.Printf("Fetched content for album %s", albumID)
-	logger.Logger.Printf("Number of AlbumContent items: %d", len(content.Response.AlbumContent))
-	logger.Logger.Printf("Number of AccountMedia items: %d", len(content.Response.AggregationData.AccountMedia))
 
 	accountMediaItems := content.Response.AggregationData.AccountMedia
 	if len(accountMediaItems) == 0 {
-		return fmt.Errorf("no AccountMedia found for album %s", albumID)
+		logger.Logger.Printf("[INFO] No purchased media found to download.")
+		return nil
+	}
+
+	// Create a map from media ID to album content for easy lookup of CreatedAt
+	albumContentMap := make(map[string]posts.AlbumContent)
+	for _, ac := range content.Response.AlbumContent {
+		albumContentMap[ac.MediaId] = ac
 	}
 
 	// Create a map to store account info
@@ -53,19 +59,26 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 	}
 
 	// Fetch usernames for each unique account ID
+	var wg sync.WaitGroup
 	for accountID := range accountInfoMap {
-		username, err := posts.FetchAccountInfo(accountID, d.headers)
-		if err != nil || username == "" {
-			logger.Logger.Printf("Error fetching account info for %s or username is empty: %v", accountID, err)
-			username = accountID // Use AccountId as fallback
-		}
-		accountInfoMap[accountID].Username = username
+		wg.Add(1)
+		go func(accID string) {
+			defer wg.Done()
+			username, err := posts.FetchAccountInfo(accID, d.headers)
+			if err != nil || username == "" {
+				logger.Logger.Printf("Error fetching account info for %s or username is empty: %v", accID, err)
+				username = accID // Use AccountId as fallback
+			}
+			accountInfoMutex.Lock()
+			accountInfoMap[accID].Username = username
+			accountInfoMutex.Unlock()
+		}(accountID)
 	}
+	wg.Wait()
 
 	mediaBar := progressbar.NewOptions(len(accountMediaItems),
 		progressbar.OptionSetWriter(os.Stderr),
 		progressbar.OptionEnableColorCodes(true),
-		//progressbar.OptionShowBytes(false),
 		progressbar.OptionSetWidth(40),
 		progressbar.OptionSetDescription("[cyan]Downloading Purchased Content[reset]"),
 		progressbar.OptionSetTheme(progressbar.Theme{
@@ -80,6 +93,7 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 		progressbar.OptionShowCount(),
 	)
 
+	// This is the corrected loop
 	for accountID, accountInfo := range accountInfoMap {
 		var baseDir string
 		if accountInfo.Username == accountID {
@@ -88,21 +102,26 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 			baseDir = filepath.Join(d.saveLocation, strings.ToLower(accountInfo.Username), "purchases")
 		}
 
-		// Create subdirectories for images and videos
 		for _, subDir := range []string{"images", "videos", "audios"} {
-			err = os.MkdirAll(filepath.Join(baseDir, subDir), os.ModePerm)
-			if err != nil {
+			if err := os.MkdirAll(filepath.Join(baseDir, subDir), os.ModePerm); err != nil {
 				logger.Logger.Printf("Error creating directory %s: %v", filepath.Join(baseDir, subDir), err)
 				continue
 			}
 		}
 
-		for _, media := range accountInfo.Media {
-			err = d.downloadMediaItem(ctx, media, baseDir, posts.Post{ID: albumID}, accountInfo.Username)
+		for i, media := range accountInfo.Media {
+			postData := posts.Post{
+				ID:      media.ID,
+				Content: purchasedAlbum.Title,
+			}
+			if ac, ok := albumContentMap[media.ID]; ok {
+				postData.CreatedAt = ac.CreatedAt
+			}
+
+			// Corrected call to the restored downloadMediaItem function
+			err = d.downloadMediaItem(ctx, media, baseDir, accountInfo.Username, postData, i)
 			if err != nil {
 				logger.Logger.Printf("Error downloading media item %s: %v", media.ID, err)
-			} else {
-				logger.Logger.Printf("Successfully downloaded media item %s to %s", media.ID, baseDir)
 			}
 			mediaBar.Add(1)
 		}

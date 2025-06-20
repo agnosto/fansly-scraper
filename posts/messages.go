@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	//"strings"
 	"time"
 
 	"github.com/agnosto/fansly-scraper/headers"
@@ -27,6 +26,12 @@ type Message struct {
 		ContentType int    `json:"contentType"`
 		ContentID   string `json:"contentId"`
 	} `json:"attachments"`
+}
+
+// New struct to hold a message and its media
+type MessageWithMedia struct {
+	Message Message
+	Media   []AccountMedia
 }
 
 type MessageResponse struct {
@@ -100,13 +105,13 @@ func GetMessageGroupID(modelID string, fanslyHeaders *headers.FanslyHeaders) (st
 	return "", fmt.Errorf("no group found for model ID: %s", modelID)
 }
 
-func GetAllMessageMedia(modelID string, fanslyHeaders *headers.FanslyHeaders) ([]AccountMedia, error) {
+func GetAllMessagesWithMedia(modelID string, fanslyHeaders *headers.FanslyHeaders) ([]MessageWithMedia, error) {
 	groupID, err := GetMessageGroupID(modelID, fanslyHeaders)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get group ID: %v", err)
 	}
 
-	var allMedia []AccountMedia
+	var allMessagesWithMedia []MessageWithMedia
 	msgCursor := "0"
 	bar := progressbar.NewOptions(-1,
 		progressbar.OptionSetDescription("Fetching Messages"),
@@ -117,25 +122,25 @@ func GetAllMessageMedia(modelID string, fanslyHeaders *headers.FanslyHeaders) ([
 		progressbar.OptionSpinnerType(14),
 		progressbar.OptionFullWidth(),
 	)
+	defer bar.Finish()
 
 	for {
-		media, nextCursor, err := getMessageMediaBatch(groupID, msgCursor, fanslyHeaders)
+		batch, nextCursor, err := getMessageBatchWithMedia(groupID, msgCursor, fanslyHeaders)
 		if err != nil {
 			return nil, err
 		}
-		allMedia = append(allMedia, media...)
+		allMessagesWithMedia = append(allMessagesWithMedia, batch...)
+		bar.Add(len(batch))
 		if nextCursor == "" {
 			break
 		}
 		msgCursor = nextCursor
-		bar.Add(len(media))
 	}
 
-	bar.Finish()
-	return allMedia, nil
+	return allMessagesWithMedia, nil
 }
 
-func getMessageMediaBatch(groupID, cursor string, fanslyHeaders *headers.FanslyHeaders) ([]AccountMedia, string, error) {
+func getMessageBatchWithMedia(groupID, cursor string, fanslyHeaders *headers.FanslyHeaders) ([]MessageWithMedia, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -181,57 +186,69 @@ func getMessageMediaBatch(groupID, cursor string, fanslyHeaders *headers.FanslyH
 		bundleMap[bundle.ID] = bundle
 	}
 
-	allMediaIDs := make(map[string]struct{})
+	var messagesWithMedia []MessageWithMedia
+
 	for _, msg := range msgResp.Response.Messages {
+		mediaIDsForThisMessage := make(map[string]struct{})
 		for _, attachment := range msg.Attachments {
-			if attachment.ContentType == 1 {
-				allMediaIDs[attachment.ContentID] = struct{}{}
-			} else if attachment.ContentType == 2 {
+			if attachment.ContentType == 1 { // Single media
+				mediaIDsForThisMessage[attachment.ContentID] = struct{}{}
+			} else if attachment.ContentType == 2 { // Bundle
 				if bundle, ok := bundleMap[attachment.ContentID]; ok {
 					for _, mediaID := range bundle.AccountMediaIDs {
-						allMediaIDs[mediaID] = struct{}{}
+						mediaIDsForThisMessage[mediaID] = struct{}{}
 					}
 				}
 			}
 		}
-	}
 
-	var finalMediaItems []AccountMedia
-	var mediaToFetch []string
-	processedIDs := make(map[string]bool)
-
-	for id := range allMediaIDs {
-		if media, ok := mediaMap[id]; ok {
-			if !processedIDs[id] {
-				finalMediaItems = append(finalMediaItems, media)
-				processedIDs[id] = true
-			}
-		} else {
-			mediaToFetch = append(mediaToFetch, id)
+		if len(mediaIDsForThisMessage) == 0 {
+			continue // Skip messages with no media
 		}
-	}
 
-	if len(mediaToFetch) > 0 {
-		fetchedMedia, err := GetMediaByIDs(ctx, mediaToFetch, fanslyHeaders)
-		if err != nil {
-			logger.Logger.Printf("[WARN] Failed to fetch some bundled media items: %v", err)
-		} else {
-			for _, media := range fetchedMedia {
-				if !processedIDs[media.ID] {
+		var finalMediaItems []AccountMedia
+		var mediaToFetch []string
+		processedIDs := make(map[string]bool)
+
+		for id := range mediaIDsForThisMessage {
+			if media, ok := mediaMap[id]; ok {
+				if !processedIDs[id] {
 					finalMediaItems = append(finalMediaItems, media)
-					processedIDs[media.ID] = true
+					processedIDs[id] = true
+				}
+			} else {
+				mediaToFetch = append(mediaToFetch, id)
+			}
+		}
+
+		if len(mediaToFetch) > 0 {
+			fetchedMedia, err := GetMediaByIDs(ctx, mediaToFetch, fanslyHeaders)
+			if err != nil {
+				logger.Logger.Printf("[WARN] Failed to fetch some bundled media items for message %s: %v", msg.ID, err)
+			} else {
+				for _, media := range fetchedMedia {
+					if !processedIDs[media.ID] {
+						finalMediaItems = append(finalMediaItems, media)
+						processedIDs[media.ID] = true
+					}
 				}
 			}
 		}
-	}
 
-	filteredMedia := filterMediaWithLocations(finalMediaItems)
+		filteredMedia := filterMediaWithLocations(finalMediaItems)
+		if len(filteredMedia) > 0 {
+			messagesWithMedia = append(messagesWithMedia, MessageWithMedia{
+				Message: msg,
+				Media:   filteredMedia,
+			})
+		}
+	}
 
 	var nextCursor string
 	if len(msgResp.Response.Messages) > 0 {
 		nextCursor = msgResp.Response.Messages[len(msgResp.Response.Messages)-1].ID
 	}
 
-	logger.Logger.Printf("[INFO] Retrieved %d media items for message batch", len(filteredMedia))
-	return filteredMedia, nextCursor, nil
+	logger.Logger.Printf("[INFO] Retrieved %d messages with media in batch", len(messagesWithMedia))
+	return messagesWithMedia, nextCursor, nil
 }

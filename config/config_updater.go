@@ -93,15 +93,25 @@ func EnsureConfigUpdated(configPath string) error {
 			isUpdated = true
 		}
 
-		// Check if SkipPreviews field exists in the raw TOML
+		// Check if new fields exist in the raw TOML
 		if optionsMap, ok := rawConfig["options"].(map[string]any); ok {
 			if _, exists := optionsMap["skip_previews"]; !exists {
 				cfg.Options.SkipPreviews = defaultConfig.Options.SkipPreviews
 				isUpdated = true
 			}
+			if _, exists := optionsMap["use_content_as_filename"]; !exists {
+				cfg.Options.UseContentAsFilename = defaultConfig.Options.UseContentAsFilename
+				isUpdated = true
+			}
+			if _, exists := optionsMap["content_filename_template"]; !exists {
+				cfg.Options.ContentFilenameTemplate = defaultConfig.Options.ContentFilenameTemplate
+				isUpdated = true
+			}
 		} else {
-			// If options section doesn't exist at all, add the field
+			// If options section doesn't exist at all, add the fields
 			cfg.Options.SkipPreviews = defaultConfig.Options.SkipPreviews
+			cfg.Options.UseContentAsFilename = defaultConfig.Options.UseContentAsFilename
+			cfg.Options.ContentFilenameTemplate = defaultConfig.Options.ContentFilenameTemplate
 			isUpdated = true
 		}
 	}
@@ -189,6 +199,12 @@ func MergeConfigs(existing, new *Config) *Config {
 	result.Options.CheckUpdates = new.Options.CheckUpdates
 	result.Options.M3U8Download = new.Options.M3U8Download
 	result.Options.SkipPreviews = new.Options.SkipPreviews
+	result.Options.UseContentAsFilename = new.Options.UseContentAsFilename
+	if new.Options.ContentFilenameTemplate != "" {
+		result.Options.ContentFilenameTemplate = new.Options.ContentFilenameTemplate
+	} else if result.Options.ContentFilenameTemplate == "" {
+		result.Options.ContentFilenameTemplate = defaultConfig.Options.ContentFilenameTemplate
+	}
 
 	// Merge LiveSettings
 	result.LiveSettings = existing.LiveSettings

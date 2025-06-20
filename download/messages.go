@@ -2,7 +2,7 @@ package download
 
 import (
 	"context"
-	"fmt"
+	//"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,10 +18,20 @@ func (d *Downloader) DownloadMessages(ctx context.Context, modelId, modelName st
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	messageMediaItems, err := posts.GetAllMessageMedia(modelId, d.headers)
+	messagesWithMedia, err := posts.GetAllMessagesWithMedia(modelId, d.headers)
 	if err != nil {
 		logger.Logger.Printf("[ERROR] [%s] Failed to get message media: %v", modelName, err)
 		return err
+	}
+
+	totalMediaItems := 0
+	for _, msg := range messagesWithMedia {
+		totalMediaItems += len(msg.Media)
+	}
+
+	if totalMediaItems == 0 {
+		logger.Logger.Printf("[INFO] [%s] No new message media to download.", modelName)
+		return nil
 	}
 
 	baseDir := filepath.Join(d.saveLocation, strings.ToLower(modelName), "messages")
@@ -31,7 +41,7 @@ func (d *Downloader) DownloadMessages(ctx context.Context, modelId, modelName st
 		}
 	}
 
-	d.progressBar = progressbar.NewOptions(len(messageMediaItems),
+	d.progressBar = progressbar.NewOptions(totalMediaItems,
 		progressbar.OptionSetWriter(os.Stderr),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionUseANSICodes(true),
@@ -48,41 +58,26 @@ func (d *Downloader) DownloadMessages(ctx context.Context, modelId, modelName st
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, 10)
 
-	for _, mediaItem := range messageMediaItems {
-		wg.Add(1)
-		go func(media posts.AccountMedia) {
-			defer wg.Done()
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
+	for _, msgWithMedia := range messagesWithMedia {
+		// The index `i` is for each media item within a single message.
+		for i, mediaItem := range msgWithMedia.Media {
+			wg.Add(1)
+			go func(media posts.AccountMedia, message posts.Message, index int) {
+				defer wg.Done()
+				semaphore <- struct{}{}
+				defer func() { <-semaphore }()
 
-			err := d.downloadMessageMediaItem(ctx, media, baseDir, modelName)
-			if err != nil {
-				logger.Logger.Printf("[ERROR] [%s] Failed to download message media item %s: %v", modelName, media.ID, err)
-			}
-			d.progressBar.Add(1)
-		}(mediaItem)
+				err := d.downloadMediaItem(ctx, media, baseDir, modelName, message, index)
+				if err != nil {
+					logger.Logger.Printf("[ERROR] [%s] Failed to download message media item %s: %v", modelName, media.ID, err)
+				}
+				d.progressBar.Add(1)
+			}(mediaItem, msgWithMedia.Message, i)
+		}
 	}
 
 	wg.Wait()
 	d.progressBar.Clear()
-
-	return nil
-}
-
-func (d *Downloader) downloadMessageMediaItem(ctx context.Context, accountMedia posts.AccountMedia, baseDir, modelName string) error {
-	// Download main media
-	err := d.downloadSingleItem(ctx, accountMedia.Media, baseDir, accountMedia.ID, modelName, false)
-	if err != nil {
-		return fmt.Errorf("error downloading main media: %v", err)
-	}
-
-	// Download preview if it exists
-	if !d.cfg.Options.SkipPreviews && accountMedia.Preview != nil {
-		err = d.downloadSingleItem(ctx, *accountMedia.Preview, baseDir, accountMedia.ID, modelName, true)
-		if err != nil {
-			return fmt.Errorf("error downloading preview: %v", err)
-		}
-	}
 
 	return nil
 }

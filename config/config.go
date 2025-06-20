@@ -6,12 +6,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
 )
+
+var unsafeChars = regexp.MustCompile(`[^\w\s-._]`)
 
 type Config struct {
 	Account         AccountConfig         `toml:"account"`
@@ -38,10 +41,12 @@ type AccountConfig struct {
 }
 
 type OptionsConfig struct {
-	SaveLocation string `toml:"save_location"`
-	M3U8Download bool   `toml:"m3u8_dl"`
-	CheckUpdates bool   `toml:"check_updates"`
-	SkipPreviews bool   `toml:"skip_previews"`
+	SaveLocation            string `toml:"save_location"`
+	M3U8Download            bool   `toml:"m3u8_dl"`
+	CheckUpdates            bool   `toml:"check_updates"`
+	SkipPreviews            bool   `toml:"skip_previews"`
+	UseContentAsFilename    bool   `toml:"use_content_as_filename"`
+	ContentFilenameTemplate string `toml:"content_filename_template"`
 }
 
 type NotificationsConfig struct {
@@ -166,10 +171,12 @@ func CreateDefaultConfig() *Config {
 			UserAgent: "",
 		},
 		Options: OptionsConfig{
-			SaveLocation: "/path/to/save/content/to",
-			M3U8Download: false,
-			CheckUpdates: false,
-			SkipPreviews: true,
+			SaveLocation:            "/path/to/save/content/to",
+			M3U8Download:            false,
+			CheckUpdates:            false,
+			SkipPreviews:            true,
+			UseContentAsFilename:    false,
+			ContentFilenameTemplate: "{date}-{content}_{index}",
 		},
 		LiveSettings: LiveSettingsConfig{
 			SaveLocation:         "", // Empty means use default path
@@ -231,11 +238,19 @@ func OpenConfigInEditor(configPath string) error {
 
 func SanitizeFilename(filename string) string {
 	filename = strings.ReplaceAll(filename, " ", "_")
+
+	filename = unsafeChars.ReplaceAllString(filename, "")
+
 	filename = strings.ReplaceAll(filename, ":", "-")
 	problematicChars := []string{"/", "\\", "?", "%", "*", "|", "\"", "<", ">"}
 	for _, char := range problematicChars {
 		filename = strings.ReplaceAll(filename, char, "_")
 	}
+
+	if filename == "" {
+		return "empty_content"
+	}
+
 	return filename
 }
 
