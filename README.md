@@ -49,7 +49,7 @@ The program will create a [config](./config.md#location) file for you to edit on
 ./fansly-scraper monitor [start|stop]
 ```
 
-**Note**: Live monitoring requires keeping your terminal/shell session active. Consider using [tmux](https://github.com/tmux/tmux/wiki) or [zellij](https://github.com/zellij-org/zellij) on linux/wsl to run it in the background.
+**Note**: Live monitoring requires keeping your terminal session active. To run monitoring in the background, consider using terminal multiplexers like [tmux](https://github.com/tmux/tmux/wiki) or [zellij](https://github.com/zellij-org/zellij) on Linux/WSL. Starting from v0.6.3, you can monitor additional creators by running `-m creator` in separate terminal instances without restarting the existing monitor process.
 
 ### Update the Program
 ```bash
