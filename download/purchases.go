@@ -15,6 +15,7 @@ import (
 )
 
 type AccountInfo struct {
+	ID       string
 	Username string
 	Media    []posts.AccountMedia
 }
@@ -22,7 +23,9 @@ type AccountInfo struct {
 func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 	purchasedAlbum, err := posts.FetchPurchasedAlbums(d.headers)
 	if err != nil {
-		return fmt.Errorf("failed to fetch purchased albums: %v", err)
+		// If there's no purchased album, it's not a fatal error, just means nothing to do.
+		logger.Logger.Printf("[INFO] Could not find a 'Purchases' album or an error occurred: %v", err)
+		return nil
 	}
 	albumID := purchasedAlbum.ID
 	logger.Logger.Printf("Purchases Album ID: %s, Title: %s", albumID, purchasedAlbum.Title)
@@ -38,27 +41,26 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 		return nil
 	}
 
-	// Create a map from media ID to album content for easy lookup of CreatedAt
 	albumContentMap := make(map[string]posts.AlbumContent)
 	for _, ac := range content.Response.AlbumContent {
 		albumContentMap[ac.MediaId] = ac
 	}
 
-	// Create a map to store account info
 	accountInfoMap := make(map[string]*AccountInfo)
 	var accountInfoMutex sync.Mutex
 
-	// Group media by account ID
 	for _, media := range accountMediaItems {
 		accountInfoMutex.Lock()
 		if _, exists := accountInfoMap[media.AccountId]; !exists {
-			accountInfoMap[media.AccountId] = &AccountInfo{Media: []posts.AccountMedia{}}
+			accountInfoMap[media.AccountId] = &AccountInfo{
+				ID:    media.AccountId,
+				Media: []posts.AccountMedia{},
+			}
 		}
 		accountInfoMap[media.AccountId].Media = append(accountInfoMap[media.AccountId].Media, media)
 		accountInfoMutex.Unlock()
 	}
 
-	// Fetch usernames for each unique account ID
 	var wg sync.WaitGroup
 	for accountID := range accountInfoMap {
 		wg.Add(1)
@@ -66,8 +68,8 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 			defer wg.Done()
 			username, err := posts.FetchAccountInfo(accID, d.headers)
 			if err != nil || username == "" {
-				logger.Logger.Printf("Error fetching account info for %s or username is empty: %v", accID, err)
-				username = accID // Use AccountId as fallback
+				logger.Logger.Printf("Error fetching account info for %s or username is empty: %v. Using Account ID as fallback.", accID, err)
+				username = accID // Fallback
 			}
 			accountInfoMutex.Lock()
 			accountInfoMap[accID].Username = username
@@ -93,13 +95,14 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 		progressbar.OptionShowCount(),
 	)
 
-	// This is the corrected loop
-	for accountID, accountInfo := range accountInfoMap {
-		var baseDir string
-		if accountInfo.Username == accountID {
-			baseDir = filepath.Join(d.saveLocation, accountID, "purchases")
+	for _, accountInfo := range accountInfoMap {
+		var baseDir, modelNameForFile string
+		if accountInfo.Username == accountInfo.ID {
+			baseDir = filepath.Join(d.saveLocation, accountInfo.ID, "purchases")
+			modelNameForFile = accountInfo.ID
 		} else {
 			baseDir = filepath.Join(d.saveLocation, strings.ToLower(accountInfo.Username), "purchases")
+			modelNameForFile = accountInfo.Username
 		}
 
 		for _, subDir := range []string{"images", "videos", "audios"} {
@@ -111,19 +114,17 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 
 		for i, media := range accountInfo.Media {
 			postData := posts.Post{
-				ID:      media.ID,
+				ID:      albumID,
 				Content: purchasedAlbum.Title,
 			}
 			if ac, ok := albumContentMap[media.ID]; ok {
 				postData.CreatedAt = ac.CreatedAt
 			}
 
-			// Corrected call to the restored downloadMediaItem function
-			err = d.downloadMediaItem(ctx, media, baseDir, accountInfo.Username, postData, i)
+			err = d.downloadMediaItem(ctx, media, baseDir, modelNameForFile, postData, i)
 			if err != nil {
 				logger.Logger.Printf("Error downloading media item %s: %v", media.ID, err)
 			}
-			mediaBar.Add(1)
 		}
 	}
 

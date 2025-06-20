@@ -218,10 +218,29 @@ func (d *Downloader) downloadMediaItem(ctx context.Context, accountMedia posts.A
 	return nil
 }
 
-func (d *Downloader) generateFilename(bestMedia posts.MediaItem, contentSource any, index int, isPreview bool, ext string) string {
+func (d *Downloader) generateFilename(bestMedia posts.MediaItem, modelName string, contentSource any, index int, isPreview bool, ext string) string {
+	if !d.cfg.Options.UseContentAsFilename {
+		var sourceID string
+		if p, ok := contentSource.(posts.Post); ok {
+			sourceID = p.ID
+		} else if m, ok := contentSource.(posts.Message); ok {
+			sourceID = m.ID
+		} else {
+			sourceID = bestMedia.ID
+		}
+
+		suffix := ""
+		if isPreview {
+			suffix = "_preview"
+		}
+		// Fallback to old ID-based method: {postId}_{mediaId}
+		return fmt.Sprintf("%s_%s%s%s", sourceID, bestMedia.ID, suffix, ext)
+	}
+
 	var date int64
 	var textContent string
 	var sourceID string
+	var hasTextContent bool
 
 	if contentSource != nil {
 		switch v := contentSource.(type) {
@@ -236,11 +255,15 @@ func (d *Downloader) generateFilename(bestMedia posts.MediaItem, contentSource a
 		}
 	}
 
-	// Use content-based filename if enabled and content is available
-	if d.cfg.Options.UseContentAsFilename && textContent != "" {
-		dateStr := time.Unix(date, 0).Format("20060102")
+	// Check if the extracted text content is meaningful
+	if textContent != "" && textContent != "Purchases" {
+		hasTextContent = true
+	}
 
-		// Sanitize and truncate content
+	var baseName string
+	if hasTextContent {
+		// Use the user-defined template for posts/messages with content
+		dateStr := time.Unix(date, 0).Format("20060102")
 		cleanContent := strings.ReplaceAll(textContent, "\n", " ")
 		runes := []rune(cleanContent)
 		if len(runes) > 50 {
@@ -259,31 +282,30 @@ func (d *Downloader) generateFilename(bestMedia posts.MediaItem, contentSource a
 			"{index}", fmt.Sprintf("%d", index),
 			"{postId}", sourceID,
 			"{mediaId}", bestMedia.ID,
+			"{model_name}", modelName,
 		)
-		baseName := r.Replace(template)
+		baseName = r.Replace(template)
 
-		suffix := ""
-		if isPreview {
-			suffix = "_preview"
+	} else {
+		var dateStr string
+		if date > 0 {
+			dateStr = time.Unix(date, 0).Format("20060102")
+		} else {
+			dateStr = time.Now().Format("20060102") // Fallback to current date
 		}
-		// Use the new robust SanitizeFilename function
-		return config.SanitizeFilename(baseName) + suffix + ext
-	}
 
-	// Fallback to old ID-based method
-	identifier := sourceID
-	if identifier == "" {
-		identifier = bestMedia.ID // Ultimate fallback
+		// Template: {date}_{model_name}_{mediaId}_{index}
+		baseName = fmt.Sprintf("%s_%s_%s_%d", dateStr, modelName, bestMedia.ID, index)
 	}
 
 	suffix := ""
 	if isPreview {
 		suffix = "_preview"
 	}
-	return fmt.Sprintf("%s_%s%s%s", identifier, bestMedia.ID, suffix, ext)
+	return config.SanitizeFilename(baseName) + suffix + ext
 }
 
-func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaItem, baseDir string, modelName string, isPreview bool, contentSource any, index int) error {
+func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaItem, baseDir, modelName string, isPreview bool, contentSource any, index int) error {
 	var mediaItems = []posts.MediaItem{}
 
 	getMediaType := func(mimetype string) string {
@@ -309,7 +331,6 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 		for _, variant := range mediaItem.Variants {
 			variantType := getMediaType(variant.Mimetype)
 
-			// Skip M3U8 files if M3U8Download is false
 			if variant.Mimetype == "application/vnd.apple.mpegurl" && !d.M3U8Download {
 				continue
 			}
@@ -339,21 +360,17 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 
 	bestMedia := mediaItems[0]
 
-	var fileType string
-	var subDir string
+	var fileType, subDir string
 	switch {
 	case strings.HasPrefix(item.Mimetype, "image/"):
-		subDir = "images"
-		fileType = "image"
+		subDir, fileType = "images", "image"
 	case strings.HasPrefix(item.Mimetype, "video/") || item.Mimetype == "application/vnd.apple.mpegurl":
-		subDir = "videos"
-		fileType = "video"
+		subDir, fileType = "videos", "video"
 		if item.Mimetype == "application/vnd.apple.mpegurl" {
 			item.Mimetype = "video/mp4"
 		}
 	case strings.HasPrefix(item.Mimetype, "audio/"):
-		subDir = "audios"
-		fileType = "audio"
+		subDir, fileType = "audios", "audio"
 		if item.Mimetype == "audio/mp4" {
 			item.Mimetype = "audio/mp3"
 		}
@@ -375,14 +392,16 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 	}
 
 	// Generate filename using the new centralized function
-	fileName := d.generateFilename(bestMedia, contentSource, index, isPreview, ext)
+	fileName := d.generateFilename(bestMedia, modelName, contentSource, index, isPreview, ext)
 	filePath := filepath.Join(baseDir, subDir, fileName)
 
+	// ... (Rest of downloadSingleItem logic remains the same)
 	if d.fileExists(filePath) {
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
 			d.progressBar.Describe(fmt.Sprintf("[yellow]File missing[reset], Redownloading %s", fileName))
 		} else {
 			d.progressBar.Describe(fmt.Sprintf("[red]File Exists[reset], Skipping %s", fileName))
+			d.progressBar.Add(1) // Make sure to increment progress bar even on skip
 			return nil
 		}
 	}
@@ -399,6 +418,7 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 			logger.Logger.Printf("[ERROR] failed to save hash for existing file %s: %v", filePath, err)
 			return fmt.Errorf("error saving hash for existing file: %v", err)
 		}
+		d.progressBar.Add(1)
 		return nil
 	}
 
