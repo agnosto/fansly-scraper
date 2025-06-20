@@ -4,34 +4,40 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
+	//"strings"
+	"time"
+
 	"github.com/agnosto/fansly-scraper/headers"
 	"github.com/agnosto/fansly-scraper/logger"
 	"github.com/schollz/progressbar/v3"
 	"golang.org/x/time/rate"
-	"net/http"
-	"os"
-	"time"
 )
 
 var (
-	messageLimiter = rate.NewLimiter(rate.Every(3*time.Second), 2)
+	messageLimiter = rate.NewLimiter(rate.Every(5*time.Second), 1)
 )
 
 type Message struct {
-	ID        string `json:"id"`
-	Content   string `json:"content"`
-	CreatedAt int64  `json:"createdAt"`
+	ID          string `json:"id"`
+	Content     string `json:"content"`
+	CreatedAt   int64  `json:"createdAt"`
+	Attachments []struct {
+		ContentType int    `json:"contentType"`
+		ContentID   string `json:"contentId"`
+	} `json:"attachments"`
 }
 
 type MessageResponse struct {
 	Success  bool `json:"success"`
 	Response struct {
-		Messages     []Message      `json:"messages"`
-		AccountMedia []AccountMedia `json:"accountMedia"`
+		Messages            []Message            `json:"messages"`
+		AccountMedia        []AccountMedia       `json:"accountMedia"`
+		AccountMediaBundles []AccountMediaBundle `json:"accountMediaBundles"`
 	} `json:"response"`
 }
 
-// Updated Group structure to match new API response
 type Group struct {
 	AccountID           string `json:"account_id"`
 	GroupID             string `json:"groupId"`
@@ -41,7 +47,7 @@ type Group struct {
 	UnreadCount         int    `json:"unreadCount"`
 	SubscriptionTierID  any    `json:"subscriptionTierId"`
 	LastMessageID       string `json:"lastMessageId"`
-	LastUnreadMessageID string `json:"lastUnreadMessageId"`
+	LastUnreadMessageID string `json:"lastUnreadMessageID"`
 }
 
 type GroupResponse struct {
@@ -62,13 +68,11 @@ func GetMessageGroupID(modelID string, fanslyHeaders *headers.FanslyHeaders) (st
 		return "", fmt.Errorf("rate limiter error: %v", err)
 	}
 
-	// Updated URL to the new endpoint
 	url := "https://apiv3.fansly.com/api/v1/messaging/groups?limit=1000&ngsw-bypass=true"
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("error creating request: %v", err)
 	}
-
 	fanslyHeaders.AddHeadersToRequest(req, true)
 
 	client := &http.Client{}
@@ -87,7 +91,6 @@ func GetMessageGroupID(modelID string, fanslyHeaders *headers.FanslyHeaders) (st
 		return "", fmt.Errorf("error decoding response: %v", err)
 	}
 
-	// Look for the group with the matching partner account ID
 	for _, group := range groupResp.Response.Data {
 		if group.PartnerAccountID == modelID {
 			return group.GroupID, nil
@@ -125,7 +128,7 @@ func GetAllMessageMedia(modelID string, fanslyHeaders *headers.FanslyHeaders) ([
 			break
 		}
 		msgCursor = nextCursor
-		bar.Add(len(allMedia))
+		bar.Add(len(media))
 	}
 
 	bar.Finish()
@@ -133,7 +136,9 @@ func GetAllMessageMedia(modelID string, fanslyHeaders *headers.FanslyHeaders) ([
 }
 
 func getMessageMediaBatch(groupID, cursor string, fanslyHeaders *headers.FanslyHeaders) ([]AccountMedia, string, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
 	err := messageLimiter.Wait(ctx)
 	if err != nil {
 		return nil, "", fmt.Errorf("rate limiter error: %v", err)
@@ -144,14 +149,13 @@ func getMessageMediaBatch(groupID, cursor string, fanslyHeaders *headers.FanslyH
 		url += fmt.Sprintf("&before=%s", cursor)
 	}
 
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, "", err
 	}
-
 	fanslyHeaders.AddHeadersToRequest(req, true)
 
+	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, "", err
@@ -163,46 +167,71 @@ func getMessageMediaBatch(groupID, cursor string, fanslyHeaders *headers.FanslyH
 	}
 
 	var msgResp MessageResponse
-	err = json.NewDecoder(resp.Body).Decode(&msgResp)
-	if err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&msgResp); err != nil {
 		return nil, "", err
 	}
 
-	var mediaItems []AccountMedia
-	for _, accountMedia := range msgResp.Response.AccountMedia {
-		hasValidLocations := false
-		// Check main media variants for locations
-		for _, variant := range accountMedia.Media.Variants {
-			if len(variant.Locations) > 0 {
-				hasValidLocations = true
-				break
-			}
-		}
-		// Check preview media and its variants for locations
-		if accountMedia.Preview != nil {
-			if len(accountMedia.Preview.Locations) > 0 {
-				hasValidLocations = true
-			} else {
-				for _, variant := range accountMedia.Preview.Variants {
-					if len(variant.Locations) > 0 {
-						hasValidLocations = true
-						break
+	mediaMap := make(map[string]AccountMedia)
+	for _, media := range msgResp.Response.AccountMedia {
+		mediaMap[media.ID] = media
+	}
+
+	bundleMap := make(map[string]AccountMediaBundle)
+	for _, bundle := range msgResp.Response.AccountMediaBundles {
+		bundleMap[bundle.ID] = bundle
+	}
+
+	allMediaIDs := make(map[string]struct{})
+	for _, msg := range msgResp.Response.Messages {
+		for _, attachment := range msg.Attachments {
+			if attachment.ContentType == 1 {
+				allMediaIDs[attachment.ContentID] = struct{}{}
+			} else if attachment.ContentType == 2 {
+				if bundle, ok := bundleMap[attachment.ContentID]; ok {
+					for _, mediaID := range bundle.AccountMediaIDs {
+						allMediaIDs[mediaID] = struct{}{}
 					}
 				}
 			}
 		}
-		if hasValidLocations {
-			mediaItems = append(mediaItems, accountMedia)
+	}
+
+	var finalMediaItems []AccountMedia
+	var mediaToFetch []string
+	processedIDs := make(map[string]bool)
+
+	for id := range allMediaIDs {
+		if media, ok := mediaMap[id]; ok {
+			if !processedIDs[id] {
+				finalMediaItems = append(finalMediaItems, media)
+				processedIDs[id] = true
+			}
 		} else {
-			logger.Logger.Printf("[WARN] Skipping AccountMedia %s: No valid locations found", accountMedia.ID)
+			mediaToFetch = append(mediaToFetch, id)
 		}
 	}
+
+	if len(mediaToFetch) > 0 {
+		fetchedMedia, err := GetMediaByIDs(ctx, mediaToFetch, fanslyHeaders)
+		if err != nil {
+			logger.Logger.Printf("[WARN] Failed to fetch some bundled media items: %v", err)
+		} else {
+			for _, media := range fetchedMedia {
+				if !processedIDs[media.ID] {
+					finalMediaItems = append(finalMediaItems, media)
+					processedIDs[media.ID] = true
+				}
+			}
+		}
+	}
+
+	filteredMedia := filterMediaWithLocations(finalMediaItems)
 
 	var nextCursor string
 	if len(msgResp.Response.Messages) > 0 {
 		nextCursor = msgResp.Response.Messages[len(msgResp.Response.Messages)-1].ID
 	}
 
-	logger.Logger.Printf("[INFO] Retrieved %d media items for message batch", len(mediaItems))
-	return mediaItems, nextCursor, nil
+	logger.Logger.Printf("[INFO] Retrieved %d media items for message batch", len(filteredMedia))
+	return filteredMedia, nextCursor, nil
 }

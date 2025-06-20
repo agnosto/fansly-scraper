@@ -4,25 +4,32 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/agnosto/fansly-scraper/headers"
 	"github.com/agnosto/fansly-scraper/logger"
 	"golang.org/x/time/rate"
-	"net/http"
-	"time"
 )
 
 var (
-	limiter = rate.NewLimiter(rate.Every(3*time.Second), 2)
+	limiter = rate.NewLimiter(rate.Every(5*time.Second), 1)
 )
 
-type AccountMediaBundles struct {
+type AccountMediaBundle struct {
 	ID              string   `json:"id"`
 	Access          bool     `json:"access"`
 	AccountMediaIDs []string `json:"accountMediaIds"`
 	BundleContent   []struct {
-		AccountMediaID string `json:"AccountMediaId"`
+		AccountMediaID string `json:"accountMediaId"`
 		Pos            int    `json:"pos"`
 	} `json:"bundleContent"`
+}
+
+type AccountMediaResponse struct {
+	Success  bool           `json:"success"`
+	Response []AccountMedia `json:"response"`
 }
 
 type Location struct {
@@ -48,8 +55,9 @@ type MediaItem struct {
 type AccountMedia struct {
 	ID        string     `json:"id"`
 	AccountId string     `json:"accountId"`
+	Access    bool       `json:"access"`
 	Media     MediaItem  `json:"media"`
-	Preview   *MediaItem `json:"preview,omitempty"` // Added to handle optional preview
+	Preview   *MediaItem `json:"preview,omitempty"`
 }
 
 type PostResponse struct {
@@ -62,29 +70,83 @@ type PostResponse struct {
 				ContentID   string `json:"contentId"`
 			} `json:"attachments"`
 		} `json:"posts"`
-		AccountMediaBundles []AccountMediaBundles `json:"accountMediaBundles"`
-		AccountMedia        []AccountMedia        `json:"accountMedia"`
+		AccountMediaBundles []AccountMediaBundle `json:"accountMediaBundles"`
+		AccountMedia        []AccountMedia       `json:"accountMedia"`
 	} `json:"response"`
 }
 
+func GetMediaByIDs(ctx context.Context, mediaIDs []string, fanslyHeaders *headers.FanslyHeaders) ([]AccountMedia, error) {
+	if len(mediaIDs) == 0 {
+		return nil, nil
+	}
+
+	idSet := make(map[string]struct{})
+	uniqueIDs := []string{}
+	for _, id := range mediaIDs {
+		if _, ok := idSet[id]; !ok {
+			idSet[id] = struct{}{}
+			uniqueIDs = append(uniqueIDs, id)
+		}
+	}
+
+	if len(uniqueIDs) == 0 {
+		return nil, nil
+	}
+
+	err := limiter.Wait(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("rate limiter error: %v", err)
+	}
+
+	url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/account/media?ids=%s&ngsw-bypass=true", strings.Join(uniqueIDs, ","))
+	logger.Logger.Printf("[INFO] Fetching details for %d bundled media items", len(uniqueIDs))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	fanslyHeaders.AddHeadersToRequest(req, true)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch media by IDs with status code %d", resp.StatusCode)
+	}
+
+	var mediaResp AccountMediaResponse
+	if err := json.NewDecoder(resp.Body).Decode(&mediaResp); err != nil {
+		return nil, err
+	}
+	if !mediaResp.Success {
+		return nil, fmt.Errorf("API reported failure when fetching media by IDs")
+	}
+	return mediaResp.Response, nil
+}
+
 func GetPostMedia(postId string, fanslyHeaders *headers.FanslyHeaders) ([]AccountMedia, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
 	err := limiter.Wait(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("rate limiter error: %v", err)
 	}
 
 	url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/post?ids=%s&ngsw-bypass=true", postId)
-	logger.Logger.Printf("[INFO] Starting media parsing for Post: %s with URL: %v", postId, url)
+	logger.Logger.Printf("[INFO] Starting media parsing for Post: %s", postId)
 
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-
 	fanslyHeaders.AddHeadersToRequest(req, true)
 
+	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -96,90 +158,122 @@ func GetPostMedia(postId string, fanslyHeaders *headers.FanslyHeaders) ([]Accoun
 	}
 
 	var postResp PostResponse
-	err = json.NewDecoder(resp.Body).Decode(&postResp)
-	if err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&postResp); err != nil {
 		return nil, err
 	}
 
-	var accountMediaItems []AccountMedia
+	mediaMap := make(map[string]AccountMedia)
+	for _, media := range postResp.Response.AccountMedia {
+		mediaMap[media.ID] = media
+	}
+
+	bundleMap := make(map[string]AccountMediaBundle)
+	for _, bundle := range postResp.Response.AccountMediaBundles {
+		bundleMap[bundle.ID] = bundle
+	}
+
+	allMediaIDs := make(map[string]struct{})
 	for _, post := range postResp.Response.Posts {
 		for _, attachment := range post.Attachments {
-			for _, accountMedia := range postResp.Response.AccountMedia {
-				if accountMedia.ID == attachment.ContentID {
-					hasLocations := false
-					// Check main media variants for locations
-					for _, variant := range accountMedia.Media.Variants {
-						if len(variant.Locations) > 0 {
-							hasLocations = true
-							break
-						}
+			if attachment.ContentType == 1 {
+				allMediaIDs[attachment.ContentID] = struct{}{}
+			} else if attachment.ContentType == 2 {
+				if bundle, ok := bundleMap[attachment.ContentID]; ok {
+					for _, mediaID := range bundle.AccountMediaIDs {
+						allMediaIDs[mediaID] = struct{}{}
 					}
-					// Check preview media and its variants for locations
-					if accountMedia.Preview != nil {
-						if len(accountMedia.Preview.Locations) > 0 {
-							hasLocations = true
-						} else {
-							for _, variant := range accountMedia.Preview.Variants {
-								if len(variant.Locations) > 0 {
-									hasLocations = true
-									break
-								}
-							}
-						}
-					}
-					if hasLocations {
-						accountMediaItems = append(accountMediaItems, accountMedia)
-					} else {
-						logger.Logger.Printf("[WARN] POST: %s, Skipping AccountMedia %s: No locations found", postId, accountMedia.ID)
-					}
+				}
+			}
+		}
+	}
+
+	var finalMediaItems []AccountMedia
+	var mediaToFetch []string
+	processedIDs := make(map[string]bool)
+
+	for id := range allMediaIDs {
+		if media, ok := mediaMap[id]; ok {
+			if !processedIDs[id] {
+				finalMediaItems = append(finalMediaItems, media)
+				processedIDs[id] = true
+			}
+		} else {
+			mediaToFetch = append(mediaToFetch, id)
+		}
+	}
+
+	if len(mediaToFetch) > 0 {
+		fetchedMedia, err := GetMediaByIDs(ctx, mediaToFetch, fanslyHeaders)
+		if err != nil {
+			logger.Logger.Printf("[WARN] Failed to fetch some bundled media for post %s: %v", postId, err)
+		} else {
+			for _, media := range fetchedMedia {
+				if !processedIDs[media.ID] {
+					finalMediaItems = append(finalMediaItems, media)
+					processedIDs[media.ID] = true
+				}
+			}
+		}
+	}
+
+	filteredMedia := filterMediaWithLocations(finalMediaItems)
+	logger.Logger.Printf("[INFO] Retrieved %d media items for post %s", len(filteredMedia), postId)
+	return filteredMedia, nil
+}
+
+func filterMediaWithLocations(mediaItems []AccountMedia) []AccountMedia {
+	var filteredMedia []AccountMedia
+
+	for _, accountMedia := range mediaItems {
+		hasContent := false
+
+		// 1. Check for explicit download URLs on main media object or its variants
+		if len(accountMedia.Media.Locations) > 0 {
+			hasContent = true
+		}
+		if !hasContent {
+			for _, variant := range accountMedia.Media.Variants {
+				if len(variant.Locations) > 0 {
+					hasContent = true
 					break
 				}
 			}
 		}
-		for _, bundle := range postResp.Response.AccountMediaBundles {
-			if bundle.Access {
-				for _, bundleContent := range bundle.BundleContent {
-					// Find and add the corresponding AccountMedia
-					for _, accountMedia := range postResp.Response.AccountMedia {
-						if accountMedia.ID == bundleContent.AccountMediaID {
-							accountMediaItems = append(accountMediaItems, accountMedia)
-							break
-						}
+
+		// 2. As a fallback, check for URLs on the preview object or its variants.
+		// This is useful for content where only the preview is available (e.g., access: false).
+		if !hasContent && accountMedia.Preview != nil {
+			if len(accountMedia.Preview.Locations) > 0 {
+				hasContent = true
+			}
+			if !hasContent {
+				for _, variant := range accountMedia.Preview.Variants {
+					if len(variant.Locations) > 0 {
+						hasContent = true
+						break
 					}
 				}
 			}
 		}
-	}
 
-	for _, accountMedia := range postResp.Response.AccountMedia {
-		// Check if this accountMedia is already added
-		alreadyAdded := false
-		for _, addedMedia := range accountMediaItems {
-			if addedMedia.ID == accountMedia.ID {
-				alreadyAdded = true
-				break
+		// 3. Specifically check for streamable videos (HLS/DASH), as they may not have explicit `locations`.
+		// The download logic knows how to handle these manifest types.
+		if !hasContent && accountMedia.Media.Type == 2 { // Type 2 is video
+			for _, variant := range accountMedia.Media.Variants {
+				// Type 302 is HLS (m3u8), 303 is DASH (mpd)
+				if variant.Type == 302 || variant.Type == 303 {
+					hasContent = true
+					break
+				}
 			}
 		}
-		if !alreadyAdded {
-			// Add if it has locations or its preview has locations
-			if hasLocations(accountMedia.Media) || (accountMedia.Preview != nil && hasLocations(*accountMedia.Preview)) {
-				accountMediaItems = append(accountMediaItems, accountMedia)
-			}
+
+		if hasContent {
+			filteredMedia = append(filteredMedia, accountMedia)
+		} else {
+			logger.Logger.Printf("[WARN] Skipping AccountMedia %s: No downloadable/streamable content found", accountMedia.ID)
 		}
 	}
 
-	logger.Logger.Printf("[INFO] Retrieved %d media items for post %s", len(accountMediaItems), postId)
-	return accountMediaItems, nil
-}
-
-func hasLocations(media MediaItem) bool {
-	if len(media.Locations) > 0 {
-		return true
-	}
-	for _, variant := range media.Variants {
-		if len(variant.Locations) > 0 {
-			return true
-		}
-	}
-	return false
+	return filteredMedia
 }
