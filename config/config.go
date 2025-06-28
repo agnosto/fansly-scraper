@@ -155,7 +155,10 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("save_location is empty in %v", configPath)
 	}
 
-	config.Options.SaveLocation = filepath.ToSlash(config.Options.SaveLocation)
+	config.Options.SaveLocation = filepath.Clean(config.Options.SaveLocation)
+	if config.LiveSettings.SaveLocation != "" {
+		config.LiveSettings.SaveLocation = filepath.Clean(config.LiveSettings.SaveLocation)
+	}
 
 	if config.SecurityHeaders.LastUpdated.IsZero() {
 		config.SecurityHeaders.LastUpdated = time.Now()
@@ -271,9 +274,9 @@ func FormatVODFilename(template string, data map[string]string) string {
 
 func ResolveLiveSavePath(cfg *Config, username string) string {
 	if cfg.LiveSettings.SaveLocation != "" {
-		return filepath.ToSlash(cfg.LiveSettings.SaveLocation)
+		return cfg.LiveSettings.SaveLocation
 	}
-	return filepath.ToSlash(filepath.Join(cfg.Options.SaveLocation, strings.ToLower(username), "lives"))
+	return filepath.Join(cfg.Options.SaveLocation, strings.ToLower(username), "lives")
 }
 
 func GetVODFilename(cfg *Config, data map[string]string) string {
