@@ -437,19 +437,22 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 		}
 
 		if cfg.LiveSettings.FFmpegConvert {
-			mp4Filename := strings.TrimSuffix(recordedFilename, cfg.LiveSettings.VODsFileExtension) + ".mp4"
-			ms.logger.Printf("Starting MP4 conversion for %s", username)
-			if err := ms.convertToMP4(recordedFilename, mp4Filename); err != nil {
-				ms.logger.Printf("Error converting to MP4 for %s: %v", username, err)
-				// Don't return, try to save the original file instead
-				ms.logger.Printf("Will attempt to save original file for %s", username)
+			if strings.ToLower(filepath.Ext(recordedFilename)) == ".mp4" {
+				ms.logger.Printf("Recording is already in MP4 format, skipping conversion: %s", recordedFilename)
 				conversionSuccess = true
 			} else {
-				finalFilename = mp4Filename
-				conversionSuccess = true
-				ms.logger.Printf("MP4 conversion complete for %s", username)
-				if err := os.Remove(recordedFilename); err != nil && !os.IsNotExist(err) {
-					ms.logger.Printf("Error deleting original file for %s: %v", username, err)
+				mp4Filename := strings.TrimSuffix(recordedFilename, filepath.Ext(recordedFilename)) + ".mp4"
+				ms.logger.Printf("Starting MP4 conversion for %s", username)
+				if err := ms.convertToMP4(recordedFilename, mp4Filename); err != nil {
+					ms.logger.Printf("Error converting to MP4 for %s: %v. The original file will be kept.", username, err)
+					conversionSuccess = true // "Success" in the sense that we keep the original file.
+				} else {
+					finalFilename = mp4Filename
+					conversionSuccess = true
+					ms.logger.Printf("MP4 conversion complete for %s", username)
+					if err := os.Remove(recordedFilename); err != nil && !os.IsNotExist(err) {
+						ms.logger.Printf("Error deleting original file for %s: %v", username, err)
+					}
 				}
 			}
 		} else {
