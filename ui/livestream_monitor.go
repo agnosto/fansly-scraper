@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"os/exec"
+	//"os/exec"
 	"path/filepath"
-	"runtime"
+	//"runtime"
 	"strings"
 	"time"
 
@@ -276,25 +276,27 @@ func (m *MainModel) startLiveStatusUpdates() tea.Cmd {
 func (m *MainModel) Cleanup() {
 	// Stop all monitoring first
 	m.monitoringService.Shutdown()
-	// Kill FFmpeg processes with proper error handling
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("taskkill", "/F", "/IM", "ffmpeg.exe")
-	} else {
-		cmd = exec.Command("pkill", "ffmpeg")
-	}
-	cmd.Run() // Execute the command synchronously
-	// Clean up lock files with verification
-	recordingsPath := filepath.Join(config.GetConfigDir(), "active_recordings")
-	files, err := os.ReadDir(recordingsPath)
-	if err == nil {
-		for _, file := range files {
-			if filepath.Ext(file.Name()) == ".lock" {
-				lockFile := filepath.Join(recordingsPath, file.Name())
-				if err := os.Remove(lockFile); err != nil {
-					logger.Logger.Printf("Failed to remove lock file %s: %v", lockFile, err)
+	/*
+		// Kill FFmpeg processes with proper error handling
+		var cmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			cmd = exec.Command("taskkill", "/F", "/IM", "ffmpeg.exe")
+		} else {
+			cmd = exec.Command("pkill", "ffmpeg")
+		}
+		cmd.Run() // Execute the command synchronously
+		// Clean up lock files with verification
+		recordingsPath := filepath.Join(config.GetConfigDir(), "active_recordings")
+		files, err := os.ReadDir(recordingsPath)
+		if err == nil {
+			for _, file := range files {
+				if filepath.Ext(file.Name()) == ".lock" {
+					lockFile := filepath.Join(recordingsPath, file.Name())
+					if err := os.Remove(lockFile); err != nil {
+						logger.Logger.Printf("Failed to remove lock file %s: %v", lockFile, err)
+					}
 				}
 			}
 		}
-	}
+	*/
 }

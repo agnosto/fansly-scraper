@@ -71,8 +71,8 @@ func main() {
 	go func() {
 		<-signalChan
 		fmt.Println("Received interrupt signal. Shutting down...")
-		stopMonitoring()
-		cleanupLockFiles()
+		//stopMonitoring()
+		//cleanupLockFiles()
 		os.Exit(0)
 	}()
 
