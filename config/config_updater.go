@@ -159,6 +159,15 @@ func EnsureConfigUpdated(configPath string) error {
 				cfg.LiveSettings.RecordChat = defaultConfig.LiveSettings.RecordChat
 				isUpdated = true
 			}
+
+			if _, exists := liveSettingsMap["ffmpeg_recording_options"]; !exists {
+				cfg.LiveSettings.FFmpegRecordingOptions = defaultConfig.LiveSettings.FFmpegRecordingOptions
+				isUpdated = true
+			}
+			if _, exists := liveSettingsMap["ffmpeg_conversion_options"]; !exists {
+				cfg.LiveSettings.FFmpegConversionOptions = defaultConfig.LiveSettings.FFmpegConversionOptions
+				isUpdated = true
+			}
 		}
 	}
 
@@ -233,6 +242,13 @@ func MergeConfigs(existing, new *Config) *Config {
 	result.LiveSettings.GenerateContactSheet = new.LiveSettings.GenerateContactSheet
 	result.LiveSettings.UseMTForContactSheet = new.LiveSettings.UseMTForContactSheet
 	result.LiveSettings.RecordChat = new.LiveSettings.RecordChat
+
+	if new.LiveSettings.FFmpegRecordingOptions != "" {
+		result.LiveSettings.FFmpegRecordingOptions = new.LiveSettings.FFmpegRecordingOptions
+	}
+	if new.LiveSettings.FFmpegConversionOptions != "" {
+		result.LiveSettings.FFmpegConversionOptions = new.LiveSettings.FFmpegConversionOptions
+	}
 
 	// Merge Notifications
 	result.Notifications = existing.Notifications

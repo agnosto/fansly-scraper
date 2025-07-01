@@ -25,14 +25,16 @@ type Config struct {
 }
 
 type LiveSettingsConfig struct {
-	SaveLocation         string `toml:"save_location"`
-	VODsFileExtension    string `toml:"vods_file_extension"`
-	FFmpegConvert        bool   `toml:"ffmpeg_convert"`
-	GenerateContactSheet bool   `toml:"generate_contact_sheet"`
-	UseMTForContactSheet bool   `toml:"use_mt_for_contact_sheet"`
-	FilenameTemplate     string `toml:"filename_template"`
-	DateFormat           string `toml:"date_format"`
-	RecordChat           bool   `toml:"record_chat"`
+	SaveLocation            string `toml:"save_location"`
+	VODsFileExtension       string `toml:"vods_file_extension"`
+	FFmpegConvert           bool   `toml:"ffmpeg_convert"`
+	GenerateContactSheet    bool   `toml:"generate_contact_sheet"`
+	UseMTForContactSheet    bool   `toml:"use_mt_for_contact_sheet"`
+	FilenameTemplate        string `toml:"filename_template"`
+	DateFormat              string `toml:"date_format"`
+	RecordChat              bool   `toml:"record_chat"`
+	FFmpegRecordingOptions  string `toml:"ffmpeg_recording_options"`
+	FFmpegConversionOptions string `toml:"ffmpeg_conversion_options"`
 }
 
 type AccountConfig struct {
@@ -182,14 +184,16 @@ func CreateDefaultConfig() *Config {
 			ContentFilenameTemplate: "{date}-{content}_{index}",
 		},
 		LiveSettings: LiveSettingsConfig{
-			SaveLocation:         "", // Empty means use default path
-			VODsFileExtension:    ".ts",
-			FFmpegConvert:        true,
-			GenerateContactSheet: true,
-			UseMTForContactSheet: false,
-			FilenameTemplate:     "{model_username}_{date}_{streamId}_{streamVersion}",
-			DateFormat:           "20060102_150405",
-			RecordChat:           true,
+			SaveLocation:            "", // Empty means use default path
+			VODsFileExtension:       ".ts",
+			FFmpegConvert:           true,
+			GenerateContactSheet:    true,
+			UseMTForContactSheet:    false,
+			FilenameTemplate:        "{model_username}_{date}_{streamId}_{streamVersion}",
+			DateFormat:              "20060102_150405",
+			RecordChat:              true,
+			FFmpegRecordingOptions:  "",
+			FFmpegConversionOptions: "",
 		},
 		Notifications: NotificationsConfig{
 			Enabled:           false,

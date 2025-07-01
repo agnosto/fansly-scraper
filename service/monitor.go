@@ -371,12 +371,29 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 	// Log the FFmpeg command for debugging
 	ms.logger.Printf("Starting FFmpeg recording for %s with URL: %s to file: %s", username, playbackUrl, recordedFilename)
 
+	var recordingArgs []string
+	if cfg.LiveSettings.FFmpegRecordingOptions != "" {
+		// Use user-provided options
+		recordingArgs = strings.Fields(cfg.LiveSettings.FFmpegRecordingOptions)
+		ms.logger.Printf("Using custom FFmpeg recording options: %s", cfg.LiveSettings.FFmpegRecordingOptions)
+	} else {
+		// Use hardcoded program defaults
+		recordingArgs = []string{
+			"-c", "copy",
+			"-movflags", "use_metadata_tags", "-map_metadata", "0",
+			"-timeout", "300", "-reconnect", "300", "-reconnect_at_eof", "300",
+			"-reconnect_streamed", "300", "-reconnect_delay_max", "300",
+			"-rtmp_live", "live",
+		}
+	}
+
+	// Build the full command
+	cmdArgs := []string{"-i", playbackUrl}
+	cmdArgs = append(cmdArgs, recordingArgs...)
+	cmdArgs = append(cmdArgs, recordedFilename)
+
 	// Create FFmpeg command
-	cmd := exec.Command("ffmpeg", "-i", playbackUrl, "-c", "copy",
-		"-movflags", "use_metadata_tags", "-map_metadata", "0",
-		"-timeout", "300", "-reconnect", "300", "-reconnect_at_eof", "300",
-		"-reconnect_streamed", "300", "-reconnect_delay_max", "300",
-		"-rtmp_live", "live", recordedFilename)
+	cmd := exec.Command("ffmpeg", cmdArgs...)
 
 	// Set up stdout and stderr to be logged
 	//cmd.Stdout = os.Stdout
@@ -511,7 +528,30 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 }
 
 func (ms *MonitoringService) convertToMP4(tsFilename, mp4Filename string) error {
-	cmd := exec.Command("ffmpeg", "-i", tsFilename, "-c", "copy", mp4Filename)
+	cfg, err := config.LoadConfig(config.GetConfigPath())
+	if err != nil {
+		// Fallback to default if config can't be loaded, though this is unlikely
+		ms.logger.Printf("Could not load config for conversion options, using default: %v", err)
+		cmd := exec.Command("ffmpeg", "-i", tsFilename, "-c", "copy", mp4Filename)
+		return cmd.Run()
+	}
+
+	var conversionArgs []string
+	if cfg.LiveSettings.FFmpegConversionOptions != "" {
+		// Use user-provided options
+		conversionArgs = strings.Fields(cfg.LiveSettings.FFmpegConversionOptions)
+		ms.logger.Printf("Using custom FFmpeg conversion options: %s", cfg.LiveSettings.FFmpegConversionOptions)
+	} else {
+		// Use hardcoded program default
+		conversionArgs = []string{"-c", "copy"}
+	}
+
+	// Build the full command
+	cmdArgs := []string{"-i", tsFilename}
+	cmdArgs = append(cmdArgs, conversionArgs...)
+	cmdArgs = append(cmdArgs, mp4Filename)
+
+	cmd := exec.Command("ffmpeg", cmdArgs...)
 	return cmd.Run()
 }
 
