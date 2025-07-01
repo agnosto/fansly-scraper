@@ -98,6 +98,17 @@ Preview files are usually named with a `_preview` suffix (e.g., `postid_mediaid_
 | filename_template | Template for file naming | See below | "{model_username}_{date}" |
 | date_format | Date format in filenames | "20060102_150405" | "2006-01-02_15:04:05" |
 | record_chat | Save chat messages from streams to a json file* | true | true/false |
+|ffmpeg_recording_options | Custom FFmpeg arguments for the initial stream recording. Leave empty to use application defaults. | "" | "-c:v libx264 -crf 23" |
+|ffmpeg_conversion_options  | Custom FFmpeg arguments for the post-recording conversion. Overrides the default -c copy. | "" | "-c copy -movflags +faststart" |
+
+### Custom FFmpeg Options
+For advanced users, you can directly control the arguments passed to FFmpeg for both recording and post-processing.
+
+>[!WARNING]
+>Incorrect FFmpeg syntax can cause your recordings to fail. It is highly recommended to test your command-line arguments directly with FFmpeg before using them in the configuration file.
+
+- ffmpeg_recording_options: This replaces the default set of arguments used to record the live stream. If left empty, the application uses its built-in defaults which are optimized for stable stream capture and reconnection (-c copy -movflags use_metadata_tags -reconnect 300 ...). This option allows you to re-encode on the fly, map specific streams, or apply filters during the recording process.
+- ffmpeg_conversion_options: This replaces the default argument (-c copy) used during the post-processing step when ffmpeg_convert is set to true. This is useful for tasks like adding faststart flags for web playback, changing audio codecs, or embedding metadata without re-encoding the entire video.
 
 ### Recorded chat
 
