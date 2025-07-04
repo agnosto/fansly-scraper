@@ -72,6 +72,7 @@ The program will create a [config](./config.md#location) file for you to edit on
 - **MacOS users**: May need to allow notifications in [system settings](https://github.com/gen2brain/beeep/issues/67#issuecomment-2646474049)
 - **Live status**: Press `r` in TUI to refresh live status
 - **Duplicate files**: Sometimes the same image may appear twice due to Fansly's API structure
+- **Date formats for livestream filename**: In the event a stream gets interrupted and reattempts to record, if the date format isn't specific enough (ie, no timestamp), it may fail to save the stream after as both vods will be the same name, for now use one of these: `2006-01-02_15:04:05` or `20060102_150405`
 
 ## Support the Project
 
