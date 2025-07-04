@@ -54,9 +54,29 @@ console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weigh
 | save_location | Base directory for downloads, on windows replace backslashes ("\\") in the path with forward slashes ("/") | Required | "/home/user/content" |
 | m3u8_dl | Use m3u8 downloader for saving content | false | true/false |
 | check_updates | Check for new updates on launch | false | true/false |
-| skip_previews | Skip downloading preview images/videos for posts and messages | true | true/false |
-| use_content_as_filename | Generate human-readable filenames from post/message content. | false | true/false |
-| content_filename_template | Template for readable filenames. See variables below. | "{date}-{content}_{index}" | "{date}-{content}" |
+| [skip_previews](#preview-files) | Skip downloading preview images/videos for posts and messages | true | true/false |
+| [use_content_as_filename](#readable-filenames) | Generate human-readable filenames from post/message content. | false | true/false |
+| [content_filename_template](#readable-filenames) | Template for readable filenames. See variables below. | "{date}-{content}_{index}" | "{date}-{content}" |
+| [download_media_type](#filtering-by-media-type)   | Download only specific media. Options: `all`, `images`, `videos`, `audio.` | "all"   | "videos"  |
+| [skip_downloaded_posts](#skipping-processed-posts) | Skip posts that have already been processed to speed up subsequent runs.   | false  | true/false  |
+
+### Filtering by Media Type
+
+The `download_media_type` option allows you to save bandwidth and storage by only downloading the content you want. This is useful if you are only interested in a creator's images or videos, for example.
+
+- **`all`**: Downloads all media types (images, videos, and audio). This is the default.
+- **`images`** or **`image`**: Downloads only images.
+- **`videos`** or **`video`**: Downloads only videos.
+- **`audios`** or **`audio`**: Downloads only audio files.
+
+The setting is not case-sensitive, and both singular and plural forms work (e.g., `videos` and `video` are treated the same). This filter applies to all content types, including Timeline, Messages, Stories, and Purchases.
+
+### Skipping Processed Posts
+
+Set `skip_downloaded_posts` to `true` to dramatically speed up re-running the scraper on a creator you have already downloaded. When enabled, the application keeps a record of every post it successfully processes in its local database (`downloads.db`). On future runs, it will skip any post ID that is already in its records, avoiding the need to re-fetch and check media for that post.
+
+> [!WARNING]
+> Due to API rate limits or network issues, it's possible for the application to mark a post as "processed" even if some of its media failed to download. If you suspect content is missing from a previous run, it is recommended to temporarily set `skip_downloaded_posts = false` to force the scraper to re-check all of the creator's posts for any missing files.
 
 ### Readable Filenames
 
@@ -91,15 +111,15 @@ Preview files are usually named with a `_preview` suffix (e.g., `postid_mediaid_
 | Setting | Description | Default | Example |
 |---------|-------------|---------|---------|
 | save_location | Custom path for livestreams | Empty (uses save_location from Options) | "/home/user/streams" |
-| vods_file_extension | File extension for recordings | ".ts" | ".ts" or ".mp4" |
+| [vods_file_extension](#video-file-extensions) | File extension for recordings | ".ts" | ".ts" or ".mp4" |
 | ffmpeg_convert | Convert to MP4 after recording | true | true/false |
 | generate_contact_sheet | Create preview thumbnails | true | true/false |
 | use_mt_for_contact_sheet | Use [mt](https://github.com/mutschler/mt) for better thumbnails if its installed | false | true/false |
-| filename_template | Template for file naming | See below | "{model_username}_{date}" |
-| date_format | Date format in filenames | "20060102_150405" | "2006-01-02_15:04:05" |
-| record_chat | Save chat messages from streams to a json file* | true | true/false |
-|ffmpeg_recording_options | Custom FFmpeg arguments for the initial stream recording. Leave empty to use application defaults. | "" | "-c:v libx264 -crf 23" |
-|ffmpeg_conversion_options  | Custom FFmpeg arguments for the post-recording conversion. Overrides the default -c copy. | "" | "-c copy -movflags +faststart" |
+| [filename_template](#filename-template-variables) | Template for file naming | See below | "{model_username}_{date}" |
+| [date_format](#date-format-options) | Date format in filenames | "20060102_150405" | "2006-01-02_15:04:05" |
+| [record_chat](#recorded-chat) | Save chat messages from streams to a json file* | true | true/false |
+| [ffmpeg_recording_options](#custom-ffmpeg-options) | Custom FFmpeg arguments for the initial stream recording. Leave empty to use application defaults. | "" | "-c:v libx264 -crf 23" |
+| [ffmpeg_conversion_options](#custom-ffmpeg-options)  | Custom FFmpeg arguments for the post-recording conversion. Overrides the default -c copy. | "" | "-c copy -movflags +faststart" |
 
 ### Custom FFmpeg Options
 For advanced users, you can directly control the arguments passed to FFmpeg for both recording and post-processing.

@@ -9,6 +9,8 @@ check_updates = true
 skip_previews = false
 use_content_as_filename = false
 content_filename_template = "{date}-{content}_{index}" 
+download_media_type = "all" # options: all, image, video, audio
+skip_downloaded_posts = false
 
 [live_settings]
 save_location = "" # Optional: Set custom path for livestream recordings. If empty, uses default path
