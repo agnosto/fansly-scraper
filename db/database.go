@@ -51,7 +51,7 @@ func NewDatabase(saveLocation string) (*Database, error) {
 		}
 	} else {
 		// Run normal migrations for new database
-		if err := db.AutoMigrate(&models.File{}); err != nil {
+		if err := db.AutoMigrate(&models.File{}, &models.ProcessedPost{}); err != nil {
 			return nil, fmt.Errorf("failed to run migrations: %w", err)
 		}
 	}

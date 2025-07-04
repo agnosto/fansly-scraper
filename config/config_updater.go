@@ -107,11 +107,21 @@ func EnsureConfigUpdated(configPath string) error {
 				cfg.Options.ContentFilenameTemplate = defaultConfig.Options.ContentFilenameTemplate
 				isUpdated = true
 			}
+			if _, exists := optionsMap["download_media_type"]; !exists {
+				cfg.Options.DownloadMediaType = defaultConfig.Options.DownloadMediaType
+				isUpdated = true
+			}
+			if _, exists := optionsMap["skip_downloaded_posts"]; !exists {
+				cfg.Options.SkipDownloadedPosts = defaultConfig.Options.SkipDownloadedPosts
+				isUpdated = true
+			}
 		} else {
 			// If options section doesn't exist at all, add the fields
 			cfg.Options.SkipPreviews = defaultConfig.Options.SkipPreviews
 			cfg.Options.UseContentAsFilename = defaultConfig.Options.UseContentAsFilename
 			cfg.Options.ContentFilenameTemplate = defaultConfig.Options.ContentFilenameTemplate
+			cfg.Options.DownloadMediaType = defaultConfig.Options.DownloadMediaType
+			cfg.Options.SkipDownloadedPosts = defaultConfig.Options.SkipDownloadedPosts
 			isUpdated = true
 		}
 	}
@@ -214,6 +224,12 @@ func MergeConfigs(existing, new *Config) *Config {
 	} else if result.Options.ContentFilenameTemplate == "" {
 		result.Options.ContentFilenameTemplate = defaultConfig.Options.ContentFilenameTemplate
 	}
+	if new.Options.DownloadMediaType != "" {
+		result.Options.DownloadMediaType = new.Options.DownloadMediaType
+	} else if result.Options.DownloadMediaType == "" {
+		result.Options.DownloadMediaType = defaultConfig.Options.DownloadMediaType
+	}
+	result.Options.SkipDownloadedPosts = new.Options.SkipDownloadedPosts
 
 	// Merge LiveSettings
 	result.LiveSettings = existing.LiveSettings

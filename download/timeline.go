@@ -35,18 +35,19 @@ type logWriter struct {
 }
 
 type Downloader struct {
-	db              *sql.DB
-	saveLocation    string
-	authToken       string
-	userAgent       string
-	M3U8Download    bool
-	headers         *headers.FanslyHeaders
-	limiter         *rate.Limiter
-	progressBar     *progressbar.ProgressBar
-	logMu           sync.Mutex
-	ffmpegAvailable bool
-	fileService     *service.FileService
-	cfg             *config.Config
+	db                   *sql.DB
+	saveLocation         string
+	authToken            string
+	userAgent            string
+	M3U8Download         bool
+	headers              *headers.FanslyHeaders
+	limiter              *rate.Limiter
+	progressBar          *progressbar.ProgressBar
+	logMu                sync.Mutex
+	ffmpegAvailable      bool
+	fileService          *service.FileService
+	processedPostService *service.ProcessedPostService
+	cfg                  *config.Config
 }
 
 func (w logWriter) Write(p []byte) (n int, err error) {
@@ -73,6 +74,10 @@ func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error
 		logger.Logger.Printf("Error initializing database: %v", err)
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
+
+	// New processed post service setup
+	postRepo := repository.NewProcessedPostRepository(database.DB)
+	processedPostService := service.NewProcessedPostService(postRepo)
 
 	fileRepo := repository.NewFileRepository(database.DB)
 	fileService := service.NewFileService(fileRepo)
@@ -101,16 +106,17 @@ func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error
 	)
 
 	return &Downloader{
-		fileService:     fileService,
-		authToken:       cfg.Account.AuthToken,
-		userAgent:       cfg.Account.UserAgent,
-		saveLocation:    cfg.Options.SaveLocation,
-		M3U8Download:    cfg.Options.M3U8Download,
-		headers:         fanslyHeaders,
-		limiter:         limiter,
-		progressBar:     bar,
-		ffmpegAvailable: ffmpegAvailable,
-		cfg:             cfg,
+		fileService:          fileService,
+		processedPostService: processedPostService,
+		authToken:            cfg.Account.AuthToken,
+		userAgent:            cfg.Account.UserAgent,
+		saveLocation:         cfg.Options.SaveLocation,
+		M3U8Download:         cfg.Options.M3U8Download,
+		headers:              fanslyHeaders,
+		limiter:              limiter,
+		progressBar:          bar,
+		ffmpegAvailable:      ffmpegAvailable,
+		cfg:                  cfg,
 	}, nil
 }
 
@@ -152,6 +158,13 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 		wg.Add(1)
 		go func(post posts.Post) {
 			defer wg.Done()
+
+			if d.cfg.Options.SkipDownloadedPosts && d.processedPostService.PostExists(post.ID) {
+				logger.Logger.Printf("[INFO] [%s] Skipping already processed post %s", modelName, post.ID)
+				d.progressBar.Add(1)
+				return
+			}
+
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
@@ -171,6 +184,14 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 				}
 				d.progressBar.Add(1) // Increment after processing one AccountMedia (main + preview)
 			}
+
+			if d.cfg.Options.SkipDownloadedPosts {
+				err := d.processedPostService.MarkPostAsProcessed(post.ID, modelName)
+				if err != nil {
+					logger.Logger.Printf("[ERROR] [%s] Failed to mark post %s as processed: %v", modelName, post.ID, err)
+				}
+			}
+
 		}(post)
 	}
 	wg.Wait()
@@ -376,6 +397,13 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 		}
 	default:
 		return fmt.Errorf("unknown media type: %s", item.Mimetype)
+	}
+
+	mediaTypeFilter := d.cfg.Options.DownloadMediaType
+	normalizedFilter := strings.TrimSuffix(mediaTypeFilter, "s")
+	if normalizedFilter != "all" && normalizedFilter != fileType {
+		d.progressBar.Describe(fmt.Sprintf("[yellow]Skipping[reset] %s due to media type filter (%s)", item.ID, mediaTypeFilter))
+		return nil // Not an error, just skipping
 	}
 
 	mediaUrl := bestMedia.Locations[0].Location

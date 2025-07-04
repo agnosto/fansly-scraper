@@ -49,6 +49,8 @@ type OptionsConfig struct {
 	SkipPreviews            bool   `toml:"skip_previews"`
 	UseContentAsFilename    bool   `toml:"use_content_as_filename"`
 	ContentFilenameTemplate string `toml:"content_filename_template"`
+	DownloadMediaType       string `toml:"download_media_type"`
+	SkipDownloadedPosts     bool   `toml:"skip_downloaded_posts"`
 }
 
 type NotificationsConfig struct {
@@ -182,6 +184,8 @@ func CreateDefaultConfig() *Config {
 			SkipPreviews:            true,
 			UseContentAsFilename:    false,
 			ContentFilenameTemplate: "{date}-{content}_{index}",
+			DownloadMediaType:       "all",
+			SkipDownloadedPosts:     false,
 		},
 		LiveSettings: LiveSettingsConfig{
 			SaveLocation:            "", // Empty means use default path
