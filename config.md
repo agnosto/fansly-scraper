@@ -52,13 +52,22 @@ console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weigh
 | Setting | Description | Default | Example |
 |---------|-------------|---------|---------|
 | save_location | Base directory for downloads, on windows replace backslashes ("\\") in the path with forward slashes ("/") | Required | "/home/user/content" |
-| m3u8_dl | Use m3u8 downloader for saving content | false | true/false |
+| [m3u8_dl](#m3u8-video-download) | 	Enable downloading of high-quality M3U8 video streams. Requires FFmpeg. | false | true/false |
 | check_updates | Check for new updates on launch | false | true/false |
 | [skip_previews](#preview-files) | Skip downloading preview images/videos for posts and messages | true | true/false |
 | [use_content_as_filename](#readable-filenames) | Generate human-readable filenames from post/message content. | false | true/false |
 | [content_filename_template](#readable-filenames) | Template for readable filenames. See variables below. | "{date}-{content}_{index}" | "{date}-{content}" |
 | [download_media_type](#filtering-by-media-type)   | Download only specific media. Options: `all`, `images`, `videos`, `audio.` | "all"   | "videos"  |
 | [skip_downloaded_posts](#skipping-processed-posts) | Skip posts that have already been processed to speed up subsequent runs.   | false  | true/false  |
+
+### M3U8 Video Download
+
+Set `m3u8_dl = true` to enable the downloading of videos streamed using the M3U8 (HLS) format. It is highly recommended to enable this setting for the best possible video quality.
+
+- **Why enable this?** Fansly often serves the highest resolution versions of videos as M3U8 streams. If this option is disabled, the scraper may have to download a lower-quality MP4 file as a fallback, or it may not be able to download the video at all if no other source is available.
+
+- **Requirement: FFmpeg**
+This feature requires FFmpeg to be installed on your system and available in your system's PATH. The scraper uses FFmpeg to download all the small video segments (.ts files) from the stream and seamlessly combine them into a single, high-quality video file (e.g., an .mp4).
 
 ### Filtering by Media Type
 
