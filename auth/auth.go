@@ -208,7 +208,7 @@ func getFollowedAccountIDs(userId string, fanslyHeaders *headers.FanslyHeaders) 
 	client := &http.Client{}
 	var allAccountIDs []string
 	offset := 0
-	batchSize := 200
+	batchSize := 100
 
 	logger.Logger.Printf("Starting to fetch followed accounts for userId: %s", userId)
 
@@ -283,11 +283,11 @@ func getFollowedAccountIDs(userId string, fanslyHeaders *headers.FanslyHeaders) 
 			allAccountIDs = append(allAccountIDs, accountID.AccountId)
 		}
 
-		if len(followingResponse.Response) < batchSize {
-			break
-		}
+		//if len(followingResponse.Response) < batchSize {
+		//	break
+		//}
 
-		offset += batchSize
+		offset += len(followingResponse.Response)
 	}
 
 	return allAccountIDs, nil
@@ -296,11 +296,11 @@ func getFollowedAccountIDs(userId string, fanslyHeaders *headers.FanslyHeaders) 
 func getAccountDetails(accountIDs []string, fanslyHeaders *headers.FanslyHeaders) ([]FollowedModel, error) {
 	client := &http.Client{}
 	var allModels []FollowedModel
-	batchSize := 100 // Even smaller batch size for fetching account details
+	batchSize := 50 // Even smaller batch size for fetching account details
 
 	for i := 0; i < len(accountIDs); i += batchSize {
 		// Add delay between batches to avoid rate limiting
-		time.Sleep(1 * time.Second)
+		time.Sleep(2 * time.Second)
 
 		end := min(i+batchSize, len(accountIDs))
 		batch := accountIDs[i:end]
