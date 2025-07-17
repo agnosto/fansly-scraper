@@ -3,7 +3,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
+	//"maps"
 	"strconv"
 
 	"log"
@@ -162,7 +162,8 @@ func (ms *MonitoringService) loadState() {
 	}
 
 	// Merge the loaded state with the existing state
-	maps.Copy(ms.activeMonitors, loadedMonitors)
+	//maps.Copy(ms.activeMonitors, loadedMonitors)
+	ms.activeMonitors = loadedMonitors
 }
 
 func (ms *MonitoringService) saveState() {
