@@ -76,10 +76,13 @@ func main() {
 		os.Exit(0)
 	}()
 
-	cfg, err := config.LoadConfig(config.GetConfigPath())
+	configPath := config.GetConfigPath()
+	cfg, err := config.LoadConfig(configPath)
 	//log.Printf("[Main Start] Loaded Config: %v", cfg)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("FATAL: Could not load configuration file.")
+		log.Printf("Please check that the following file exists and is not empty or corrupted: %s", configPath)
+		log.Fatal("Error details: ", err)
 	}
 
 	if err := logger.InitLogger(cfg); err != nil {
