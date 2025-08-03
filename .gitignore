@@ -4,3 +4,4 @@ config.toml
 *.bak
 *.exe
 /fansly-scraper
+.crush

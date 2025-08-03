@@ -78,11 +78,15 @@ func main() {
 
 	configPath := config.GetConfigPath()
 	cfg, err := config.LoadConfig(configPath)
-	//log.Printf("[Main Start] Loaded Config: %v", cfg)
 	if err != nil {
-		log.Printf("FATAL: Could not load configuration file.")
-		log.Printf("Please check that the following file exists and is not empty or corrupted: %s", configPath)
-		log.Fatal("Error details: ", err)
+		p := tea.NewProgram(ui.NewConfigWizardModel())
+		if _, perr := p.Run(); perr != nil {
+			log.Fatal(perr)
+		}
+		cfg, err = config.LoadConfig(configPath)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	if err := logger.InitLogger(cfg); err != nil {

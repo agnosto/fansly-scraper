@@ -16,14 +16,13 @@ import (
 // This should be called when the application starts.
 func VerifyConfigOnStartup() {
 	configPath := GetConfigPath()
-	err := EnsureConfigExists(configPath)
-	if err != nil {
+	if err := EnsureConfigExists(configPath); err != nil {
 		log.Printf("Error ensuring config exists: %v", err)
 	}
-
-	err = EnsureConfigUpdated(configPath)
-	if err != nil {
-		log.Printf("Error updating config: %v", err)
+	if _, err := LoadConfig(configPath); err == nil {
+		if err := EnsureConfigUpdated(configPath); err != nil {
+			log.Printf("Error updating config: %v", err)
+		}
 	}
 }
 

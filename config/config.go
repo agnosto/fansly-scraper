@@ -148,24 +148,8 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, err
 	}
 
-	// Validate required config values
-	if config.Account.UserAgent == "" {
-		return nil, fmt.Errorf("user_agent is empty in %v", configPath)
-	}
-	if config.Account.AuthToken == "" {
-		return nil, fmt.Errorf("auth_token is empty in %v", configPath)
-	}
-	if config.Options.SaveLocation == "" {
-		return nil, fmt.Errorf("save_location is empty in %v", configPath)
-	}
-
-	config.Options.SaveLocation = filepath.Clean(config.Options.SaveLocation)
-	if config.LiveSettings.SaveLocation != "" {
-		config.LiveSettings.SaveLocation = filepath.Clean(config.LiveSettings.SaveLocation)
-	}
-
-	if config.SecurityHeaders.LastUpdated.IsZero() {
-		config.SecurityHeaders.LastUpdated = time.Now()
+	if err := ValidateConfig(&config, configPath); err != nil {
+		return nil, err
 	}
 
 	return &config, nil
@@ -216,6 +200,26 @@ func CreateDefaultConfig() *Config {
 			LastUpdated: time.Now(),
 		},
 	}
+}
+
+func ValidateConfig(cfg *Config, configPath string) error {
+	if cfg.Account.UserAgent == "" {
+		return fmt.Errorf("user_agent is empty in %v", configPath)
+	}
+	if cfg.Account.AuthToken == "" {
+		return fmt.Errorf("auth_token is empty in %v", configPath)
+	}
+	if cfg.Options.SaveLocation == "" {
+		return fmt.Errorf("save_location is empty in %v", configPath)
+	}
+	cfg.Options.SaveLocation = filepath.Clean(cfg.Options.SaveLocation)
+	if cfg.LiveSettings.SaveLocation != "" {
+		cfg.LiveSettings.SaveLocation = filepath.Clean(cfg.LiveSettings.SaveLocation)
+	}
+	if cfg.SecurityHeaders.LastUpdated.IsZero() {
+		cfg.SecurityHeaders.LastUpdated = time.Now()
+	}
+	return nil
 }
 
 func OpenConfigInEditor(configPath string) error {
