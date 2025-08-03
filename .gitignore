@@ -5,3 +5,4 @@ config.toml
 *.exe
 /fansly-scraper
 .crush
+CRUSH.md
