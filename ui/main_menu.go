@@ -138,6 +138,27 @@ func (m *MainModel) handleMainMenuSelection() (tea.Model, tea.Cmd) {
 			}
 			return editConfigFinishedMsg{}
 		})
+	case "Run setup wizard":
+		return m, func() tea.Msg {
+			p := tea.NewProgram(NewConfigWizardModel())
+			if _, err := p.Run(); err != nil {
+				logger.Logger.Printf("Error running setup wizard: %v", err)
+			}
+			return setupWizardFinishedMsg{}
+		}
+	case "Reset configuration":
+		return m, func() tea.Msg {
+			if err := config.ResetConfig(); err != nil {
+				logger.Logger.Printf("Error resetting config: %v", err)
+				return setupWizardFinishedMsg{}
+			}
+			logger.Logger.Printf("Configuration reset to defaults. Launching setup wizard...")
+			p := tea.NewProgram(NewConfigWizardModel())
+			if _, err := p.Run(); err != nil {
+				logger.Logger.Printf("Error running setup wizard after reset: %v", err)
+			}
+			return setupWizardFinishedMsg{}
+		}
 	case "Quit":
 		m.quit = true
 		return m, tea.Quit

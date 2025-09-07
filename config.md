@@ -27,7 +27,13 @@ This document outlines available options for the Scraper.
 <details>
 <summary><strong>Getting your token</strong></summary>
 
-### Method 1 (Recommended) special thanks to [prof79](https://github.com/prof79/)'s wiki for this:
+### Method 0 (Easiest): Use the Setup Wizard
+
+- When the app starts for the first time, choose auto login in the setup wizard by pressing `a`.
+- It will start a local capture on `http://127.0.0.1:<port>/capture` and show a one‑line snippet.
+- Press `o` to open fansly.com, log in, open DevTools Console, press `c` in the wizard to copy the snippet, paste it into the Console and hit Enter. Your token and user‑agent will be filled automatically.
+
+### Method 1 (Manual Console)
 
 1. Go to [fansly](https://fansly.com) and login and open devtools (ctrl+shift+i / F12)
 2. In devtools, go to the Console Tab and Paste the following: 
@@ -40,7 +46,7 @@ console.log('%c➡️ Authorization_Token =', 'font-size: 12px; color: limegreen
 console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weight: bold;', navigator.userAgent); // show user-agent
 ```
 
-### Method 2:
+### Method 2 (Manual Storage View):
 1. Go to [fansly](https://fansly.com) and login and open devtools (ctrl+shift+i / F12)
 2. Click on `Storage` and then `Local Storage`
 3. Look for `session_active_session` and copy the `token` value

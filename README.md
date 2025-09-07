@@ -25,7 +25,7 @@ go install github.com/agnosto/fansly-scraper/cmd/fansly-scraper@latest
 ./fansly-scraper
 ```
 
-The program will create a [config](./config.md#location) file for you to edit on first run.
+On first run, the setup wizard helps you configure everything. Press 'a' to use auto login: it opens Fansly and provides a one‑line snippet to paste in DevTools Console. Your token and user‑agent are captured automatically and saved to the config.
 
 ## Basic Usage
 
@@ -33,6 +33,10 @@ The program will create a [config](./config.md#location) file for you to edit on
 ```bash
 ./fansly-scraper
 ```
+
+From the main menu you can:
+- Run setup wizard (choose save location, auto login)
+- Reset configuration (restore defaults, re-run wizard)
 
 ### Command Line Mode
 ```bash
