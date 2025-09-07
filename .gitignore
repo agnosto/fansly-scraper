@@ -6,3 +6,45 @@ config.toml
 /fansly-scraper
 .crush
 CRUSH.md
+
+# Logs
+.logs/
+logs/
+*.log
+*.log.*
+
+# SQLite databases
+downloads.db
+downloads.db-journal
+downloads.db-shm
+downloads.db-wal
+*.db
+*.sqlite
+*.sqlite3
+
+# Go build artifacts
+*.test
+*.out
+*.dll
+*.so
+*.dylib
+
+# Build output
+dist/
+bin/
+build/
+coverage.out
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment files
+.env
+.env.*
