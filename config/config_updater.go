@@ -329,3 +329,19 @@ func downloadFile(url, filePath string) error {
 	_, err = io.Copy(out, resp.Body)
 	return err
 }
+
+// ResetConfig removes the current config file (if present) and writes a fresh
+// default config. This does not preserve any previous values.
+func ResetConfig() error {
+	configPath := GetConfigPath()
+	// Best-effort remove existing file
+	_ = os.Remove(configPath)
+	// Ensure directory exists without creating a config file
+	if err := os.MkdirAll(filepath.Dir(configPath), os.ModePerm); err != nil {
+		return err
+	}
+	// Overwrite with a pristine default config
+	defaultConfig := CreateDefaultConfig()
+	// SaveConfig will not merge since we removed the file
+	return SaveConfig(defaultConfig)
+}
