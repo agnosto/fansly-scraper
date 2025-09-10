@@ -60,10 +60,11 @@ From the main menu you can:
 ./fansly-scraper update
 ```
 
-## Advanced Setup
+## 🗺️ Project Roadmap & Advanced Setup
+
+Our development is tracked publicly on our **[Project Roadmap](https://github.com/users/agnosto/projects/1)**. You can see what we're working on, what's planned for the future, and contribute to the discussion.
 
 - **Configuration options**: See [config.md](./config.md)
-- **Development roadmap**: See [TRACKER.md](./TRACKER.md)
 - **Build from source**:
   ```bash
   git clone https://github.com/agnosto/fansly-scraper && cd fansly-scraper
