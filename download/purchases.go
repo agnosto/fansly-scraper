@@ -125,6 +125,7 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 			if err != nil {
 				logger.Logger.Printf("Error downloading media item %s: %v", media.ID, err)
 			}
+			mediaBar.Add(1)
 		}
 	}
 

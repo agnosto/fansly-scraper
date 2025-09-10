@@ -32,6 +32,9 @@ func (m *MainModel) HandleFollowedModelsMenuUpdate(msg tea.Msg) (tea.Model, tea.
 			m.table.MoveDown(1)
 			return m, nil
 		case key.Matches(msg, m.keys.Select):
+			if len(m.table.Rows()) == 0 {
+				return m, nil
+			}
 			selectedRow := m.table.SelectedRow()
 			m.selectedModel = selectedRow[0]
 			m.filteredModels = m.followedModels // Reset to unfiltered list
