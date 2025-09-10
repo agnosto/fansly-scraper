@@ -159,6 +159,9 @@ func (m *MainModel) handleMainMenuSelection() (tea.Model, tea.Cmd) {
 			}
 			return setupWizardFinishedMsg{}
 		}
+	case "Donate":
+		m.state = DonateState
+		return m, nil
 	case "Quit":
 		m.quit = true
 		return m, tea.Quit

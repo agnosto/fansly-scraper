@@ -40,6 +40,7 @@ const (
 	DownloadPurchasedState
 	CompletionState
 	LoadingState
+	DonateState
 )
 
 type MainModel struct {
@@ -224,19 +225,20 @@ func (m *MainModel) Init() tea.Cmd {
 }
 
 func NewMainModel(downloader *download.Downloader, version string, monitoringService *service.MonitoringService) *MainModel {
-    return &MainModel{
-        version: version,
-        options: []string{
-            "Download a user's post",
-            "Download purchased content",
-            "Monitor a user's livestreams",
-            "Like all of a user's post",
-            "Unlike all of a user's post",
-            "Run setup wizard",
-            "Reset configuration",
-            "Edit config.toml file",
-            "Quit",
-        },
+	return &MainModel{
+		version: version,
+		options: []string{
+			"Download a user's post",
+			"Download purchased content",
+			"Monitor a user's livestreams",
+			"Like all of a user's post",
+			"Unlike all of a user's post",
+			"Run setup wizard",
+			"Reset configuration",
+			"Edit config.toml file",
+			"Donate",
+			"Quit",
+		},
 		downloadOptions:   []string{"All", "Timeline", "Messages", "Stories"},
 		cursorPos:         0,
 		keys:              defaultKeyMap,

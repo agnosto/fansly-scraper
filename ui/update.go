@@ -69,6 +69,8 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.HandlePurchaseProgressMenuUpdate(msg)
 		case CompletionState:
 			return m.HandleCompletionUpdate(msg)
+		case DonateState:
+			return m.HandleDonateMenuUpdate(msg)
 		// Add cases for other states
 		default:
 			logger.Logger.Printf("[DEBUG] Update: Unhandled state: %v", m.state)
@@ -177,6 +179,8 @@ func (m *MainModel) View() string {
 		return m.RenderPurchaseProgressMenu()
 	case CompletionState:
 		return m.RenderCompletionMenu()
+	case DonateState:
+		return m.RenderDonateMenu()
 	default:
 		return "Unknown state"
 	}

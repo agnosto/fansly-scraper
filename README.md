@@ -80,7 +80,11 @@ From the main menu you can:
 
 ## Support the Project
 
-If this tool helps you, consider donating:
+If this tool helps you, consider sponsoring on github:
+
+[![Sponsor agnosto on GitHub](https://img.shields.io/badge/Sponsor-%23EA4AAA?style=for-the-badge&logo=githubsponsors)](https://github.com/sponsors/agnosto)
+
+Alternatively, you can make a one-time donation via cryptocurrency:
 
 <table>
   <tr>
