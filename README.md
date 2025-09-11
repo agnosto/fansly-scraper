@@ -71,6 +71,16 @@ Our development is tracked publicly on our **[Project Roadmap](https://github.co
   go build -v -ldflags "-w -s" -o fansly-scraper ./cmd/fansly-scraper
   ```
 
+## Contributing
+
+Contributions are welcome and greatly appreciated! Whether it's reporting a bug, proposing a feature, or submitting a pull request, your help is valued.
+![alt text](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)
+
+![alt text](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat-square)
+
+Please read our [Contributing Guidelines](./CONTRIBUTING.md) before you start.
+Check the [Issues tab](https://github.com/agnosto/fansly-scraper/issues) to see if there's a task you'd like to take on.
+
 ## Known Issues
 
 - **Chat recording**: May occasionally miss messages during reconnections

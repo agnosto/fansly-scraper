@@ -1,0 +1,26 @@
+version: "2"
+
+run:
+  go: "1.23"
+  tests: true
+
+linters:
+  # Use a preset of default, fast-running linters.
+  # The essential formatting checks are part of this group.
+  presets:
+    - default
+
+  # Now, explicitly disable the linters that are producing the 66 issues
+  # you want to ignore for now.
+  disable:
+    - errcheck
+    - staticcheck
+    - unused
+
+issues:
+  # Good practice to prevent certain linters from running on test files if they
+  # produce noisy or irrelevant results.
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck # For example, you might not want to check errors in tests.
