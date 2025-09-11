@@ -64,7 +64,7 @@ From the main menu you can:
 
 Our development is tracked publicly on our **[Project Roadmap](https://github.com/users/agnosto/projects/1)**. You can see what we're working on, what's planned for the future, and contribute to the discussion.
 
-- **Configuration options**: See [config.md](./config.md)
+- **Configuration Guide**: See the **[Official Wiki](https://github.com/agnosto/fansly-scraper/wiki)**
 - **Build from source**:
   ```bash
   git clone https://github.com/agnosto/fansly-scraper && cd fansly-scraper
