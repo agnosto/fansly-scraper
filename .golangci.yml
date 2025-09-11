@@ -1,25 +1,19 @@
-version: "2"
-
 run:
   go: "1.23"
   tests: true
 
 linters:
-  # Use a preset of default, fast-running linters.
-  # The essential formatting checks are part of this group.
-  presets:
-    - default
+  # The default behavior of golangci-lint IS to run the default set of linters
+  # when no 'enable' or 'preset' is specified. So we can remove the 'presets'
+  # block and just specify which of the default linters to disable.
 
-  # Now, explicitly disable the linters that are producing the 66 issues
-  # you want to ignore for now.
   disable:
     - errcheck
     - staticcheck
     - unused
 
 issues:
-  # Good practice to prevent certain linters from running on test files if they
-  # produce noisy or irrelevant results.
+  # The name for this section in v1.59.1 is 'exclude-rules'.
   exclude-rules:
     - path: _test\.go
       linters:
