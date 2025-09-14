@@ -68,38 +68,49 @@ type GroupResponse struct {
 
 func GetMessageGroupID(modelID string, fanslyHeaders *headers.FanslyHeaders) (string, error) {
 	ctx := context.Background()
-	err := messageLimiter.Wait(ctx)
-	if err != nil {
-		return "", fmt.Errorf("rate limiter error: %v", err)
-	}
+	limit := 50
+	offset := 0
 
-	url := "https://apiv3.fansly.com/api/v1/messaging/groups?limit=1000&ngsw-bypass=true"
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return "", fmt.Errorf("error creating request: %v", err)
-	}
-	fanslyHeaders.AddHeadersToRequest(req, true)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("error sending request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	var groupResp GroupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&groupResp); err != nil {
-		return "", fmt.Errorf("error decoding response: %v", err)
-	}
-
-	for _, group := range groupResp.Response.Data {
-		if group.PartnerAccountID == modelID {
-			return group.GroupID, nil
+	for {
+		err := messageLimiter.Wait(ctx)
+		if err != nil {
+			return "", fmt.Errorf("rate limiter error: %v", err)
 		}
+
+		url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/messaging/groups?limit=%d&offset=%d&ngsw-bypass=true", limit, offset)
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return "", fmt.Errorf("error creating request: %v", err)
+		}
+		fanslyHeaders.AddHeadersToRequest(req, true)
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("error sending request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+
+		var groupResp GroupResponse
+		if err := json.NewDecoder(resp.Body).Decode(&groupResp); err != nil {
+			return "", fmt.Errorf("error decoding response: %v", err)
+		}
+
+		if len(groupResp.Response.Data) == 0 {
+			break // No more groups to fetch
+		}
+
+		for _, group := range groupResp.Response.Data {
+			if group.PartnerAccountID == modelID {
+				return group.GroupID, nil
+			}
+		}
+
+		offset += limit
 	}
 
 	return "", fmt.Errorf("no group found for model ID: %s", modelID)
