@@ -1,6 +1,7 @@
 package posts
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/agnosto/fansly-scraper/auth"
 	"github.com/agnosto/fansly-scraper/headers"
 	"github.com/agnosto/fansly-scraper/logger"
 	"github.com/schollz/progressbar/v3"
@@ -43,77 +45,85 @@ type MessageResponse struct {
 	} `json:"response"`
 }
 
-type Group struct {
-	AccountID           string `json:"account_id"`
-	GroupID             string `json:"groupId"`
-	PartnerAccountID    string `json:"partnerAccountId"`
-	PartnerUsername     string `json:"partnerUsername"`
-	Flags               int    `json:"flags"`
-	UnreadCount         int    `json:"unreadCount"`
-	SubscriptionTierID  any    `json:"subscriptionTierId"`
-	LastMessageID       string `json:"lastMessageId"`
-	LastUnreadMessageID string `json:"lastUnreadMessageID"`
+// Structs for creating/retrieving a message group
+type UserPayload struct {
+	UserID          string `json:"userId"`
+	PermissionFlags int    `json:"permissionFlags"`
 }
 
-type GroupResponse struct {
+type GroupRequestPayload struct {
+	Users        []UserPayload `json:"users"`
+	Recipients   []any         `json:"recipients"`
+	LastMessage  any           `json:"lastMessage"`
+	UserSettings any           `json:"userSettings"`
+	Type         int           `json:"type"`
+}
+
+type GroupCreateResponse struct {
 	Success  bool `json:"success"`
 	Response struct {
-		Data            []Group `json:"data"`
-		AggregationData struct {
-			Accounts []struct{} `json:"accounts"`
-			Groups   []struct{} `json:"groups"`
-		} `json:"aggregationData"`
+		ID string `json:"id"`
 	} `json:"response"`
 }
 
 func GetMessageGroupID(modelID string, fanslyHeaders *headers.FanslyHeaders) (string, error) {
-	ctx := context.Background()
-	limit := 50
-	offset := 0
-
-	for {
-		err := messageLimiter.Wait(ctx)
-		if err != nil {
-			return "", fmt.Errorf("rate limiter error: %v", err)
-		}
-
-		url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/messaging/groups?limit=%d&offset=%d&ngsw-bypass=true", limit, offset)
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			return "", fmt.Errorf("error creating request: %v", err)
-		}
-		fanslyHeaders.AddHeadersToRequest(req, true)
-
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			return "", fmt.Errorf("error sending request: %v", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		}
-
-		var groupResp GroupResponse
-		if err := json.NewDecoder(resp.Body).Decode(&groupResp); err != nil {
-			return "", fmt.Errorf("error decoding response: %v", err)
-		}
-
-		if len(groupResp.Response.Data) == 0 {
-			break // No more groups to fetch
-		}
-
-		for _, group := range groupResp.Response.Data {
-			if group.PartnerAccountID == modelID {
-				return group.GroupID, nil
-			}
-		}
-
-		offset += limit
+	myUserID, err := auth.GetMyUserID()
+	if err != nil {
+		return "", fmt.Errorf("could not get own user ID: %v", err)
 	}
 
-	return "", fmt.Errorf("no group found for model ID: %s", modelID)
+	payload := GroupRequestPayload{
+		Users: []UserPayload{
+			{UserID: myUserID, PermissionFlags: 0},
+			{UserID: modelID, PermissionFlags: 0},
+		},
+		Recipients:   []any{},
+		LastMessage:  nil,
+		UserSettings: nil,
+		Type:         1,
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("error marshalling group request payload: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := messageLimiter.Wait(ctx); err != nil {
+		return "", fmt.Errorf("rate limiter error: %v", err)
+	}
+
+	url := "https://apiv3.fansly.com/api/v1/group?ngsw-bypass=true"
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return "", fmt.Errorf("error creating group request: %v", err)
+	}
+
+	fanslyHeaders.AddHeadersToRequest(req, true)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("error sending group request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected status code for group request: %d", resp.StatusCode)
+	}
+
+	var groupResp GroupCreateResponse
+	if err := json.NewDecoder(resp.Body).Decode(&groupResp); err != nil {
+		return "", fmt.Errorf("error decoding group response: %v", err)
+	}
+
+	if !groupResp.Success || groupResp.Response.ID == "" {
+		return "", fmt.Errorf("failed to get group ID for model %s", modelID)
+	}
+
+	logger.Logger.Printf("[INFO] Successfully found message group ID for model %s", modelID)
+	return groupResp.Response.ID, nil
 }
 
 func GetAllMessagesWithMedia(modelID string, fanslyHeaders *headers.FanslyHeaders) ([]MessageWithMedia, error) {

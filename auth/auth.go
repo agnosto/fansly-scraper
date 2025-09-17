@@ -12,6 +12,11 @@ import (
 	"github.com/agnosto/fansly-scraper/logger"
 )
 
+var (
+	// Store the current user's ID after login to be used by other packages
+	currentAccountID string
+)
+
 type Config struct {
 	Client        http.Client
 	UserAgent     string `json:"user-agent"`
@@ -114,7 +119,21 @@ func Login(fanslyHeaders *headers.FanslyHeaders) (*AccountInfo, error) {
 	}
 
 	accountInfo := &apiResponse.Response.Account
+
+	// Store the user's ID for later use
+	if accountInfo.ID != "" {
+		currentAccountID = accountInfo.ID
+	}
+
 	return accountInfo, nil
+}
+
+// GetMyUserID returns the logged-in user's ID. Login must be called first.
+func GetMyUserID() (string, error) {
+	if currentAccountID == "" {
+		return "", fmt.Errorf("user not logged in or user ID not found")
+	}
+	return currentAccountID, nil
 }
 
 func GetSubscriptions(fanslyHeaders *headers.FanslyHeaders) ([]string, error) {
