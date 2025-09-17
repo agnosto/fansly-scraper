@@ -29,7 +29,7 @@ To get started with the code, follow these steps:
     *   Fork the repository on GitHub.
     *   Clone your forked repository to your local machine:
         ```bash
-        git clone https://github.com/your-username/fansly-scraper.git
+        git clone https://github.com/agnosto/fansly-scraper.git
         cd fansly-scraper
         ```
 
