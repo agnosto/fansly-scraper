@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/agnosto/fansly-scraper/auth"
 	"github.com/agnosto/fansly-scraper/cmd"
 	"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/core"
 	"github.com/agnosto/fansly-scraper/download"
+	"github.com/agnosto/fansly-scraper/headers"
 	"github.com/agnosto/fansly-scraper/logger"
 	"github.com/agnosto/fansly-scraper/service"
 	"github.com/agnosto/fansly-scraper/ui"
@@ -168,6 +170,22 @@ func main() {
 }
 
 func runCLIMode(username string, downloadType string, downloader *download.Downloader) {
+	cfg, err := config.LoadConfig(config.GetConfigPath())
+	if err != nil {
+		logger.Logger.Printf("Failed to load config for login: %v", err)
+		os.Exit(1)
+	}
+	fanslyHeaders, err := headers.NewFanslyHeaders(cfg)
+	if err != nil {
+		logger.Logger.Printf("Failed to create headers for login: %v", err)
+		os.Exit(1)
+	}
+
+	// Perform the login to populate the user ID
+	if _, err := auth.Login(fanslyHeaders); err != nil {
+		logger.Logger.Printf("Error logging in: %v", err)
+		os.Exit(1)
+	}
 	// Get model ID from username
 	modelID, err := core.GetModelIDFromUsername(username)
 	if err != nil {
