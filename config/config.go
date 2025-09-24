@@ -54,14 +54,15 @@ type OptionsConfig struct {
 }
 
 type NotificationsConfig struct {
-	Enabled           bool   `toml:"enabled"`
-	SystemNotify      bool   `toml:"system_notify"`
-	DiscordWebhook    string `toml:"discord_webhook"`
-	DiscordMentionID  string `toml:"discord_mention_id"`
-	TelegramBotToken  string `toml:"telegram_bot_token"`
-	TelegramChatID    string `toml:"telegram_chat_id"`
-	NotifyOnLiveStart bool   `toml:"notify_on_live_start"`
-	NotifyOnLiveEnd   bool   `toml:"notify_on_live_end"`
+	Enabled                   bool   `toml:"enabled"`
+	SystemNotify              bool   `toml:"system_notify"`
+	DiscordWebhook            string `toml:"discord_webhook"`
+	DiscordMentionID          string `toml:"discord_mention_id"`
+	TelegramBotToken          string `toml:"telegram_bot_token"`
+	TelegramChatID            string `toml:"telegram_chat_id"`
+	NotifyOnLiveStart         bool   `toml:"notify_on_live_start"`
+	NotifyOnLiveEnd           bool   `toml:"notify_on_live_end"`
+	SendContactSheetOnLiveEnd bool   `toml:"send_contact_sheet_on_live_end"`
 }
 
 type SecurityHeadersConfig struct {
@@ -184,14 +185,15 @@ func CreateDefaultConfig() *Config {
 			FFmpegConversionOptions: "",
 		},
 		Notifications: NotificationsConfig{
-			Enabled:           false,
-			SystemNotify:      true,
-			DiscordWebhook:    "",
-			DiscordMentionID:  "",
-			TelegramBotToken:  "",
-			TelegramChatID:    "",
-			NotifyOnLiveStart: true,
-			NotifyOnLiveEnd:   false,
+			Enabled:                   false,
+			SystemNotify:              true,
+			DiscordWebhook:            "",
+			DiscordMentionID:          "",
+			TelegramBotToken:          "",
+			TelegramChatID:            "",
+			NotifyOnLiveStart:         true,
+			NotifyOnLiveEnd:           false,
+			SendContactSheetOnLiveEnd: false,
 		},
 		SecurityHeaders: SecurityHeadersConfig{
 			DeviceID:    "",

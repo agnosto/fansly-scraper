@@ -260,9 +260,10 @@ func (ms *MonitoringService) monitorModel(modelID, username string) {
 				fmt.Printf("%s is already being recorded\n", username)
 			}
 		} else {
-			// Check if we need to send a notification for ending stream
+			// When the model is no longer live, the 'wasLive' flag is reset.
+			// The actual "Live End" notification is now handled exclusively by the
+			// startRecording function's goroutine after all file processing is complete.
 			if wasLive {
-				ms.notificationSvc.NotifyLiveEnd(username, modelID, "")
 				wasLive = false
 			}
 
@@ -496,20 +497,21 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 				ms.logger.Printf("Successfully saved live recording info for %s to database", username)
 			}
 
+			var contactSheetPath string
+
 			// Generate and save contact sheet if enabled
 			if cfg.LiveSettings.GenerateContactSheet {
-				// For contact sheet generation, use MP4 if converted, otherwise use original
 				sourceFile := finalFilename
 				contactSheetFilename := strings.TrimSuffix(sourceFile, filepath.Ext(sourceFile)) + "_contact_sheet.jpg"
 
 				if err := ms.generateContactSheet(sourceFile); err != nil {
 					ms.logger.Printf("Error generating contact sheet for %s: %v", username, err)
 				} else {
-					// Check if contact sheet file exists
-					if _, err := os.Stat(contactSheetFilename); os.IsNotExist(err) {
-						ms.logger.Printf("Error: Contact sheet file not found for %s: %s", username, contactSheetFilename)
-					} else {
-						ms.logger.Printf("Attempting to save contact sheet info to database for %s: %s", username, contactSheetFilename)
+					if _, err := os.Stat(contactSheetFilename); err == nil {
+						ms.logger.Printf("Successfully generated contact sheet: %s", contactSheetFilename)
+						contactSheetPath = contactSheetFilename // Set the path on success
+
+						// Save contact sheet info to database
 						if err := ms.saveContactSheet(username, contactSheetFilename); err != nil {
 							ms.logger.Printf("Error saving contact sheet info for %s to database: %v", username, err)
 						} else {
@@ -519,7 +521,7 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 				}
 			}
 
-			ms.notificationSvc.NotifyLiveEnd(username, modelID, finalFilename)
+			ms.notificationSvc.NotifyLiveEnd(username, modelID, finalFilename, contactSheetPath)
 		}
 	}()
 

@@ -141,6 +141,11 @@ func EnsureConfigUpdated(configPath string) error {
 				cfg.Notifications.NotifyOnLiveEnd = defaultConfig.Notifications.NotifyOnLiveEnd
 				isUpdated = true
 			}
+
+			if _, exists := notificationsMap["send_contact_sheet_on_live_end"]; !exists {
+				cfg.Notifications.SendContactSheetOnLiveEnd = defaultConfig.Notifications.SendContactSheetOnLiveEnd
+				isUpdated = true
+			}
 		}
 	}
 
