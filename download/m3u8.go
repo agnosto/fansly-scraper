@@ -163,52 +163,58 @@ func parseM3U8Playlist(content, m3u8URL string, cookies map[string]string) ([]st
 		}
 	}
 
-	//log.Printf("Is master playlist: %v", isMasterPlaylist)
-
 	if isMasterPlaylist {
+		// This is a master playlist, find the highest quality stream
 		for i, line := range lines {
 			line = strings.TrimSpace(line)
 			if strings.HasPrefix(line, "#EXT-X-STREAM-INF:") {
-				bandwidthStr := strings.Split(strings.Split(line, "BANDWIDTH=")[1], ",")[0]
-				bandwidth, _ := strconv.Atoi(bandwidthStr)
-				if bandwidth > highestBandwidth {
-					highestBandwidth = bandwidth
-					highestQualityURL = strings.TrimSpace(lines[i+1])
+				// Extract BANDWIDTH attribute
+				if strings.Contains(line, "BANDWIDTH=") {
+					bandwidthStr := strings.Split(strings.Split(line, "BANDWIDTH=")[1], ",")[0]
+					bandwidth, _ := strconv.Atoi(bandwidthStr)
+					if bandwidth > highestBandwidth {
+						highestBandwidth = bandwidth
+						// The URL is on the next line
+						if i+1 < len(lines) {
+							highestQualityURL = strings.TrimSpace(lines[i+1])
+						}
+					}
 				}
 			}
 		}
 
-		logger.Logger.Printf("Highest quality URL: %s", highestQualityURL)
-
 		if highestQualityURL != "" {
-			// Construct the full URL for the highest quality stream
-			newURL, err := url.Parse(highestQualityURL)
+			logger.Logger.Printf("Master playlist detected. Highest quality stream found with bandwidth %d: %s", highestBandwidth, highestQualityURL)
+
+			// Construct the full URL for the highest quality media playlist
+			mediaPlaylistURL, err := url.Parse(highestQualityURL)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse highest quality URL: %w", err)
 			}
-			newURL = baseURL.ResolveReference(newURL)
+			// Resolve the relative URL (e.g., "media-1/stream.m3u8") against the base URL
+			resolvedMediaPlaylistURL := baseURL.ResolveReference(mediaPlaylistURL)
 
-			// Preserve query parameters
-			newURL.RawQuery = baseURL.RawQuery
+			// Preserve original query parameters (auth tokens)
+			resolvedMediaPlaylistURL.RawQuery = baseURL.RawQuery
 
-			logger.Logger.Printf("Fetching media playlist from: %s", newURL.String())
+			logger.Logger.Printf("Fetching highest quality media playlist from: %s", resolvedMediaPlaylistURL.String())
 
-			// Fetch the media playlist
-			nestedContent, err := fetchM3U8Playlist(newURL.String(), cookies)
+			// Fetch the content of the highest quality media playlist
+			mediaPlaylistContent, err := fetchM3U8Playlist(resolvedMediaPlaylistURL.String(), cookies)
 			if err != nil {
 				return nil, fmt.Errorf("failed to fetch media playlist: %w", err)
 			}
 
-			//logger.Logger.Printf("Media playlist content:\n%s", nestedContent)
-
-			return parseM3U8Playlist(nestedContent, newURL.String(), cookies)
+			content = mediaPlaylistContent
+			baseURL = resolvedMediaPlaylistURL
+		} else {
+			logger.Logger.Printf("Master playlist detected, but no suitable stream found. Proceeding with original content.")
 		}
 	}
 
-	// If it's not a master playlist or we couldn't find a higher quality stream,
-	// parse the segments directly
-	//log.Printf("Parsing segments directly")
-	return parseSegments(content, m3u8URL)
+	// This function will now parse segments from either the original media playlist
+	// or the highest-quality one we just fetched.
+	return parseSegments(content, baseURL.String())
 }
 
 func parseSegments(content, baseURL string) ([]string, error) {
