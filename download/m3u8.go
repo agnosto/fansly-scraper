@@ -38,7 +38,7 @@ func GetM3U8Cookies(m3u8URL string) map[string]string {
 	}
 }
 
-func (d *Downloader) DownloadM3U8(ctx context.Context, modelName string, m3u8URL string, savePath string, postID string) error {
+func (d *Downloader) DownloadM3U8(ctx context.Context, modelName string, m3u8URL string, savePath string, postID string, frameRate float64) error {
 	fileType := "video"
 
 	if err := m3u8Semaphore.Acquire(ctx, 1); err != nil {
@@ -81,7 +81,7 @@ func (d *Downloader) DownloadM3U8(ctx context.Context, modelName string, m3u8URL
 
 	// Combine segments using ffmpeg
 	outputFile := filepath.Join(filepath.Dir(savePath), filepath.Base(savePath))
-	err = combineSegments(segmentFiles, outputFile, segmentDir)
+	err = combineSegments(segmentFiles, outputFile, segmentDir, frameRate)
 	//log.Printf("[DOWNLOAD M3U8] OutputFile: %v, or Error: %v", outputFile, err)
 	if err != nil {
 		return err
@@ -364,38 +364,58 @@ func downloadFile(ctx context.Context, url string, fileName string, cookies map[
 	return nil
 }
 
-func combineSegments(segmentFiles []string, outputFile string, segmentDir string) error {
-	tempFile, err := os.CreateTemp(segmentDir, "segments_list_*.txt")
+func combineSegments(segmentFiles []string, outputFile string, segmentDir string, frameRate float64) error {
+	// For HLS/TS segments, binary concatenation is most reliable
+	// TS format is designed to allow this
+	concatTempFile := filepath.Join(segmentDir, "concat_temp.ts")
+	defer os.Remove(concatTempFile)
+
+	// Binary concatenate all TS segments
+	outFile, err := os.Create(concatTempFile)
 	if err != nil {
-		return fmt.Errorf("failed to create temporary file: %w", err)
-	}
-	defer os.Remove(tempFile.Name())
-
-	_, err = fmt.Fprint(tempFile, "ffconcat version 1.0\n")
-	if err != nil {
-		return fmt.Errorf("failed to write to temporary file: %w", err)
+		return fmt.Errorf("failed to create concat temp file: %w", err)
 	}
 
-	for _, file := range segmentFiles {
-		absPath, err := filepath.Abs(file)
+	for _, segmentFile := range segmentFiles {
+		inFile, err := os.Open(segmentFile)
 		if err != nil {
-			return fmt.Errorf("failed to get absolute path: %w", err)
+			outFile.Close()
+			return fmt.Errorf("failed to open segment file %s: %w", segmentFile, err)
 		}
-		_, err = fmt.Fprintf(tempFile, "file '%s'\n", filepath.ToSlash(absPath))
+
+		_, err = io.Copy(outFile, inFile)
+		inFile.Close()
 		if err != nil {
-			return fmt.Errorf("failed to write to temporary file: %w", err)
+			outFile.Close()
+			return fmt.Errorf("failed to copy segment: %w", err)
 		}
 	}
-	tempFile.Close()
+	outFile.Close()
 
+	// Now remux the concatenated TS to MP4
+	// Key: regenerate timestamps entirely and force the correct frame rate
 	args := []string{
-		"-f", "concat",
-		"-safe", "0",
-		"-i", tempFile.Name(),
-		"-c", "copy",
-		"-bsf:a", "aac_adtstoasc",
-		outputFile,
+		"-fflags", "+genpts",
+		"-i", concatTempFile,
 	}
+
+	// Force the correct frame rate from the API metadata
+	if frameRate > 0 {
+		args = append(args,
+			"-r", fmt.Sprintf("%.6f", frameRate),
+			"-video_track_timescale", "90000", // Standard timescale for proper sync
+		)
+	}
+
+	args = append(args,
+		"-c:v", "copy",
+		"-c:a", "copy",
+		"-bsf:a", "aac_adtstoasc",
+		"-vsync", "cfr", // Constant frame rate - drop/duplicate frames as needed
+		"-movflags", "+faststart",
+		outputFile,
+	)
+
 	cmd := exec.Command("ffmpeg", args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

@@ -42,11 +42,13 @@ type MediaItem struct {
 	Type     int    `json:"type"`
 	Height   int    `json:"height"`
 	Mimetype string `json:"mimetype"`
+	Metadata string `json:"metadata,omitempty"`
 	Variants []struct {
 		ID        string     `json:"id"`
 		Type      int        `json:"type"`
 		Height    int        `json:"height"`
 		Mimetype  string     `json:"mimetype"`
+		Metadata  string     `json:"metadata,omitempty"`
 		Locations []Location `json:"locations"`
 	} `json:"variants"`
 	Locations []Location `json:"locations"`
