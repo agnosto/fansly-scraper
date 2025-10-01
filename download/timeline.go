@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -455,6 +456,18 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 	if bestMedia.Mimetype == "application/vnd.apple.mpegurl" && d.ffmpegAvailable {
 		fullUrl := mediaUrl
 		metadata := bestMedia.Locations[0].Metadata
+		var frameRate float64
+
+		if bestMedia.Metadata != "" {
+			var meta struct {
+				FrameRate float64 `json:"frameRate"`
+			}
+			if err := json.Unmarshal([]byte(bestMedia.Metadata), &meta); err == nil {
+				frameRate = meta.FrameRate
+				logger.Logger.Printf("Found frame rate %f for M3U8 stream", frameRate)
+			}
+		}
+
 		var sourceID string
 		if p, ok := contentSource.(posts.Post); ok {
 			sourceID = p.ID
@@ -467,7 +480,7 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 				url.QueryEscape(metadata["Key-Pair-Id"]),
 				url.QueryEscape(metadata["Signature"]))
 		}
-		return d.DownloadM3U8(ctx, modelName, fullUrl, filePath, sourceID)
+		return d.DownloadM3U8(ctx, modelName, fullUrl, filePath, sourceID, frameRate)
 	}
 
 	return d.downloadRegularFile(mediaUrl, filePath, modelName, fileType)
