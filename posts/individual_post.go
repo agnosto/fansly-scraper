@@ -224,58 +224,61 @@ func GetPostMedia(postId string, fanslyHeaders *headers.FanslyHeaders) ([]Accoun
 }
 
 func filterMediaWithLocations(mediaItems []AccountMedia) []AccountMedia {
-	var filteredMedia []AccountMedia
+	return mediaItems
+	/*
+		var filteredMedia []AccountMedia
 
-	for _, accountMedia := range mediaItems {
-		hasContent := false
+		for _, accountMedia := range mediaItems {
+			hasContent := false
 
-		// 1. Check for explicit download URLs on main media object or its variants
-		if len(accountMedia.Media.Locations) > 0 {
-			hasContent = true
-		}
-		if !hasContent {
-			for _, variant := range accountMedia.Media.Variants {
-				if len(variant.Locations) > 0 {
-					hasContent = true
-					break
-				}
-			}
-		}
-
-		// 2. As a fallback, check for URLs on the preview object or its variants.
-		// This is useful for content where only the preview is available (e.g., access: false).
-		if !hasContent && accountMedia.Preview != nil {
-			if len(accountMedia.Preview.Locations) > 0 {
+			// 1. Check for explicit download URLs on main media object or its variants
+			if len(accountMedia.Media.Locations) > 0 {
 				hasContent = true
 			}
 			if !hasContent {
-				for _, variant := range accountMedia.Preview.Variants {
+				for _, variant := range accountMedia.Media.Variants {
 					if len(variant.Locations) > 0 {
 						hasContent = true
 						break
 					}
 				}
 			}
-		}
 
-		// 3. Specifically check for streamable videos (HLS/DASH), as they may not have explicit `locations`.
-		// The download logic knows how to handle these manifest types.
-		if !hasContent && accountMedia.Media.Type == 2 { // Type 2 is video
-			for _, variant := range accountMedia.Media.Variants {
-				// Type 302 is HLS (m3u8), 303 is DASH (mpd)
-				if variant.Type == 302 || variant.Type == 303 {
+			// 2. As a fallback, check for URLs on the preview object or its variants.
+			// This is useful for content where only the preview is available (e.g., access: false).
+			if !hasContent && accountMedia.Preview != nil {
+				if len(accountMedia.Preview.Locations) > 0 {
 					hasContent = true
-					break
 				}
+				if !hasContent {
+					for _, variant := range accountMedia.Preview.Variants {
+						if len(variant.Locations) > 0 {
+							hasContent = true
+							break
+						}
+					}
+				}
+			}
+
+			// 3. Specifically check for streamable videos (HLS/DASH), as they may not have explicit `locations`.
+			// The download logic knows how to handle these manifest types.
+			if !hasContent && accountMedia.Media.Type == 2 { // Type 2 is video
+				for _, variant := range accountMedia.Media.Variants {
+					// Type 302 is HLS (m3u8), 303 is DASH (mpd)
+					if variant.Type == 302 || variant.Type == 303 {
+						hasContent = true
+						break
+					}
+				}
+			}
+
+			if hasContent {
+				filteredMedia = append(filteredMedia, accountMedia)
+			} else {
+				logger.Logger.Printf("[WARN] Skipping AccountMedia %s: No downloadable/streamable content found", accountMedia.ID)
 			}
 		}
 
-		if hasContent {
-			filteredMedia = append(filteredMedia, accountMedia)
-		} else {
-			logger.Logger.Printf("[WARN] Skipping AccountMedia %s: No downloadable/streamable content found", accountMedia.ID)
-		}
-	}
-
-	return filteredMedia
+		return filteredMedia
+	*/
 }
