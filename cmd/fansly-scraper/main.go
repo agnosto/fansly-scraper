@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"runtime"
+	"strings"
 
 	"github.com/agnosto/fansly-scraper/auth"
 	"github.com/agnosto/fansly-scraper/cmd"
@@ -11,6 +12,7 @@ import (
 	"github.com/agnosto/fansly-scraper/download"
 	"github.com/agnosto/fansly-scraper/headers"
 	"github.com/agnosto/fansly-scraper/logger"
+	"github.com/agnosto/fansly-scraper/posts"
 	"github.com/agnosto/fansly-scraper/service"
 	"github.com/agnosto/fansly-scraper/ui"
 	"github.com/agnosto/fansly-scraper/updater"
@@ -37,7 +39,7 @@ const version = "v0.7.6"
 func main() {
 	flags, subcommand := cmd.ParseFlags()
 
-	isCliMode := flags.Username != "" || flags.Monitor != "" || subcommand != ""
+	isCliMode := flags.Username != "" || flags.Monitor != "" || subcommand != "" || flags.PostID != ""
 
 	config.VerifyConfigOnStartup()
 
@@ -119,6 +121,12 @@ func main() {
 		logger.Logger.Fatal(err)
 	}
 
+	// Add logic to handle the new --post flag
+	if flags.PostID != "" {
+		runDownloadPostMode(flags.PostID, downloader)
+		return
+	}
+
 	if flags.Username != "" && flags.DownloadType == "" {
 		flags.DownloadType = "all"
 	}
@@ -167,6 +175,94 @@ func main() {
 		logger.Logger.Printf("Error: %v", err)
 		os.Exit(1)
 	}
+}
+
+// New function to handle downloading a single post
+func runDownloadPostMode(postIdentifier string, downloader *download.Downloader) {
+	// 1. Extract Post ID from URL or direct ID
+	postID := postIdentifier
+	if strings.Contains(postIdentifier, "/") {
+		parts := strings.Split(postIdentifier, "/")
+		// Take the last part, and remove any query parameters
+		postID = strings.Split(parts[len(parts)-1], "?")[0]
+	}
+	// Basic validation
+	if _, err := strconv.ParseUint(postID, 10, 64); err != nil {
+		fmt.Printf("Invalid Post ID: %s\n", postID)
+		logger.Logger.Printf("Invalid Post ID: %s", postID)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Starting download for post: %s\n", postID)
+	logger.Logger.Printf("Starting download for post: %s", postID)
+
+	// 2. Load config and setup headers
+	cfg, err := config.LoadConfig(config.GetConfigPath())
+	if err != nil {
+		fmt.Printf("Failed to load config: %v\n", err)
+		logger.Logger.Printf("Failed to load config: %v", err)
+		os.Exit(1)
+	}
+	fanslyHeaders, err := headers.NewFanslyHeaders(cfg)
+	if err != nil {
+		fmt.Printf("Failed to create headers: %v\n", err)
+		logger.Logger.Printf("Failed to create headers: %v", err)
+		os.Exit(1)
+	}
+
+	// Perform a login to ensure auth token is valid
+	if _, err := auth.Login(fanslyHeaders); err != nil {
+		logger.Logger.Printf("Error logging in: %v", err)
+		os.Exit(1)
+	}
+
+	// 3. Get Post Details (info and media)
+	postInfo, accountMediaItems, err := posts.GetFullPostDetails(postID, fanslyHeaders)
+	if err != nil {
+		fmt.Printf("Error getting post details: %v\n", err)
+		logger.Logger.Printf("Error getting post details: %v", err)
+		os.Exit(1)
+	}
+
+	// 4. Get Account Details (Username) from the accountId found in the post
+	accountDetails, err := auth.GetAccountDetails([]string{postInfo.AccountId}, fanslyHeaders)
+	if err != nil || len(accountDetails) == 0 {
+		fmt.Printf("Error getting model info for account ID %s: %v\n", postInfo.AccountId, err)
+		logger.Logger.Printf("Error getting model info for account ID %s: %v", postInfo.AccountId, err)
+		os.Exit(1)
+	}
+	modelName := accountDetails[0].Username
+	fmt.Printf("Post by model: %s\n", modelName)
+	logger.Logger.Printf("Post by model: %s (ID: %s)", modelName, postInfo.AccountId)
+
+	// 5. Create directories for the model
+	baseDir := filepath.Join(cfg.Options.SaveLocation, strings.ToLower(modelName), "timeline")
+	for _, subDir := range []string{"images", "videos", "audios"} {
+		if err = os.MkdirAll(filepath.Join(baseDir, subDir), os.ModePerm); err != nil {
+			fmt.Printf("Error creating directory: %v\n", err)
+			logger.Logger.Printf("Error creating directory: %v", err)
+			os.Exit(1)
+		}
+	}
+
+	// 6. Download all media items for the post
+	// Create a posts.Post object to pass to the download function for filename generation
+	postForDownloader := posts.Post{
+		ID:        postInfo.ID,
+		Content:   postInfo.Content,
+		CreatedAt: postInfo.CreatedAt,
+	}
+
+	ctx := context.Background()
+	fmt.Printf("Found %d media items to download.\n", len(accountMediaItems))
+	for i, media := range accountMediaItems {
+		err := downloader.DownloadMediaItem(ctx, media, baseDir, modelName, postForDownloader, i)
+		if err != nil {
+			logger.Logger.Printf("[ERROR] Failed to download media item %s: %v", media.ID, err)
+		}
+	}
+
+	fmt.Println("Post download complete.")
 }
 
 func runCLIMode(username string, downloadType string, downloader *download.Downloader) {

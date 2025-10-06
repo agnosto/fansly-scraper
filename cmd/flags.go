@@ -15,6 +15,7 @@ type Flags struct {
 	Monitor        string
 	Service        string
 	MonitorCommand string
+	PostID         string
 }
 
 func ParseFlags() (Flags, string) {
@@ -31,6 +32,8 @@ func ParseFlags() (Flags, string) {
 	flag.StringVar(&flags.Monitor, "m", "", "Toggle monitoring for a model")
 	flag.StringVar(&flags.Monitor, "monitor", "", "Toggle monitoring for a model")
 	flag.StringVar(&flags.Service, "service", "", "Control the service: install, uninstall, start, stop, restart")
+	flag.StringVar(&flags.PostID, "p", "", "Download a specific post by ID or URL")
+	flag.StringVar(&flags.PostID, "post", "", "Download a specific post by ID or URL")
 
 	flag.Parse()
 
@@ -57,6 +60,7 @@ func customUsage() {
 	fmt.Fprintf(os.Stderr, "  -d, --download=TYPE       Download type: all, timeline, messages, or stories\n")
 	fmt.Fprintf(os.Stderr, "  -v, --version             Display version information\n")
 	fmt.Fprintf(os.Stderr, "  -m, --monitor=USERNAME    Toggle monitoring for a model\n")
+	fmt.Fprintf(os.Stderr, "  -p, --post=POST_ID/URL    Download a specific post by ID or URL\n")
 	fmt.Fprintf(os.Stderr, "      --service=ACTION      Control the service: install, uninstall, start, stop, restart\n\n")
 	fmt.Fprintf(os.Stderr, "Commands:\n")
 	fmt.Fprintf(os.Stderr, "  update                    Check for and perform updates\n")

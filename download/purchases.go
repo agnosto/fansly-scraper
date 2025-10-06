@@ -121,7 +121,7 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 				postData.CreatedAt = ac.CreatedAt
 			}
 
-			err = d.downloadMediaItem(ctx, media, baseDir, modelNameForFile, postData, i)
+			err = d.DownloadMediaItem(ctx, media, baseDir, modelNameForFile, postData, i)
 			if err != nil {
 				logger.Logger.Printf("Error downloading media item %s: %v", media.ID, err)
 			}

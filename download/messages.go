@@ -67,7 +67,7 @@ func (d *Downloader) DownloadMessages(ctx context.Context, modelId, modelName st
 				semaphore <- struct{}{}
 				defer func() { <-semaphore }()
 
-				err := d.downloadMediaItem(ctx, media, baseDir, modelName, message, index)
+				err := d.DownloadMediaItem(ctx, media, baseDir, modelName, message, index)
 				if err != nil {
 					logger.Logger.Printf("[ERROR] [%s] Failed to download message media item %s: %v", modelName, media.ID, err)
 				}

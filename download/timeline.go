@@ -178,7 +178,7 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 			// Corrected loop: Call downloadMediaItem for each AccountMedia object.
 			// The index `i` is passed for filename generation.
 			for i, accountMedia := range accountMediaItems {
-				err = d.downloadMediaItem(ctx, accountMedia, baseDir, modelName, post, i)
+				err = d.DownloadMediaItem(ctx, accountMedia, baseDir, modelName, post, i)
 				if err != nil {
 					logger.Logger.Printf("[ERROR] [%s] Failed to download media item %s: %v", modelName, accountMedia.ID, err)
 					continue
@@ -202,7 +202,7 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 	return nil
 }
 
-func (d *Downloader) downloadMediaItem(ctx context.Context, accountMedia posts.AccountMedia, baseDir, modelName string, contentSource any, index int) error {
+func (d *Downloader) DownloadMediaItem(ctx context.Context, accountMedia posts.AccountMedia, baseDir, modelName string, contentSource any, index int) error {
 	hasValidLocations := func(item posts.MediaItem) bool {
 		if len(item.Locations) > 0 {
 			return true

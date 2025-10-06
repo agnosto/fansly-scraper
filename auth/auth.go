@@ -220,7 +220,7 @@ func GetFollowedUsers(userId string, fanslyHeaders *headers.FanslyHeaders) ([]Fo
 	}
 
 	// 3. Get account details for all IDs
-	return getAccountDetails(allAccountIDs, fanslyHeaders)
+	return GetAccountDetails(allAccountIDs, fanslyHeaders)
 }
 
 func getFollowedAccountIDs(userId string, fanslyHeaders *headers.FanslyHeaders) ([]string, error) {
@@ -312,7 +312,8 @@ func getFollowedAccountIDs(userId string, fanslyHeaders *headers.FanslyHeaders) 
 	return allAccountIDs, nil
 }
 
-func getAccountDetails(accountIDs []string, fanslyHeaders *headers.FanslyHeaders) ([]FollowedModel, error) {
+// GetAccountDetails retrieves account information for a list of account IDs.
+func GetAccountDetails(accountIDs []string, fanslyHeaders *headers.FanslyHeaders) ([]FollowedModel, error) {
 	client := &http.Client{}
 	var allModels []FollowedModel
 	batchSize := 50 // Even smaller batch size for fetching account details
