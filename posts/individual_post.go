@@ -85,7 +85,7 @@ type PostResponse struct {
 
 // GetFullPostDetails fetches post metadata and all associated media items.
 func GetFullPostDetails(postId string, fanslyHeaders *headers.FanslyHeaders) (*PostInfo, []AccountMedia, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Second)
 	defer cancel()
 
 	if err := limiter.Wait(ctx); err != nil {
