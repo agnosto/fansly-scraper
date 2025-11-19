@@ -39,9 +39,37 @@ const version = "v0.7.7"
 func main() {
 	flags, subcommand := cmd.ParseFlags()
 
-	isCliMode := flags.Username != "" || flags.Monitor != "" || subcommand != "" || flags.PostID != ""
-
 	config.VerifyConfigOnStartup()
+
+	configPath := config.GetConfigPath()
+	cfg, err := config.LoadConfig(configPath)
+
+	if err != nil && !flags.RunDiagnosis {
+		// Only fatal if not running diagnosis, as diagnosis can test a broken config
+		p := tea.NewProgram(ui.NewConfigWizardModel())
+		if _, perr := p.Run(); perr != nil {
+			log.Fatal(perr)
+		}
+		cfg, err = config.LoadConfig(configPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	// Initialize the logger if config was loaded
+	if cfg != nil {
+		if err := logger.InitLogger(cfg); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	if flags.RunDiagnosis {
+		diagnosisSuite := cmd.NewDiagnosisSuite(flags.DiagnosisFlags, cfg)
+		diagnosisSuite.Run()
+		return
+	}
+
+	isCliMode := flags.Username != "" || flags.Monitor != "" || subcommand != "" || flags.PostID != ""
 
 	if flags.Version {
 		fmt.Printf("Fansly Scraper version %s\n", version)
@@ -79,23 +107,6 @@ func main() {
 		//cleanupLockFiles()
 		os.Exit(0)
 	}()
-
-	configPath := config.GetConfigPath()
-	cfg, err := config.LoadConfig(configPath)
-	if err != nil {
-		p := tea.NewProgram(ui.NewConfigWizardModel())
-		if _, perr := p.Run(); perr != nil {
-			log.Fatal(perr)
-		}
-		cfg, err = config.LoadConfig(configPath)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	if err := logger.InitLogger(cfg); err != nil {
-		log.Fatal(err)
-	}
 
 	var updateAvailable bool
 	var latestVersion string

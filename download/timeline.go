@@ -19,6 +19,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/schollz/progressbar/v3"
+	"golang.org/x/sync/semaphore"
 	"golang.org/x/time/rate"
 
 	"github.com/agnosto/fansly-scraper/config"
@@ -49,6 +50,7 @@ type Downloader struct {
 	fileService          *service.FileService
 	processedPostService *service.ProcessedPostService
 	cfg                  *config.Config
+	m3u8Semaphore        *semaphore.Weighted
 }
 
 func (w logWriter) Write(p []byte) (n int, err error) {
@@ -118,6 +120,7 @@ func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error
 		progressBar:          bar,
 		ffmpegAvailable:      ffmpegAvailable,
 		cfg:                  cfg,
+		m3u8Semaphore:        semaphore.NewWeighted(2),
 	}, nil
 }
 
@@ -202,7 +205,9 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 	return nil
 }
 
-func (d *Downloader) DownloadMediaItem(ctx context.Context, accountMedia posts.AccountMedia, baseDir, modelName string, contentSource any, index int) error {
+func (d *Downloader) DownloadMediaItem(ctx context.Context, accountMedia posts.AccountMedia, baseDir, modelName string, contentSource any, index int, isDiagnosis ...bool) error {
+	diagMode := len(isDiagnosis) > 0 && isDiagnosis[0]
+
 	hasValidLocations := func(item posts.MediaItem) bool {
 		if len(item.Locations) > 0 {
 			return true
@@ -217,7 +222,7 @@ func (d *Downloader) DownloadMediaItem(ctx context.Context, accountMedia posts.A
 
 	if hasValidLocations(accountMedia.Media) {
 		// Use `contentSource` which can be a post, message, or anything else
-		err := d.downloadSingleItem(ctx, accountMedia.Media, baseDir, modelName, false, contentSource, index)
+		err := d.downloadSingleItem(ctx, accountMedia.Media, baseDir, modelName, false, contentSource, index, diagMode)
 		if err != nil {
 			logger.Logger.Printf("[ERROR] [%s] Failed to download main media item %s: %v", modelName, accountMedia.ID, err)
 			return fmt.Errorf("error downloading main media: %v", err)
@@ -226,7 +231,7 @@ func (d *Downloader) DownloadMediaItem(ctx context.Context, accountMedia posts.A
 
 	if !d.cfg.Options.SkipPreviews && accountMedia.Preview != nil && hasValidLocations(*accountMedia.Preview) {
 		// Use `contentSource` here as well
-		err := d.downloadSingleItem(ctx, *accountMedia.Preview, baseDir, modelName, true, contentSource, index)
+		err := d.downloadSingleItem(ctx, *accountMedia.Preview, baseDir, modelName, true, contentSource, index, diagMode)
 		if err != nil {
 			logger.Logger.Printf("[ERROR] [%s] Failed to download preview item for media item %s : %v", modelName, accountMedia.ID, err)
 			return fmt.Errorf("error downloading preview: %v", err)
@@ -327,7 +332,7 @@ func (d *Downloader) generateFilename(bestMedia posts.MediaItem, modelName strin
 	return config.SanitizeFilename(baseName) + suffix + ext
 }
 
-func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaItem, baseDir, modelName string, isPreview bool, contentSource any, index int) error {
+func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaItem, baseDir, modelName string, isPreview bool, contentSource any, index int, isDiagnosis bool) error {
 	var mediaItems = []posts.MediaItem{}
 
 	getMediaType := func(mimetype string) string {
@@ -425,30 +430,32 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 	filePath := filepath.Join(baseDir, subDir, fileName)
 
 	// ... (Rest of downloadSingleItem logic remains the same)
-	if d.fileExists(filePath) {
-		if _, err := os.Stat(filePath); os.IsNotExist(err) {
-			d.progressBar.Describe(fmt.Sprintf("[yellow]File missing[reset], Redownloading %s", fileName))
-		} else {
-			d.progressBar.Describe(fmt.Sprintf("[red]File Exists[reset], Skipping %s", fileName))
-			d.progressBar.Add(1) // Make sure to increment progress bar even on skip
+	if !isDiagnosis {
+		if d.fileExists(filePath) {
+			if _, err := os.Stat(filePath); os.IsNotExist(err) {
+				d.progressBar.Describe(fmt.Sprintf("[yellow]File missing[reset], Redownloading %s", fileName))
+			} else {
+				d.progressBar.Describe(fmt.Sprintf("[red]File Exists[reset], Skipping %s", fileName))
+				d.progressBar.Add(1) // Make sure to increment progress bar even on skip
+				return nil
+			}
+		}
+
+		if _, err := os.Stat(filePath); err == nil {
+			d.progressBar.Describe(fmt.Sprintf("[yellow]No DB Record[reset], Adding %s", fileName))
+			hashString, err := d.hashExistingFile(filePath)
+			if err != nil {
+				logger.Logger.Printf("[ERROR] failed to hash existing file %s: %v", filePath, err)
+				return fmt.Errorf("error hashing existing file: %v", err)
+			}
+			err = d.saveFileHash(modelName, hashString, filePath, fileType)
+			if err != nil {
+				logger.Logger.Printf("[ERROR] failed to save hash for existing file %s: %v", filePath, err)
+				return fmt.Errorf("error saving hash for existing file: %v", err)
+			}
+			d.progressBar.Add(1)
 			return nil
 		}
-	}
-
-	if _, err := os.Stat(filePath); err == nil {
-		d.progressBar.Describe(fmt.Sprintf("[yellow]No DB Record[reset], Adding %s", fileName))
-		hashString, err := d.hashExistingFile(filePath)
-		if err != nil {
-			logger.Logger.Printf("[ERROR] failed to hash existing file %s: %v", filePath, err)
-			return fmt.Errorf("error hashing existing file: %v", err)
-		}
-		err = d.saveFileHash(modelName, hashString, filePath, fileType)
-		if err != nil {
-			logger.Logger.Printf("[ERROR] failed to save hash for existing file %s: %v", filePath, err)
-			return fmt.Errorf("error saving hash for existing file: %v", err)
-		}
-		d.progressBar.Add(1)
-		return nil
 	}
 
 	d.progressBar.Describe(fmt.Sprintf("[green]Downloading[reset] %s", fileName))
@@ -480,10 +487,10 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 				url.QueryEscape(metadata["Key-Pair-Id"]),
 				url.QueryEscape(metadata["Signature"]))
 		}
-		return d.DownloadM3U8(ctx, modelName, fullUrl, filePath, sourceID, frameRate)
+		return d.DownloadM3U8(ctx, modelName, fullUrl, filePath, sourceID, frameRate, isDiagnosis)
 	}
 
-	return d.downloadRegularFile(mediaUrl, filePath, modelName, fileType)
+	return d.downloadRegularFile(mediaUrl, filePath, modelName, fileType, isDiagnosis)
 }
 
 func (d *Downloader) downloadWithRetry(url string) (*http.Response, error) {
@@ -528,7 +535,7 @@ func (d *Downloader) downloadWithRetry(url string) (*http.Response, error) {
 	return nil, fmt.Errorf("failed to download %s after %d retries", url, maxRetries)
 }
 
-func (d *Downloader) downloadRegularFile(url, filePath string, modelName string, fileType string) error {
+func (d *Downloader) downloadRegularFile(url, filePath string, modelName string, fileType string, isDiagnosis bool) error {
 	if err := d.limiter.Wait(context.Background()); err != nil {
 		return fmt.Errorf("rate limiter wait error: %v", err)
 	}
@@ -569,7 +576,12 @@ func (d *Downloader) downloadRegularFile(url, filePath string, modelName string,
 	}
 
 	hashString := hex.EncodeToString(hash.Sum(nil))
-	return d.saveFileHash(modelName, hashString, filePath, fileType)
+	//return d.saveFileHash(modelName, hashString, filePath, fileType)
+	if !isDiagnosis {
+		return d.saveFileHash(modelName, hashString, filePath, fileType)
+	}
+
+	return nil
 }
 
 func (d *Downloader) hashExistingFile(filePath string) (string, error) {

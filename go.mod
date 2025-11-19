@@ -1,9 +1,7 @@
 //module go-fansly-scraper
 module github.com/agnosto/fansly-scraper
 
-go 1.23.0
-
-toolchain go1.24.0
+go 1.24.0
 
 require (
 	github.com/BurntSushi/toml v1.4.0
@@ -56,7 +54,7 @@ require (
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/muesli/termenv v0.15.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	golang.org/x/sync v0.14.0
+	golang.org/x/sync v0.18.0
 	golang.org/x/sys v0.33.0
 	golang.org/x/term v0.22.0 // indirect
 	golang.org/x/text v0.25.0 // indirect

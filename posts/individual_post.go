@@ -174,9 +174,12 @@ func GetFullPostDetails(postId string, fanslyHeaders *headers.FanslyHeaders) (*P
 		}
 	}
 
-	filteredMedia := filterMediaWithLocations(finalMediaItems)
+	/*filteredMedia := filterMediaWithLocations(finalMediaItems)
 	logger.Logger.Printf("[INFO] Retrieved %d media items for post %s", len(filteredMedia), postId)
-	return &postInfo, filteredMedia, nil
+	return &postInfo, filteredMedia, nil*/
+
+	logger.Logger.Printf("[INFO] Retrieved %d media items for post %s", len(finalMediaItems), postId)
+	return &postInfo, finalMediaItems, nil
 }
 
 func GetMediaByIDs(ctx context.Context, mediaIDs []string, fanslyHeaders *headers.FanslyHeaders) ([]AccountMedia, error) {

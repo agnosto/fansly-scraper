@@ -28,7 +28,7 @@ import (
 	"github.com/agnosto/fansly-scraper/utils"
 )
 
-var m3u8Semaphore = semaphore.NewWeighted(2) // Limit to 2 concurrent M3U8 downloads, shitop programming
+//var m3u8Semaphore = semaphore.NewWeighted(2) // Limit to 2 concurrent M3U8 downloads, shitop programming
 
 func GetM3U8Cookies(m3u8URL string) map[string]string {
 	return map[string]string{
@@ -38,13 +38,13 @@ func GetM3U8Cookies(m3u8URL string) map[string]string {
 	}
 }
 
-func (d *Downloader) DownloadM3U8(ctx context.Context, modelName string, m3u8URL string, savePath string, postID string, frameRate float64) error {
+func (d *Downloader) DownloadM3U8(ctx context.Context, modelName string, m3u8URL string, savePath string, postID string, frameRate float64, isDiagnosis bool) error {
 	fileType := "video"
 
-	if err := m3u8Semaphore.Acquire(ctx, 1); err != nil {
+	if err := d.m3u8Semaphore.Acquire(ctx, 1); err != nil {
 		return err
 	}
-	defer m3u8Semaphore.Release(1)
+	defer d.m3u8Semaphore.Release(1)
 	cookies := GetM3U8Cookies(m3u8URL)
 	//baseURL, _ := utils.SplitURL(m3u8URL)
 
@@ -92,9 +92,15 @@ func (d *Downloader) DownloadM3U8(ctx context.Context, modelName string, m3u8URL
 		return fmt.Errorf("error hashing M3U8 file: %w", err)
 	}
 
-	if err := d.saveFileHash(modelName, hashString, outputFile, fileType); err != nil {
-		return fmt.Errorf("error saving hash for M3U8 file: %w", err)
+	if !isDiagnosis {
+		if err := d.saveFileHash(modelName, hashString, outputFile, fileType); err != nil {
+			return fmt.Errorf("error saving hash for M3U8 file: %w", err)
+		}
 	}
+
+	//if err := d.saveFileHash(modelName, hashString, outputFile, fileType); err != nil {
+	//	return fmt.Errorf("error saving hash for M3U8 file: %w", err)
+	//}
 
 	// Clean up segment files
 	for _, file := range segmentFiles {

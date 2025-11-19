@@ -16,6 +16,16 @@ type Flags struct {
 	Service        string
 	MonitorCommand string
 	PostID         string
+	RunDiagnosis   bool
+	DiagnosisFlags DiagnosisFlags
+}
+
+type DiagnosisFlags struct {
+	Level      int
+	OutputFile string
+	Creator    string
+	PostID     string
+	KeepTmp    bool
 }
 
 func ParseFlags() (Flags, string) {
@@ -23,6 +33,7 @@ func ParseFlags() (Flags, string) {
 
 	flag.Usage = customUsage
 
+	// Main operational flags
 	flag.StringVar(&flags.Username, "u", "", "Model username to download")
 	flag.StringVar(&flags.Username, "username", "", "Model username to download")
 	flag.StringVar(&flags.DownloadType, "d", "", "Download type: all, timeline, messages, or stories")
@@ -34,6 +45,14 @@ func ParseFlags() (Flags, string) {
 	flag.StringVar(&flags.Service, "service", "", "Control the service: install, uninstall, start, stop, restart")
 	flag.StringVar(&flags.PostID, "p", "", "Download a specific post by ID or URL")
 	flag.StringVar(&flags.PostID, "post", "", "Download a specific post by ID or URL")
+
+	// Diagnosis flags, now grouped logically
+	flag.BoolVar(&flags.RunDiagnosis, "diagnosis", false, "Run the diagnosis suite")
+	flag.IntVar(&flags.DiagnosisFlags.Level, "level", 1, "Verbosity level for diagnosis (1-3)")
+	flag.StringVar(&flags.DiagnosisFlags.OutputFile, "output", "", "Output file for diagnosis report")
+	flag.StringVar(&flags.DiagnosisFlags.Creator, "creator", "", "Specify a creator's username for targeted tests")
+	flag.StringVar(&flags.DiagnosisFlags.PostID, "postID", "", "Specify a post ID for targeted tests")
+	flag.BoolVar(&flags.DiagnosisFlags.KeepTmp, "keep-tmp", false, "Do not delete the temporary download directory after diagnosis")
 
 	flag.Parse()
 
@@ -62,6 +81,15 @@ func customUsage() {
 	fmt.Fprintf(os.Stderr, "  -m, --monitor=USERNAME    Toggle monitoring for a model\n")
 	fmt.Fprintf(os.Stderr, "  -p, --post=POST_ID/URL    Download a specific post by ID or URL\n")
 	fmt.Fprintf(os.Stderr, "      --service=ACTION      Control the service: install, uninstall, start, stop, restart\n\n")
+
+	fmt.Fprintf(os.Stderr, "Diagnosis:\n")
+	fmt.Fprintf(os.Stderr, "  --diagnosis               Run the diagnosis suite with the following options:\n")
+	fmt.Fprintf(os.Stderr, "      --level=LEVEL         Verbosity level (1-3, default: 1)\n")
+	fmt.Fprintf(os.Stderr, "      --output=FILE         Output file for the report (default: diagnosis-report-YYYY-MM-DD_HH-MM-SS.txt)\n")
+	fmt.Fprintf(os.Stderr, "      --creator=USERNAME    Run tests on a specific creator\n")
+	fmt.Fprintf(os.Stderr, "      --postID=ID           Run tests on a specific post (requires --creator)\n\n")
+	fmt.Fprintf(os.Stderr, "      --keep-tmp            Do not delete the temporary download directory after diagnosis\n\n")
+
 	fmt.Fprintf(os.Stderr, "Commands:\n")
 	fmt.Fprintf(os.Stderr, "  update                    Check for and perform updates\n")
 	fmt.Fprintf(os.Stderr, "  monitor [start|stop]      Start or stop the monitoring process\n")

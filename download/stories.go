@@ -71,14 +71,14 @@ func (d *Downloader) DownloadStories(ctx context.Context, modelId, modelName str
 
 func (d *Downloader) downloadStoryMediaItem(ctx context.Context, accountMedia posts.AccountMedia, baseDir, modelName string, index int) error {
 	// Download main media - pass nil for contentSource and the index
-	err := d.downloadSingleItem(ctx, accountMedia.Media, baseDir, modelName, false, nil, index)
+	err := d.downloadSingleItem(ctx, accountMedia.Media, baseDir, modelName, false, nil, index, false)
 	if err != nil {
 		return fmt.Errorf("error downloading main media: %v", err)
 	}
 
 	// Download preview if it exists
 	if !d.cfg.Options.SkipPreviews && accountMedia.Preview != nil {
-		err = d.downloadSingleItem(ctx, *accountMedia.Preview, baseDir, modelName, true, nil, index)
+		err = d.downloadSingleItem(ctx, *accountMedia.Preview, baseDir, modelName, true, nil, index, false)
 		if err != nil {
 			return fmt.Errorf("error downloading preview: %v", err)
 		}
