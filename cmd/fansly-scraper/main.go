@@ -132,6 +132,40 @@ func main() {
 		logger.Logger.Fatal(err)
 	}
 
+	if flags.DumpChatLog && flags.Username != "" {
+		// Need to load config and headers manually if not already done in main flow
+		cfg, err := config.LoadConfig(config.GetConfigPath())
+		if err != nil {
+			logger.Logger.Printf("Failed to load config: %v", err)
+			os.Exit(1)
+		}
+		fanslyHeaders, err := headers.NewFanslyHeaders(cfg)
+		if err != nil {
+			logger.Logger.Printf("Failed to create headers: %v", err)
+			os.Exit(1)
+		}
+
+		// Perform login to ensure we can fetch user details
+		if _, err := auth.Login(fanslyHeaders); err != nil {
+			logger.Logger.Printf("Error logging in: %v", err)
+			os.Exit(1)
+		}
+
+		// Get Model ID
+		modelID, err := core.GetModelIDFromUsername(flags.Username)
+		if err != nil {
+			logger.Logger.Printf("Error getting model ID: %v", err)
+			os.Exit(1)
+		}
+
+		// Run Dump
+		if err := downloader.DumpChatLogs(context.Background(), modelID, flags.Username); err != nil {
+			logger.Logger.Printf("Error dumping chat logs: %v", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	// Add logic to handle the new --post flag
 	if flags.PostID != "" {
 		runDownloadPostMode(flags.PostID, downloader)

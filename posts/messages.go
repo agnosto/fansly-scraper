@@ -21,10 +21,12 @@ var (
 )
 
 type Message struct {
-	ID          string `json:"id"`
-	Content     string `json:"content"`
-	CreatedAt   int64  `json:"createdAt"`
-	Attachments []struct {
+	ID             string `json:"id"`
+	Content        string `json:"content"`
+	CreatedAt      int64  `json:"createdAt"`
+	SenderId       string `json:"senderId"`
+	SenderUsername string `json:"senderUsername,omitempty"`
+	Attachments    []struct {
 		ContentType int    `json:"contentType"`
 		ContentID   string `json:"contentId"`
 	} `json:"attachments"`
@@ -272,4 +274,45 @@ func getMessageBatchWithMedia(groupID, cursor string, fanslyHeaders *headers.Fan
 
 	logger.Logger.Printf("[INFO] Retrieved %d messages with media in batch", len(messagesWithMedia))
 	return messagesWithMedia, nextCursor, nil
+}
+
+func FetchMessages(groupID, cursor string, fanslyHeaders *headers.FanslyHeaders) ([]Message, string, error) {
+	ctx := context.Background()
+	if err := messageLimiter.Wait(ctx); err != nil {
+		return nil, "", fmt.Errorf("rate limiter error: %v", err)
+	}
+
+	url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/message?groupId=%s&limit=25&ngsw-bypass=true", groupID)
+	if cursor != "0" {
+		url += fmt.Sprintf("&before=%s", cursor)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	fanslyHeaders.AddHeadersToRequest(req, true)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("failed to fetch messages with status code %d", resp.StatusCode)
+	}
+
+	var msgResp MessageResponse
+	if err := json.NewDecoder(resp.Body).Decode(&msgResp); err != nil {
+		return nil, "", err
+	}
+
+	var nextCursor string
+	if len(msgResp.Response.Messages) > 0 {
+		nextCursor = msgResp.Response.Messages[len(msgResp.Response.Messages)-1].ID
+	}
+
+	return msgResp.Response.Messages, nextCursor, nil
 }
