@@ -124,17 +124,22 @@ func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error
 	}, nil
 }
 
-func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName string) error {
+func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName string, wallID string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	timelinePosts, err := posts.GetAllTimelinePosts(modelId, d.headers)
+	timelinePosts, err := posts.GetAllTimelinePosts(modelId, wallID, d.headers)
 	if err != nil {
 		logger.Logger.Printf("[ERROR] [%s] Failed to get timeline posts: %v", modelName, err)
 		return err
 	}
 
-	baseDir := filepath.Join(d.saveLocation, strings.ToLower(modelName), "timeline")
+	folderName := "timeline"
+	if wallID != "" {
+		folderName = fmt.Sprintf("wall_%s", wallID)
+	}
+
+	baseDir := filepath.Join(d.saveLocation, strings.ToLower(modelName), folderName)
 	for _, subDir := range []string{"images", "videos", "audios"} {
 		if err = os.MkdirAll(filepath.Join(baseDir, subDir), os.ModePerm); err != nil {
 			return err

@@ -22,6 +22,9 @@ func (m *MainModel) HandleCompletionUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.cursorPos {
 			case 0: // Process another
 				m.state = FollowedModelsState
+				m.filteredModels = m.followedModels
+				m.filterInput = ""
+				m.updateTable()
 				m.cursorPos = 0
 				return m, nil
 			case 1: // Return to main menu

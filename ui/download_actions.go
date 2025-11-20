@@ -33,11 +33,18 @@ func (m *MainModel) HandleDownloadActionsMenuUpdate(msg tea.Msg) (tea.Model, tea
 			return m, nil
 		case key.Matches(msg, m.keys.Select):
 			m.selectedOption = m.downloadOptions[m.cursorPos]
+			if m.selectedOption == "Select Wall" {
+				m.state = WallSelectionState
+				m.cursorPos = 0 // Reset cursor for the new menu
+				m.updateWallTable()
+				return m, nil
+			}
 			m.state = DownloadProgressState
 			return m, m.startDownload(m.selectedOption)
 		case key.Matches(msg, m.keys.Back):
 			m.state = FollowedModelsState
 			m.cursorPos = 0
+			m.updateTable()
 			return m, nil
 		}
 	}
@@ -75,7 +82,7 @@ func (m *MainModel) startDownload(option string) tea.Cmd {
 
 			switch option {
 			case "All":
-				if err := m.downloader.DownloadTimeline(ctx, m.selectedModelId, m.selectedModel); err != nil {
+				if err := m.downloader.DownloadTimeline(ctx, m.selectedModelId, m.selectedModel, ""); err != nil {
 					logger.Logger.Printf("Error downloading timeline: %v", err)
 				}
 				if err := m.downloader.DownloadMessages(ctx, m.selectedModelId, m.selectedModel); err != nil {
@@ -85,7 +92,7 @@ func (m *MainModel) startDownload(option string) tea.Cmd {
 					logger.Logger.Printf("Error downloading messages: %v", err)
 				}
 			case "Timeline":
-				err = m.downloader.DownloadTimeline(ctx, m.selectedModelId, m.selectedModel)
+				err = m.downloader.DownloadTimeline(ctx, m.selectedModelId, m.selectedModel, "")
 			case "Messages":
 				err = m.downloader.DownloadMessages(ctx, m.selectedModelId, m.selectedModel)
 			case "Stories":

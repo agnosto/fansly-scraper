@@ -161,7 +161,7 @@ func (ds *DiagnosisSuite) testCreator() {
 	}
 	ds.log(fmt.Sprintf(" - INFO: Model ID for %s is %s", ds.flags.Creator, modelID))
 
-	timelinePosts, err := posts.GetAllTimelinePosts(modelID, ds.fanslyHeaders)
+	timelinePosts, err := posts.GetAllTimelinePosts(modelID, "", ds.fanslyHeaders)
 	if err != nil {
 		ds.log(fmt.Sprintf(" - FAIL: Could not get timeline posts: %v", err))
 	} else {

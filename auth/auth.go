@@ -55,11 +55,20 @@ type TimelineStats struct {
 	BundleVidCount int    `json:"bundleVideoCount"`
 }
 
+type Wall struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Metadata    string `json:"metadata"`
+	Pos         int    `json:"pos"`
+}
+
 type FollowedModel struct {
 	ID            string        `json:"id"`
 	Username      string        `json:"username"`
 	DisplayName   string        `json:"displayName"`
 	TimelineStats TimelineStats `json:"timelineStats"`
+	Walls         []Wall        `json:"walls"`
 }
 
 // Subscription structures

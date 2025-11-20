@@ -62,13 +62,13 @@ var (
 	timelineLimiter = rate.NewLimiter(rate.Every(3*time.Second), 2)
 )
 
-func GetAllTimelinePosts(accountID string, fanslyHeaders *headers.FanslyHeaders) ([]Post, error) {
+func GetAllTimelinePosts(accountID string, wallID string, fanslyHeaders *headers.FanslyHeaders) ([]Post, error) {
 	var allPosts []Post
 	before := "0"
 	hasMore := true
 
 	// Get initial batch to check access
-	initialResponse, err := getTimelineBatchResponse(accountID, before, fanslyHeaders)
+	initialResponse, err := getTimelineBatchResponse(accountID, wallID, before, fanslyHeaders)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check timeline access: %v", err)
 	}
@@ -99,7 +99,7 @@ func GetAllTimelinePosts(accountID string, fanslyHeaders *headers.FanslyHeaders)
 	bar.Add(len(initialResponse.Response.Posts))
 
 	for hasMore {
-		response, err := getTimelineBatchResponse(accountID, before, fanslyHeaders)
+		response, err := getTimelineBatchResponse(accountID, wallID, before, fanslyHeaders)
 		if err != nil {
 			return nil, err
 		}
@@ -121,7 +121,7 @@ func GetAllTimelinePosts(accountID string, fanslyHeaders *headers.FanslyHeaders)
 	return allPosts, nil
 }
 
-func getTimelineBatchResponse(accountID, before string, fanslyHeaders *headers.FanslyHeaders) (TimelineResponse, error) {
+func getTimelineBatchResponse(accountID, wallID, before string, fanslyHeaders *headers.FanslyHeaders) (TimelineResponse, error) {
 	ctx := context.Background()
 	err := timelineLimiter.Wait(ctx)
 	if err != nil {
@@ -129,7 +129,7 @@ func getTimelineBatchResponse(accountID, before string, fanslyHeaders *headers.F
 	}
 
 	// Use the original URL format that was working
-	url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/timelinenew/%s?before=%s&after=0&wallId&contentSearch&ngsw-bypass=true", accountID, before)
+	url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/timelinenew/%s?before=%s&after=0&wallId=%s&contentSearch&ngsw-bypass=true", accountID, before, wallID)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {

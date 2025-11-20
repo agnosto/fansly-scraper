@@ -41,6 +41,7 @@ const (
 	CompletionState
 	LoadingState
 	DonateState
+	WallSelectionState
 )
 
 type MainModel struct {
@@ -83,6 +84,7 @@ type MainModel struct {
 	loadingDots               int
 	loadingTicker             *time.Ticker
 	accountsFetched           bool
+	selectedWallID            string
 }
 
 type loadingTickMsg struct{}
@@ -239,7 +241,7 @@ func NewMainModel(downloader *download.Downloader, version string, monitoringSer
 			"Donate",
 			"Quit",
 		},
-		downloadOptions:   []string{"All", "Timeline", "Messages", "Stories"},
+		downloadOptions:   []string{"All", "Timeline", "Select Wall", "Messages", "Stories"},
 		cursorPos:         0,
 		keys:              defaultKeyMap,
 		help:              help.New(),
