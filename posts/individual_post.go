@@ -85,8 +85,9 @@ type PostResponse struct {
 
 // GetFullPostDetails fetches post metadata and all associated media items.
 func GetFullPostDetails(postId string, fanslyHeaders *headers.FanslyHeaders) (*PostInfo, []AccountMedia, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
+	// Use a background context for the overall operation to avoid a premature timeout
+	// on posts with a very large number of media items that require batching.
+	ctx := context.Background()
 
 	if err := limiter.Wait(ctx); err != nil {
 		return nil, nil, fmt.Errorf("rate limiter error: %v", err)
@@ -95,7 +96,11 @@ func GetFullPostDetails(postId string, fanslyHeaders *headers.FanslyHeaders) (*P
 	url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/post?ids=%s&ngsw-bypass=true", postId)
 	logger.Logger.Printf("[INFO] Fetching details for Post: %s", postId)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	// Use a shorter, time-limited context specifically for the initial HTTP request.
+	reqCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, "GET", url, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -174,10 +179,6 @@ func GetFullPostDetails(postId string, fanslyHeaders *headers.FanslyHeaders) (*P
 		}
 	}
 
-	/*filteredMedia := filterMediaWithLocations(finalMediaItems)
-	logger.Logger.Printf("[INFO] Retrieved %d media items for post %s", len(filteredMedia), postId)
-	return &postInfo, filteredMedia, nil*/
-
 	logger.Logger.Printf("[INFO] Retrieved %d media items for post %s", len(finalMediaItems), postId)
 	return &postInfo, finalMediaItems, nil
 }
@@ -187,6 +188,7 @@ func GetMediaByIDs(ctx context.Context, mediaIDs []string, fanslyHeaders *header
 		return nil, nil
 	}
 
+	// Create a set of unique IDs to avoid duplicate processing
 	idSet := make(map[string]struct{})
 	uniqueIDs := []string{}
 	for _, id := range mediaIDs {
@@ -200,39 +202,65 @@ func GetMediaByIDs(ctx context.Context, mediaIDs []string, fanslyHeaders *header
 		return nil, nil
 	}
 
-	err := limiter.Wait(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("rate limiter error: %v", err)
+	var allFetchedMedia []AccountMedia
+	const batchSize = 100
+
+	for i := 0; i < len(uniqueIDs); i += batchSize {
+		end := i + batchSize
+		if end > len(uniqueIDs) {
+			end = len(uniqueIDs)
+		}
+		batch := uniqueIDs[i:end]
+
+		if err := limiter.Wait(ctx); err != nil {
+			// If the context is cancelled (e.g., timeout), stop processing.
+			if ctx.Err() != nil {
+				return allFetchedMedia, fmt.Errorf("context cancelled during batch processing: %w", ctx.Err())
+			}
+			return allFetchedMedia, fmt.Errorf("rate limiter error: %w", err)
+		}
+
+		url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/account/media?ids=%s&ngsw-bypass=true", strings.Join(batch, ","))
+		logger.Logger.Printf("[INFO] Fetching details for %d bundled media items (batch %d/%d)", len(batch), (i/batchSize)+1, (len(uniqueIDs)/batchSize)+1)
+
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			logger.Logger.Printf("[WARN] Failed to create request for media batch: %v", err)
+			continue // Skip to the next batch
+		}
+		fanslyHeaders.AddHeadersToRequest(req, true)
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			logger.Logger.Printf("[WARN] Failed to execute request for media batch: %v", err)
+			continue // Skip to the next batch
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			logger.Logger.Printf("[WARN] Failed to fetch media by IDs with status code %d for batch", resp.StatusCode)
+			continue // Skip to the next batch
+		}
+
+		var mediaResp AccountMediaResponse
+		if err := json.NewDecoder(resp.Body).Decode(&mediaResp); err != nil {
+			logger.Logger.Printf("[WARN] Failed to decode media response for batch: %v", err)
+			continue // Skip to the next batch
+		}
+		if !mediaResp.Success {
+			logger.Logger.Printf("[WARN] API reported failure when fetching media by IDs for batch")
+			continue // Skip to the next batch
+		}
+
+		allFetchedMedia = append(allFetchedMedia, mediaResp.Response...)
 	}
 
-	url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/account/media?ids=%s&ngsw-bypass=true", strings.Join(uniqueIDs, ","))
-	logger.Logger.Printf("[INFO] Fetching details for %d bundled media items", len(uniqueIDs))
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	fanslyHeaders.AddHeadersToRequest(req, true)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch media by IDs with status code %d", resp.StatusCode)
+	if len(allFetchedMedia) != len(uniqueIDs) {
+		logger.Logger.Printf("[WARN] Expected to fetch details for %d unique media IDs, but got %d. Some items may have been deleted or are inaccessible.", len(uniqueIDs), len(allFetchedMedia))
 	}
 
-	var mediaResp AccountMediaResponse
-	if err := json.NewDecoder(resp.Body).Decode(&mediaResp); err != nil {
-		return nil, err
-	}
-	if !mediaResp.Success {
-		return nil, fmt.Errorf("API reported failure when fetching media by IDs")
-	}
-	return mediaResp.Response, nil
+	return allFetchedMedia, nil
 }
 
 func GetPostMedia(postId string, fanslyHeaders *headers.FanslyHeaders) ([]AccountMedia, error) {
