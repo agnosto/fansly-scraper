@@ -49,6 +49,8 @@ type OptionsConfig struct {
 	SkipPreviews            bool   `toml:"skip_previews"`
 	UseContentAsFilename    bool   `toml:"use_content_as_filename"`
 	ContentFilenameTemplate string `toml:"content_filename_template"`
+	ContentFilenameLength   int    `toml:"content_filename_length"`
+	DateFormat              string `toml:"date_format"`
 	DownloadMediaType       string `toml:"download_media_type"`
 	SkipDownloadedPosts     bool   `toml:"skip_downloaded_posts"`
 }
@@ -169,6 +171,8 @@ func CreateDefaultConfig() *Config {
 			SkipPreviews:            true,
 			UseContentAsFilename:    false,
 			ContentFilenameTemplate: "{date}-{content}_{index}",
+			ContentFilenameLength:   50,
+			DateFormat:              "20060102",
 			DownloadMediaType:       "all",
 			SkipDownloadedPosts:     false,
 		},

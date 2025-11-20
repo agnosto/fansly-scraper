@@ -114,6 +114,14 @@ func EnsureConfigUpdated(configPath string) error {
 				cfg.Options.SkipDownloadedPosts = defaultConfig.Options.SkipDownloadedPosts
 				isUpdated = true
 			}
+			if _, exists := optionsMap["content_filename_length"]; !exists {
+				cfg.Options.ContentFilenameLength = defaultConfig.Options.ContentFilenameLength
+				isUpdated = true
+			}
+			if _, exists := optionsMap["date_format"]; !exists {
+				cfg.Options.DateFormat = defaultConfig.Options.DateFormat
+				isUpdated = true
+			}
 		} else {
 			// If options section doesn't exist at all, add the fields
 			cfg.Options.SkipPreviews = defaultConfig.Options.SkipPreviews
@@ -121,6 +129,8 @@ func EnsureConfigUpdated(configPath string) error {
 			cfg.Options.ContentFilenameTemplate = defaultConfig.Options.ContentFilenameTemplate
 			cfg.Options.DownloadMediaType = defaultConfig.Options.DownloadMediaType
 			cfg.Options.SkipDownloadedPosts = defaultConfig.Options.SkipDownloadedPosts
+			cfg.Options.ContentFilenameLength = defaultConfig.Options.ContentFilenameLength
+			cfg.Options.DateFormat = defaultConfig.Options.DateFormat
 			isUpdated = true
 		}
 	}

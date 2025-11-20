@@ -290,11 +290,19 @@ func (d *Downloader) generateFilename(bestMedia posts.MediaItem, modelName strin
 	var baseName string
 	if hasTextContent {
 		// Use the user-defined template for posts/messages with content
-		dateStr := time.Unix(date, 0).Format("20060102")
+		dateFormat := d.cfg.Options.DateFormat
+		if dateFormat == "" {
+			dateFormat = "20060102" // Fallback to the original default
+		}
+		dateStr := time.Unix(date, 0).Format(dateFormat)
 		cleanContent := strings.ReplaceAll(textContent, "\n", " ")
 		runes := []rune(cleanContent)
-		if len(runes) > 50 {
-			runes = runes[:50]
+		charLimit := d.cfg.Options.ContentFilenameLength
+		if charLimit <= 0 {
+			charLimit = 50 // Fallback if config value is invalid
+		}
+		if len(runes) > charLimit {
+			runes = runes[:charLimit]
 		}
 		cleanContent = string(runes)
 
