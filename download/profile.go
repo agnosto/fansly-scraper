@@ -80,9 +80,9 @@ func (d *Downloader) processProfileImage(ctx context.Context, img *auth.ProfileI
 		return nil
 	}
 
-	if d.fileService.FileExists(filePath) {
-		return nil
-	}
+	//if d.fileService.FileExists(filePath) {
+	//	return nil
+	//}
 
 	logger.Logger.Printf("[INFO] Downloading new %s for %s: %s", imgType, modelName, filename)
 

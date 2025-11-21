@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -85,8 +86,6 @@ type PostResponse struct {
 
 // GetFullPostDetails fetches post metadata and all associated media items.
 func GetFullPostDetails(postId string, fanslyHeaders *headers.FanslyHeaders) (*PostInfo, []AccountMedia, error) {
-	// Use a background context for the overall operation to avoid a premature timeout
-	// on posts with a very large number of media items that require batching.
 	ctx := context.Background()
 
 	if err := limiter.Wait(ctx); err != nil {
@@ -96,7 +95,6 @@ func GetFullPostDetails(postId string, fanslyHeaders *headers.FanslyHeaders) (*P
 	url := fmt.Sprintf("https://apiv3.fansly.com/api/v1/post?ids=%s&ngsw-bypass=true", postId)
 	logger.Logger.Printf("[INFO] Fetching details for Post: %s", postId)
 
-	// Use a shorter, time-limited context specifically for the initial HTTP request.
 	reqCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
@@ -127,6 +125,7 @@ func GetFullPostDetails(postId string, fanslyHeaders *headers.FanslyHeaders) (*P
 
 	postInfo := postResp.Response.Posts[0]
 
+	// 1. Map existing media and bundles for quick lookup
 	mediaMap := make(map[string]AccountMedia)
 	for _, media := range postResp.Response.AccountMedia {
 		mediaMap[media.ID] = media
@@ -137,45 +136,58 @@ func GetFullPostDetails(postId string, fanslyHeaders *headers.FanslyHeaders) (*P
 		bundleMap[bundle.ID] = bundle
 	}
 
-	allMediaIDs := make(map[string]struct{})
+	// 2. Build an ORDERED list of Media IDs from attachments
+	var orderedIDs []string
+	seenIDs := make(map[string]bool) // To prevent duplicates if referenced twice
+
 	for _, attachment := range postInfo.Attachments {
-		if attachment.ContentType == 1 { // AccountMedia
-			allMediaIDs[attachment.ContentID] = struct{}{}
+		if attachment.ContentType == 1 { // Single AccountMedia
+			if !seenIDs[attachment.ContentID] {
+				orderedIDs = append(orderedIDs, attachment.ContentID)
+				seenIDs[attachment.ContentID] = true
+			}
 		} else if attachment.ContentType == 2 { // AccountMediaBundle
 			if bundle, ok := bundleMap[attachment.ContentID]; ok {
-				for _, mediaID := range bundle.AccountMediaIDs {
-					allMediaIDs[mediaID] = struct{}{}
+				// Sort the bundle content by 'Pos' (Position) to ensure correct order
+				sort.Slice(bundle.BundleContent, func(i, j int) bool {
+					return bundle.BundleContent[i].Pos < bundle.BundleContent[j].Pos
+				})
+
+				for _, item := range bundle.BundleContent {
+					if !seenIDs[item.AccountMediaID] {
+						orderedIDs = append(orderedIDs, item.AccountMediaID)
+						seenIDs[item.AccountMediaID] = true
+					}
 				}
 			}
 		}
 	}
 
-	var finalMediaItems []AccountMedia
+	// 3. Identify which IDs are missing from the initial response
 	var mediaToFetch []string
-	processedIDs := make(map[string]bool)
-
-	for id := range allMediaIDs {
-		if media, ok := mediaMap[id]; ok {
-			if !processedIDs[id] {
-				finalMediaItems = append(finalMediaItems, media)
-				processedIDs[id] = true
-			}
-		} else {
+	for _, id := range orderedIDs {
+		if _, ok := mediaMap[id]; !ok {
 			mediaToFetch = append(mediaToFetch, id)
 		}
 	}
 
+	// 4. Fetch missing media
 	if len(mediaToFetch) > 0 {
 		fetchedMedia, err := GetMediaByIDs(ctx, mediaToFetch, fanslyHeaders)
 		if err != nil {
 			logger.Logger.Printf("[WARN] Failed to fetch some bundled media for post %s: %v", postId, err)
-		} else {
-			for _, media := range fetchedMedia {
-				if !processedIDs[media.ID] {
-					finalMediaItems = append(finalMediaItems, media)
-					processedIDs[media.ID] = true
-				}
-			}
+		}
+		// Add fetched items to map
+		for _, media := range fetchedMedia {
+			mediaMap[media.ID] = media
+		}
+	}
+
+	// 5. Construct final slice in strict order
+	var finalMediaItems []AccountMedia
+	for _, id := range orderedIDs {
+		if media, ok := mediaMap[id]; ok {
+			finalMediaItems = append(finalMediaItems, media)
 		}
 	}
 
