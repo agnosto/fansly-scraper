@@ -340,6 +340,16 @@ func runCLIMode(username string, downloadType string, downloader *download.Downl
 		os.Exit(1)
 	}
 
+	var modelObj auth.FollowedModel
+	if downloadType == "all" {
+		accountDetails, err := auth.GetAccountDetails([]string{modelID}, fanslyHeaders)
+		if err != nil {
+			logger.Logger.Printf("[WARN] Failed to fetch account details for profile download: %v", err)
+		} else if len(accountDetails) > 0 {
+			modelObj = accountDetails[0]
+		}
+	}
+
 	ctx := context.Background()
 
 	switch downloadType {
@@ -350,6 +360,14 @@ func runCLIMode(username string, downloadType string, downloader *download.Downl
 		}
 		if err := downloader.DownloadMessages(ctx, modelID, username); err != nil {
 			logger.Logger.Printf("Error downloading messages: %v", err)
+		}
+		if err := downloader.DownloadStories(ctx, modelID, username); err != nil {
+			logger.Logger.Printf("Error downloading stories: %v", err)
+		}
+		if modelObj.ID != "" {
+			if err := downloader.DownloadProfileContent(ctx, modelObj); err != nil {
+				logger.Logger.Printf("Error downloading profile content: %v", err)
+			}
 		}
 	case "timeline":
 		// Use wallID parameter

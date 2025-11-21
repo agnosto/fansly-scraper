@@ -53,6 +53,7 @@ type OptionsConfig struct {
 	DateFormat              string `toml:"date_format"`
 	DownloadMediaType       string `toml:"download_media_type"`
 	SkipDownloadedPosts     bool   `toml:"skip_downloaded_posts"`
+	DownloadProfilePic      bool   `toml:"download_profile_pic"`
 }
 
 type NotificationsConfig struct {
@@ -175,6 +176,7 @@ func CreateDefaultConfig() *Config {
 			DateFormat:              "20060102",
 			DownloadMediaType:       "all",
 			SkipDownloadedPosts:     false,
+			DownloadProfilePic:      true,
 		},
 		LiveSettings: LiveSettingsConfig{
 			SaveLocation:            "", // Empty means use default path

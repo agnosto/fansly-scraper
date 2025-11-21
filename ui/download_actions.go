@@ -3,12 +3,15 @@ package ui
 import (
 	"context"
 	"fmt"
+
 	//"log"
 	"strings"
 	"sync"
+
 	//"github.com/agnosto/fansly-scraper/auth"
 	//"github.com/agnosto/fansly-scraper/config"
 	//"github.com/agnosto/fansly-scraper/core"
+	"github.com/agnosto/fansly-scraper/auth"
 	"github.com/agnosto/fansly-scraper/logger"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -80,6 +83,23 @@ func (m *MainModel) startDownload(option string) tea.Cmd {
 			var err error
 			ctx := context.Background()
 
+			var targetModel auth.FollowedModel
+			for _, mod := range m.followedModels {
+				if mod.ID == m.selectedModelId {
+					targetModel = mod
+					break
+				}
+			}
+			// Fallback: Check filtered models if not found
+			if targetModel.ID == "" {
+				for _, mod := range m.filteredModels {
+					if mod.ID == m.selectedModelId {
+						targetModel = mod
+						break
+					}
+				}
+			}
+
 			switch option {
 			case "All":
 				if err := m.downloader.DownloadTimeline(ctx, m.selectedModelId, m.selectedModel, ""); err != nil {
@@ -90,6 +110,11 @@ func (m *MainModel) startDownload(option string) tea.Cmd {
 				}
 				if err := m.downloader.DownloadStories(ctx, m.selectedModelId, m.selectedModel); err != nil {
 					logger.Logger.Printf("Error downloading messages: %v", err)
+				}
+				if targetModel.ID != "" {
+					if err := m.downloader.DownloadProfileContent(ctx, targetModel); err != nil {
+						logger.Logger.Printf("Error downloading profile content: %v", err)
+					}
 				}
 			case "Timeline":
 				err = m.downloader.DownloadTimeline(ctx, m.selectedModelId, m.selectedModel, "")

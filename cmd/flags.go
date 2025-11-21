@@ -96,6 +96,7 @@ func customUsage() {
 	fmt.Fprintf(os.Stderr, "  -u, --username <user>     Model username to download.\n")
 	fmt.Fprintf(os.Stderr, "  -d, --download <type>     Content type: 'all', 'timeline', 'messages', 'stories'.\n")
 	fmt.Fprintf(os.Stderr, "                            (Defaults to 'all', or 'timeline' if --wall is set)\n")
+	fmt.Fprintf(os.Stderr, "                            ('all' includes profile pics if enabled in config)\n")
 	fmt.Fprintf(os.Stderr, "  -w, --wall <id>           Specific Wall ID to download (filters timeline).\n")
 	fmt.Fprintf(os.Stderr, "  -p, --post <id|url>       Download a specific post by ID or URL.\n")
 	fmt.Fprintf(os.Stderr, "      --dump-chat-log       Export text chat history to a JSON file (requires -u).\n\n")

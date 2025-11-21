@@ -63,12 +63,35 @@ type Wall struct {
 	Pos         int    `json:"pos"`
 }
 
+type ImageLocation struct {
+	LocationID string `json:"locationId"`
+	Location   string `json:"location"`
+}
+
+type ImageVariant struct {
+	ID        string          `json:"id"`
+	Type      int             `json:"type"`
+	Mimetype  string          `json:"mimetype"`
+	Height    int             `json:"height"`
+	Width     int             `json:"width"`
+	Locations []ImageLocation `json:"locations"`
+}
+
+type ProfileImage struct {
+	ID        string         `json:"id"`
+	Mimetype  string         `json:"mimetype"`
+	UpdatedAt int64          `json:"updatedAt"`
+	Variants  []ImageVariant `json:"variants"`
+}
+
 type FollowedModel struct {
 	ID            string        `json:"id"`
 	Username      string        `json:"username"`
 	DisplayName   string        `json:"displayName"`
 	TimelineStats TimelineStats `json:"timelineStats"`
 	Walls         []Wall        `json:"walls"`
+	Avatar        *ProfileImage `json:"avatar"`
+	Banner        *ProfileImage `json:"banner"`
 }
 
 // Subscription structures

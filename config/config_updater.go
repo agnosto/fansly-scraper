@@ -122,6 +122,10 @@ func EnsureConfigUpdated(configPath string) error {
 				cfg.Options.DateFormat = defaultConfig.Options.DateFormat
 				isUpdated = true
 			}
+			if _, exists := optionsMap["download_profile_pic"]; !exists {
+				cfg.Options.DownloadProfilePic = defaultConfig.Options.DownloadProfilePic
+				isUpdated = true
+			}
 		} else {
 			// If options section doesn't exist at all, add the fields
 			cfg.Options.SkipPreviews = defaultConfig.Options.SkipPreviews
@@ -131,6 +135,7 @@ func EnsureConfigUpdated(configPath string) error {
 			cfg.Options.SkipDownloadedPosts = defaultConfig.Options.SkipDownloadedPosts
 			cfg.Options.ContentFilenameLength = defaultConfig.Options.ContentFilenameLength
 			cfg.Options.DateFormat = defaultConfig.Options.DateFormat
+			cfg.Options.DownloadProfilePic = defaultConfig.Options.DownloadProfilePic
 			isUpdated = true
 		}
 	}
@@ -244,6 +249,7 @@ func MergeConfigs(existing, new *Config) *Config {
 		result.Options.DownloadMediaType = defaultConfig.Options.DownloadMediaType
 	}
 	result.Options.SkipDownloadedPosts = new.Options.SkipDownloadedPosts
+	result.Options.DownloadProfilePic = new.Options.DownloadProfilePic
 
 	// Merge LiveSettings
 	result.LiveSettings = existing.LiveSettings
