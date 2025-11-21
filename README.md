@@ -84,6 +84,7 @@ Check the [Issues tab](https://github.com/agnosto/fansly-scraper/issues) to see 
 
 ## Known Issues
 
+- **Redownloading**: As of v0.8.3, file naming convention was changed causing redownloading of media.
 - **Chat recording**: May occasionally miss messages during reconnections
 - **MacOS users**: May need to allow notifications in [system settings](https://github.com/gen2brain/beeep/issues/67#issuecomment-2646474049)
 - **Live status**: Press `r` in TUI to refresh live status
