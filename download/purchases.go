@@ -78,7 +78,7 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 	}
 	wg.Wait()
 
-	mediaBar := progressbar.NewOptions(len(accountMediaItems),
+	d.progressBar = progressbar.NewOptions(len(accountMediaItems),
 		progressbar.OptionSetWriter(os.Stderr),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionSetWidth(40),
@@ -125,10 +125,10 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 			if err != nil {
 				logger.Logger.Printf("Error downloading media item %s: %v", media.ID, err)
 			}
-			mediaBar.Add(1)
+			d.progressBar.Add(1)
 		}
 	}
 
-	mediaBar.Finish()
+	d.progressBar.Finish()
 	return nil
 }

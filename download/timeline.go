@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dustin/go-humanize"
+	//"github.com/dustin/go-humanize"
 	"github.com/schollz/progressbar/v3"
 	"golang.org/x/sync/semaphore"
 	"golang.org/x/time/rate"
@@ -146,19 +146,42 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 		}
 	}
 
-	d.progressBar = progressbar.NewOptions(-1,
+	d.progressBar = progressbar.NewOptions(len(timelinePosts),
 		progressbar.OptionSetWriter(os.Stderr),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionUseANSICodes(true),
 		progressbar.OptionSetPredictTime(true),
-		progressbar.OptionSetDescription("[green]Downloading[reset]"),
-		progressbar.OptionSetWidth(40),
-		progressbar.OptionThrottle(15*time.Millisecond),
+		progressbar.OptionSetDescription(fmt.Sprintf("[cyan]Processing %s Timeline[reset]", modelName)),
+		progressbar.OptionSetWidth(30),
+		progressbar.OptionThrottle(30*time.Millisecond),
 		progressbar.OptionShowCount(),
 		progressbar.OptionShowIts(),
 		progressbar.OptionSpinnerType(14),
 		progressbar.OptionFullWidth(),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "[green]=[reset]",
+			SaucerHead:    "[green]>[reset]",
+			SaucerPadding: " ",
+			BarStart:      "[",
+			BarEnd:        "]",
+		}),
 	)
+
+	tickerDone := make(chan bool)
+	go func() {
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-tickerDone:
+				return
+			case <-ticker.C:
+				if d.progressBar != nil {
+					d.progressBar.Add(0)
+				}
+			}
+		}
+	}()
 
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, 10)
@@ -180,6 +203,7 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 			accountMediaItems, err := posts.GetPostMedia(post.ID, d.headers)
 			if err != nil {
 				logger.Logger.Printf("[ERROR] [%s] Failed to fetch media for post %s: %v", modelName, post.ID, err)
+				d.progressBar.Add(1)
 				return
 			}
 
@@ -191,7 +215,7 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 					logger.Logger.Printf("[ERROR] [%s] Failed to download media item %s: %v", modelName, accountMedia.ID, err)
 					continue
 				}
-				d.progressBar.Add(1) // Increment after processing one AccountMedia (main + preview)
+
 			}
 
 			if d.cfg.Options.SkipDownloadedPosts {
@@ -200,13 +224,19 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 					logger.Logger.Printf("[ERROR] [%s] Failed to mark post %s as processed: %v", modelName, post.ID, err)
 				}
 			}
+			d.progressBar.Add(1) // Increment bar when entire post is done
 
 		}(post)
 	}
 	wg.Wait()
+
+	tickerDone <- true
+	close(tickerDone)
+
 	d.progressBar.Finish()
-	d.progressBar.Clear()
-	fmt.Print("\033[2K\r")
+	//d.progressBar.Clear()
+	//fmt.Print("\033[2K\r")
+	fmt.Println()
 	return nil
 }
 
@@ -559,7 +589,7 @@ func (d *Downloader) downloadRegularFile(url, filePath string, modelName string,
 	}
 	defer resp.Body.Close()
 
-	d.progressBar = progressbar.NewOptions(
+	/*d.progressBar = progressbar.NewOptions(
 		-1,
 		progressbar.OptionSetWriter(os.Stderr),
 		progressbar.OptionEnableColorCodes(true),
@@ -574,7 +604,10 @@ func (d *Downloader) downloadRegularFile(url, filePath string, modelName string,
 		progressbar.OptionShowIts(),
 		progressbar.OptionSpinnerType(14),
 		progressbar.OptionFullWidth(),
-	)
+	)*/
+
+	// Update the description of the main bar
+	d.progressBar.Describe(fmt.Sprintf("[cyan]Downloading[reset] %s", filepath.Base(filePath)))
 
 	out, err := os.Create(filePath)
 	if err != nil {
@@ -583,7 +616,7 @@ func (d *Downloader) downloadRegularFile(url, filePath string, modelName string,
 	defer out.Close()
 
 	hash := sha256.New()
-	_, err = io.Copy(io.MultiWriter(out, d.progressBar, hash), resp.Body)
+	_, err = io.Copy(io.MultiWriter(out, hash), resp.Body)
 	if err != nil {
 		return err
 	}
