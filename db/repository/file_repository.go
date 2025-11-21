@@ -3,6 +3,7 @@ package repository
 import (
 	"github.com/agnosto/fansly-scraper/db/models"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // FileRepository defines the interface for file operations
@@ -27,7 +28,10 @@ func NewFileRepository(db *gorm.DB) FileRepository {
 
 // Create adds a new file to the database
 func (r *GormFileRepository) Create(file *models.File) error {
-	return r.db.Create(file).Error
+	return r.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "hash"}}, // IF the hash column has a conflict...
+		DoNothing: true,                            // ...do nothing (ignore the insert)
+	}).Create(file).Error
 }
 
 // FindByHash finds a file by its hash
