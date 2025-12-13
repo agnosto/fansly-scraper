@@ -166,6 +166,9 @@ func (m *MainModel) RenderLivestreamMonitorMenu() string {
 	sb.WriteString(m.monitoringTable.View() + "\n")
 	helpView := m.help.View(m.keys)
 	height := m.height - strings.Count(helpView, "\n") - m.monitoringTable.Height() - 8
+	if height < 0 {
+		height = 0
+	}
 	sb.WriteString("\n" + strings.Repeat("\n", height) + helpView)
 	return sb.String()
 }

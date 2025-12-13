@@ -5,6 +5,7 @@ import (
 	"fmt"
 	//"maps"
 	"strconv"
+	"syscall"
 
 	"log"
 
@@ -257,7 +258,17 @@ func (ms *MonitoringService) monitorModel(modelID, username string) {
 				wasLive = true
 			}
 
-			if _, err := os.Stat(lockFile); os.IsNotExist(err) {
+			lockFileExists := false
+			if _, err := os.Stat(lockFile); err == nil {
+				lockFileExists = true
+				if ms.isLockStale(lockFile) {
+					os.Remove(lockFile)
+					lockFileExists = false
+					ms.logger.Printf("Removed stale lock file for %s", username)
+				}
+			}
+
+			if !lockFileExists {
 				if !ms.isTUI {
 					printColoredMessage(fmt.Sprintf("%s is live. Attempting to start recording.", username), true)
 				}
@@ -318,6 +329,9 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 		ms.logger.Printf("Error creating lock file for %s: %v", username, err)
 		return
 	}
+	// Write PID to lock file
+	pid := os.Getpid()
+	f.WriteString(strconv.Itoa(pid))
 	f.Close()
 
 	// Ensure lock file cleanup
@@ -737,4 +751,42 @@ func printColoredMessage(message string, isLive bool) {
 	} else {
 		color.Red(message)
 	}
+}
+
+func (ms *MonitoringService) isLockStale(lockFile string) bool {
+	data, err := os.ReadFile(lockFile)
+	if err != nil {
+		return false // Can't read, assume active/problematic
+	}
+
+	// If empty, assume stale (leftover from crash or old version that didn't write PID)
+	if len(data) == 0 {
+		return true
+	}
+
+	pid, err := strconv.Atoi(string(data))
+	if err != nil {
+		return true // Invalid content, assume stale
+	}
+
+	return !isProcessRunning(pid)
+}
+
+func isProcessRunning(pid int) bool {
+	if runtime.GOOS == "windows" {
+		process, err := os.FindProcess(pid)
+		if err != nil {
+			return false
+		}
+		// On Windows, FindProcess always succeeds, so we need to try to get exit code
+		processState, err := process.Wait()
+		return err == nil && !processState.Exited()
+	}
+	// Unix-like systems (Linux, macOS)
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
 }
