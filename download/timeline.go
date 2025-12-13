@@ -281,97 +281,131 @@ func (d *Downloader) DownloadMediaItem(ctx context.Context, accountMedia posts.A
 }
 
 func (d *Downloader) generateFilename(bestMedia posts.MediaItem, modelName string, contentSource any, index int, isPreview bool, ext string) string {
-	if !d.cfg.Options.UseContentAsFilename {
-		var sourceID string
-		if p, ok := contentSource.(posts.Post); ok {
-			sourceID = p.ID
-		} else if m, ok := contentSource.(posts.Message); ok {
-			sourceID = m.ID
-		} else {
-			sourceID = bestMedia.ID
-		}
-
-		suffix := ""
-		if isPreview {
-			suffix = "_preview"
-		}
-		// Fallback to old ID-based method: {postId}_{mediaId}
-		return fmt.Sprintf("%s_%s%s%s", sourceID, bestMedia.ID, suffix, ext)
+	suffix := ""
+	if isPreview {
+		suffix = "_preview"
 	}
 
+	var sourceID string
 	var date int64
 	var textContent string
-	var sourceID string
-	var hasTextContent bool
+	var shouldUseIndex bool
 
+	// Extract data based on the type of content (Post, Message, Story, etc.)
 	if contentSource != nil {
 		switch v := contentSource.(type) {
 		case posts.Post:
 			textContent = v.Content
 			date = v.CreatedAt
-			sourceID = v.ID
+
+			// Check if this is the "Purchases" album
+			if textContent == "Purchases" {
+				// Purchases: Do NOT use index (unstable), use MediaID as source
+				shouldUseIndex = false
+				sourceID = bestMedia.ID
+			} else {
+				// Timeline: Use PostID and Index
+				shouldUseIndex = true
+				sourceID = v.ID
+			}
 		case posts.Message:
+			sourceID = v.ID
 			textContent = v.Content
 			date = v.CreatedAt
+			shouldUseIndex = true // Messages often contain bundles in specific order
+		case posts.Story:
 			sourceID = v.ID
+			date = v.CreatedAt
+			shouldUseIndex = false // Stories are usually 1:1, index not required
+		case posts.PostInfo: // Handle cases where PostInfo is passed directly
+			sourceID = v.ID
+			textContent = v.Content
+			date = v.CreatedAt
+			shouldUseIndex = true
+		default:
+			// Fallback for Purchases, Profile, or unknown types
+			// We use the MediaID as the SourceID to ensure uniqueness without an unstable index
+			sourceID = bestMedia.ID
+			shouldUseIndex = false
 		}
+	} else {
+		// Fallback if no source is provided
+		sourceID = bestMedia.ID
+		shouldUseIndex = false
 	}
 
-	// Check if the extracted text content is meaningful
-	if textContent != "" && textContent != "Purchases" {
-		hasTextContent = true
+	// 2. Mode A: Default ID-Based Naming (Config: use_content_as_filename = false)
+	if !d.cfg.Options.UseContentAsFilename {
+		if shouldUseIndex {
+			// Format: PostID_Index_MediaID (e.g., 84458..._01_84458... .mp4)
+			// We use %02d to pad the index (01, 02, 10) for correct filesystem sorting
+			return fmt.Sprintf("%s_%02d_%s%s%s", sourceID, index+1, bestMedia.ID, suffix, ext)
+		}
+		// Format: SourceID_MediaID (e.g. StoryID_MediaID)
+		// If sourceID was set to MediaID in fallback, this effectively becomes MediaID_MediaID,
+		// so we check to avoid redundancy
+		if sourceID == bestMedia.ID {
+			return fmt.Sprintf("%s%s%s", bestMedia.ID, suffix, ext)
+		}
+		return fmt.Sprintf("%s_%s%s%s", sourceID, bestMedia.ID, suffix, ext)
 	}
 
-	var baseName string
+	// 3. Mode B: Content-Based Naming (Config: use_content_as_filename = true)
+
+	// Check if meaningful text content exists
+	hasTextContent := textContent != "" && textContent != "Purchases"
+
 	if hasTextContent {
-		// Use the user-defined template for posts/messages with content
+		// Define Date Format
 		dateFormat := d.cfg.Options.DateFormat
 		if dateFormat == "" {
-			dateFormat = "20060102" // Fallback to the original default
+			dateFormat = "20060102"
 		}
 		dateStr := time.Unix(date, 0).Format(dateFormat)
+
+		// Sanitize and Limit Content Text
 		cleanContent := strings.ReplaceAll(textContent, "\n", " ")
 		runes := []rune(cleanContent)
 		charLimit := d.cfg.Options.ContentFilenameLength
 		if charLimit <= 0 {
-			charLimit = 50 // Fallback if config value is invalid
+			charLimit = 50
 		}
 		if len(runes) > charLimit {
 			runes = runes[:charLimit]
 		}
 		cleanContent = string(runes)
 
+		// Get Template
 		template := d.cfg.Options.ContentFilenameTemplate
 		if template == "" {
 			template = "{date}-{content}_{index}"
 		}
 
+		// Replace Variables
+		// We allow {postId} and {mediaId} here so you can achieve custom ID formats via config if desired
 		r := strings.NewReplacer(
 			"{date}", dateStr,
 			"{content}", cleanContent,
-			"{index}", fmt.Sprintf("%d", index),
+			"{index}", fmt.Sprintf("%d", index+1),
 			"{postId}", sourceID,
 			"{mediaId}", bestMedia.ID,
 			"{model_name}", modelName,
 		)
-		baseName = r.Replace(template)
 
+		baseName := r.Replace(template)
+		return config.SanitizeFilename(baseName) + suffix + ext
+	}
+
+	// Fallback for Content Mode when NO text is present
+	// Defaults to Date_Model_MediaID_Index to ensure uniqueness
+	var dateStr string
+	if date > 0 {
+		dateStr = time.Unix(date, 0).Format("20060102")
 	} else {
-		var dateStr string
-		if date > 0 {
-			dateStr = time.Unix(date, 0).Format("20060102")
-		} else {
-			dateStr = time.Now().Format("20060102") // Fallback to current date
-		}
-
-		// Template: {date}_{model_name}_{mediaId}_{index}
-		baseName = fmt.Sprintf("%s_%s_%s_%d", dateStr, modelName, bestMedia.ID, index)
+		dateStr = time.Now().Format("20060102")
 	}
 
-	suffix := ""
-	if isPreview {
-		suffix = "_preview"
-	}
+	baseName := fmt.Sprintf("%s_%s_%s_%d", dateStr, modelName, bestMedia.ID, index+1)
 	return config.SanitizeFilename(baseName) + suffix + ext
 }
 
