@@ -230,6 +230,12 @@ func (ms *MonitoringService) monitorModel(modelID, username string) {
 		fmt.Printf("Starting to monitor %s (%s)\n", username, modelID)
 	}
 
+	cfg, err := config.LoadConfig(config.GetConfigPath())
+	checkInterval := 60 // default safe fallback
+	if err == nil && cfg.LiveSettings.CheckInterval > 0 {
+		checkInterval = cfg.LiveSettings.CheckInterval
+	}
+
 	var wasLive bool = false
 
 	for ms.IsMonitoring(modelID) {
@@ -255,7 +261,9 @@ func (ms *MonitoringService) monitorModel(modelID, username string) {
 				if !ms.isTUI {
 					printColoredMessage(fmt.Sprintf("%s is live. Attempting to start recording.", username), true)
 				}
-				go ms.startRecording(modelID, username, playbackUrl)
+				ms.startRecording(modelID, username, playbackUrl)
+
+				continue
 			} else if !ms.isTUI {
 				fmt.Printf("%s is already being recorded\n", username)
 			}
@@ -268,10 +276,16 @@ func (ms *MonitoringService) monitorModel(modelID, username string) {
 			}
 
 			if !ms.isTUI {
-				printColoredMessage(fmt.Sprintf("%s is not live. Checking again in 2 minutes.", username), false)
+				printColoredMessage(fmt.Sprintf("%s is not live. Checking again in %d seconds.", username, checkInterval), false)
 			}
 		}
-		time.Sleep(2 * time.Minute)
+		//time.Sleep(2 * time.Minute)
+		select {
+		case <-ms.stopChan:
+			return
+		case <-time.After(time.Duration(checkInterval) * time.Second):
+			// Continue loop
+		}
 	}
 
 	if !ms.isTUI {
@@ -428,12 +442,13 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 	ms.logger.Printf("Recording complete for %s.", username)
 
 	// Create a wait group for post-processing
-	var wg sync.WaitGroup
-	wg.Add(1)
+	// Remove waitgroup, return from the function immediately so monitorModel can loop again
+	//var wg sync.WaitGroup
+	//wg.Add(1)
 
 	// Run post-processing in a separate goroutine
 	go func() {
-		defer wg.Done()
+		//defer wg.Done()
 		// Stop chat recording when the stream ends
 		if ms.chatRecorder != nil && ms.chatRecorder.IsRecording(modelID) {
 			if err := ms.chatRecorder.StopRecording(modelID); err != nil {
@@ -526,7 +541,7 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 	}()
 
 	// Wait for post-processing to complete
-	wg.Wait()
+	//wg.Wait()
 	ms.logger.Printf("All processing complete for %s", username)
 }
 

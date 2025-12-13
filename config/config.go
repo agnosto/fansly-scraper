@@ -35,6 +35,7 @@ type LiveSettingsConfig struct {
 	RecordChat              bool   `toml:"record_chat"`
 	FFmpegRecordingOptions  string `toml:"ffmpeg_recording_options"`
 	FFmpegConversionOptions string `toml:"ffmpeg_conversion_options"`
+	CheckInterval           int    `toml:"check_interval"`
 }
 
 type AccountConfig struct {
@@ -191,6 +192,7 @@ func CreateDefaultConfig() *Config {
 			RecordChat:              true,
 			FFmpegRecordingOptions:  "",
 			FFmpegConversionOptions: "",
+			CheckInterval:           60,
 		},
 		Notifications: NotificationsConfig{
 			Enabled:                   false,

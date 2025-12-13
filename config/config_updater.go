@@ -202,6 +202,10 @@ func EnsureConfigUpdated(configPath string) error {
 				cfg.LiveSettings.FFmpegConversionOptions = defaultConfig.LiveSettings.FFmpegConversionOptions
 				isUpdated = true
 			}
+			if _, exists := liveSettingsMap["check_interval"]; !exists {
+				cfg.LiveSettings.CheckInterval = defaultConfig.LiveSettings.CheckInterval
+				isUpdated = true
+			}
 		}
 	}
 
@@ -295,6 +299,17 @@ func MergeConfigs(existing, new *Config) *Config {
 	}
 	if new.LiveSettings.FFmpegConversionOptions != "" {
 		result.LiveSettings.FFmpegConversionOptions = new.LiveSettings.FFmpegConversionOptions
+	}
+
+	if new.LiveSettings.CheckInterval > 0 {
+		result.LiveSettings.CheckInterval = new.LiveSettings.CheckInterval
+	} else {
+		// If not set in new (0), use existing or default
+		if existing.LiveSettings.CheckInterval > 0 {
+			result.LiveSettings.CheckInterval = existing.LiveSettings.CheckInterval
+		} else {
+			result.LiveSettings.CheckInterval = 60
+		}
 	}
 
 	// Merge Notifications
