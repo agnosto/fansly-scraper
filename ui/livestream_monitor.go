@@ -7,6 +7,7 @@ import (
 	//"os/exec"
 	"path/filepath"
 	//"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -214,28 +215,68 @@ func (m *MainModel) updateMonitoringTable() {
 		{Title: "Live Status", Width: 15},
 	}
 	activeMonitors := m.loadMonitoringState()
-	rows := make([]table.Row, len(m.filteredLiveMonitorModels))
-	for i, model := range m.filteredLiveMonitorModels {
+
+	// Struct to hold sorting data
+	type modelStatusData struct {
+		model       auth.FollowedModel
+		isMonitored bool
+		isLive      bool
+	}
+
+	var statusList []modelStatusData
+
+	// Populate statusList
+	for _, model := range m.filteredLiveMonitorModels {
+		data := modelStatusData{
+			model: model,
+		}
+		if _, isMonitored := activeMonitors[model.ID]; isMonitored {
+			data.isMonitored = true
+			isLive, _, _ := core.CheckIfModelIsLive(model.ID)
+			data.isLive = isLive
+		}
+		statusList = append(statusList, data)
+	}
+
+	// Sort the list
+	sort.Slice(statusList, func(i, j int) bool {
+		// 1. Monitor Status: Monitoring (true) > Not Monitoring (false)
+		if statusList[i].isMonitored != statusList[j].isMonitored {
+			return statusList[i].isMonitored
+		}
+		// 2. Live Status: Live (true) > Offline (false) - only matters if monitored
+		if statusList[i].isLive != statusList[j].isLive {
+			return statusList[i].isLive
+		}
+		// 3. Username: Alphabetical
+		return strings.ToLower(statusList[i].model.Username) < strings.ToLower(statusList[j].model.Username)
+	})
+
+	// Build rows from sorted list
+	rows := make([]table.Row, len(statusList))
+	for i, data := range statusList {
 		monitorStatus := "Not Monitoring"
 		monitorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("red"))
 		liveStatus := "Offline"
 		liveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("red"))
-		if _, isMonitored := activeMonitors[model.ID]; isMonitored {
+
+		if data.isMonitored {
 			monitorStatus = "Monitoring"
 			monitorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("green"))
-			isLive, _, _ := core.CheckIfModelIsLive(model.ID)
-			if isLive {
+			if data.isLive {
 				liveStatus = "Live"
 				liveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("green"))
 			}
 		}
+
 		rows[i] = table.Row{
-			model.Username,
-			model.ID,
+			data.model.Username,
+			data.model.ID,
 			monitorStyle.Render(monitorStatus),
 			liveStyle.Render(liveStatus),
 		}
 	}
+
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows(rows),
