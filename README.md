@@ -7,7 +7,7 @@ A simple all in one tool to download and monitor content from Fansly creators.
 
 ## Requirements
 
-- **Optional but highly recommended**: [ffmpeg](https://ffmpeg.org/) for livestream recording and saving higher quality videos.
+- **Optional but highly recommended**: [ffmpeg](https://ffmpeg.org/) for livestream recording and saving higher quality videos. Follow [this guide](https://phoenixnap.com/kb/ffmpeg-windows) for installing to system path on windows.
 - **Optional**: [mt](https://github.com/mutschler/mt) for better contact sheets
 
 ## Quick Start
