@@ -22,6 +22,7 @@ type Flags struct {
 	DiagnosisFlags DiagnosisFlags
 	DumpChatLog    bool
 	WallID         string
+	Limit          int
 }
 
 type DiagnosisFlags struct {
@@ -49,6 +50,9 @@ func ParseFlags() (Flags, string) {
 
 	flag.StringVar(&flags.PostID, "p", "", "Download a specific post by ID or URL")
 	flag.StringVar(&flags.PostID, "post", "", "Download a specific post by ID or URL")
+
+	flag.IntVar(&flags.Limit, "l", 0, "Limit download to the x most recent items")
+	flag.IntVar(&flags.Limit, "limit", 0, "Limit download to the x most recent items")
 
 	flag.BoolVar(&flags.DumpChatLog, "dump-chat-log", false, "Export text chat history to a JSON file")
 
@@ -99,6 +103,7 @@ func customUsage() {
 	fmt.Fprintf(os.Stderr, "                            ('all' includes profile pics if enabled in config)\n")
 	fmt.Fprintf(os.Stderr, "  -w, --wall <id>           Specific Wall ID to download (filters timeline).\n")
 	fmt.Fprintf(os.Stderr, "  -p, --post <id|url>       Download a specific post by ID or URL.\n")
+	fmt.Fprintf(os.Stderr, "  -l, --limit <num>         Limit download to the x most recent items.\n")
 	fmt.Fprintf(os.Stderr, "      --dump-chat-log       Export text chat history to a JSON file (requires -u).\n\n")
 
 	// Operational Options

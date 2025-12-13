@@ -128,7 +128,7 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	timelinePosts, err := posts.GetAllTimelinePosts(modelId, wallID, d.headers)
+	timelinePosts, err := posts.GetAllTimelinePosts(modelId, wallID, d.headers, d.cfg.Options.PostLimit)
 	if err != nil {
 		logger.Logger.Printf("[ERROR] [%s] Failed to get timeline posts: %v", modelName, err)
 		return err

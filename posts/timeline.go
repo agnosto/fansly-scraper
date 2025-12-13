@@ -62,7 +62,7 @@ var (
 	timelineLimiter = rate.NewLimiter(rate.Every(3*time.Second), 2)
 )
 
-func GetAllTimelinePosts(accountID string, wallID string, fanslyHeaders *headers.FanslyHeaders) ([]Post, error) {
+func GetAllTimelinePosts(accountID string, wallID string, fanslyHeaders *headers.FanslyHeaders, limit int) ([]Post, error) {
 	var allPosts []Post
 	before := "0"
 	hasMore := true
@@ -80,6 +80,13 @@ func GetAllTimelinePosts(accountID string, wallID string, fanslyHeaders *headers
 
 	// Add posts from initial response
 	allPosts = append(allPosts, initialResponse.Response.Posts...)
+
+	if limit > 0 && len(allPosts) >= limit {
+		allPosts = allPosts[:limit]
+		logger.Logger.Printf("[INFO] Reached post limit of %d. Stopping fetch", limit)
+		return allPosts, nil
+	}
+
 	if len(initialResponse.Response.Posts) > 0 {
 		before = initialResponse.Response.Posts[len(initialResponse.Response.Posts)-1].ID
 	} else {

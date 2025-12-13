@@ -161,14 +161,14 @@ func (ds *DiagnosisSuite) testCreator() {
 	}
 	ds.log(fmt.Sprintf(" - INFO: Model ID for %s is %s", ds.flags.Creator, modelID))
 
-	timelinePosts, err := posts.GetAllTimelinePosts(modelID, "", ds.fanslyHeaders)
+	timelinePosts, err := posts.GetAllTimelinePosts(modelID, "", ds.fanslyHeaders, 0)
 	if err != nil {
 		ds.log(fmt.Sprintf(" - FAIL: Could not get timeline posts: %v", err))
 	} else {
 		ds.log(fmt.Sprintf(" - INFO: Found %d timeline posts.", len(timelinePosts)))
 	}
 
-	messages, err := posts.GetAllMessagesWithMedia(modelID, ds.fanslyHeaders)
+	messages, err := posts.GetAllMessagesWithMedia(modelID, ds.fanslyHeaders, 0)
 	if err != nil {
 		ds.log(fmt.Sprintf(" - FAIL: Could not get messages: %v", err))
 	} else {

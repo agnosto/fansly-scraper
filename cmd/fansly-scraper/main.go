@@ -127,6 +127,11 @@ func main() {
 	ffmpegAvailable = cmd.IsFFmpegAvailable()
 	logger.Logger.Printf("Ffmpeg Check Returned %v", ffmpegAvailable)
 
+	if flags.Limit > 0 {
+		cfg.Options.PostLimit = flags.Limit
+		logger.Logger.Printf("Overriding config: Setting Post Limit to %d", flags.Limit)
+	}
+
 	downloader, err := download.NewDownloader(cfg, ffmpegAvailable)
 	if err != nil {
 		logger.Logger.Fatal(err)

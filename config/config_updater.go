@@ -126,6 +126,10 @@ func EnsureConfigUpdated(configPath string) error {
 				cfg.Options.DownloadProfilePic = defaultConfig.Options.DownloadProfilePic
 				isUpdated = true
 			}
+			if _, exist := optionsMap["post_limit"]; !exist {
+				cfg.Options.PostLimit = defaultConfig.Options.PostLimit
+				isUpdated = true
+			}
 		} else {
 			// If options section doesn't exist at all, add the fields
 			cfg.Options.SkipPreviews = defaultConfig.Options.SkipPreviews
@@ -136,6 +140,7 @@ func EnsureConfigUpdated(configPath string) error {
 			cfg.Options.ContentFilenameLength = defaultConfig.Options.ContentFilenameLength
 			cfg.Options.DateFormat = defaultConfig.Options.DateFormat
 			cfg.Options.DownloadProfilePic = defaultConfig.Options.DownloadProfilePic
+			cfg.Options.PostLimit = defaultConfig.Options.PostLimit
 			isUpdated = true
 		}
 	}
@@ -250,6 +255,12 @@ func MergeConfigs(existing, new *Config) *Config {
 	}
 	result.Options.SkipDownloadedPosts = new.Options.SkipDownloadedPosts
 	result.Options.DownloadProfilePic = new.Options.DownloadProfilePic
+
+	if new.Options.PostLimit != 0 {
+		result.Options.PostLimit = new.Options.PostLimit
+	} else {
+		result.Options.PostLimit = existing.Options.PostLimit
+	}
 
 	// Merge LiveSettings
 	result.LiveSettings = existing.LiveSettings

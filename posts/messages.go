@@ -128,7 +128,7 @@ func GetMessageGroupID(modelID string, fanslyHeaders *headers.FanslyHeaders) (st
 	return groupResp.Response.ID, nil
 }
 
-func GetAllMessagesWithMedia(modelID string, fanslyHeaders *headers.FanslyHeaders) ([]MessageWithMedia, error) {
+func GetAllMessagesWithMedia(modelID string, fanslyHeaders *headers.FanslyHeaders, limit int) ([]MessageWithMedia, error) {
 	groupID, err := GetMessageGroupID(modelID, fanslyHeaders)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get group ID: %v", err)
@@ -154,6 +154,12 @@ func GetAllMessagesWithMedia(modelID string, fanslyHeaders *headers.FanslyHeader
 		}
 		allMessagesWithMedia = append(allMessagesWithMedia, batch...)
 		bar.Add(len(batch))
+
+		if limit > 0 && len(allMessagesWithMedia) >= limit {
+			allMessagesWithMedia = allMessagesWithMedia[:limit]
+			break
+		}
+
 		if nextCursor == "" {
 			break
 		}

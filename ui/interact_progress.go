@@ -77,7 +77,7 @@ func (m *MainModel) InitiateLikeUnlike(action string) tea.Cmd {
 			}
 
 			// Fetch all timeline posts
-			timelinePosts, err := posts.GetAllTimelinePosts(m.selectedModelId, "", fanslyHeaders)
+			timelinePosts, err := posts.GetAllTimelinePosts(m.selectedModelId, "", fanslyHeaders, cfg.Options.PostLimit)
 			if err != nil {
 				logger.Logger.Printf("Error fetching timeline posts for %s: %v", m.selectedModel, err)
 				return
