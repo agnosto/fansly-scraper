@@ -354,6 +354,35 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 		return
 	}
 	filename := config.GetVODFilename(cfg, data)
+
+	baseName := strings.TrimSuffix(filename, filepath.Ext(filename))
+	extension := filepath.Ext(filename)
+	counter := 1
+	originalFilename := filename
+
+	for {
+		// Check 1: Does the recording file exist? (e.g., video.ts)
+		_, errTS := os.Stat(filepath.Join(savePath, filename))
+
+		// Check 2: Does the converted MP4 file exist? (e.g., video.mp4)
+		// We construct the MP4 name based on the CURRENT filename attempt
+		currentBase := strings.TrimSuffix(filename, extension)
+		_, errMP4 := os.Stat(filepath.Join(savePath, currentBase+".mp4"))
+
+		// If BOTH don't exist, we are safe to use this name
+		if os.IsNotExist(errTS) && os.IsNotExist(errMP4) {
+			break
+		}
+
+		// If either exists, increment and try again
+		filename = fmt.Sprintf("%s_%d%s", baseName, counter, extension)
+		counter++
+	}
+
+	if originalFilename != filename {
+		ms.logger.Printf("File %s exists, using unique filename: %s", originalFilename, filename)
+	}
+
 	recordedFilename := filepath.Join(savePath, filename)
 	dir := filepath.Join(cfg.Options.SaveLocation, strings.ToLower(username), "lives")
 	if err := os.MkdirAll(dir, 0755); err != nil {
