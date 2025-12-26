@@ -114,6 +114,13 @@ func GetAllTimelinePosts(accountID string, wallID string, fanslyHeaders *headers
 		posts := response.Response.Posts
 		allPosts = append(allPosts, posts...)
 
+		if limit > 0 && len(allPosts) >= limit {
+			allPosts = allPosts[:limit]
+			bar.Add(len(posts))
+			logger.Logger.Printf("[INFO] Reached post limit of %d inside loop. Stopping fetch", limit)
+			break
+		}
+
 		if len(posts) == 0 {
 			hasMore = false
 		} else {
