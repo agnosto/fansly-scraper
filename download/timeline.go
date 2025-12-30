@@ -608,13 +608,21 @@ func (d *Downloader) downloadWithRetry(url string) (*http.Response, error) {
 
 		client := &http.Client{}
 		resp, err := client.Do(req)
-		if err == nil && resp.StatusCode < 500 {
+		if err != nil {
+			continue
+		}
+
+		if resp.StatusCode == http.StatusOK {
 			return resp, nil
 		}
 
-		if resp != nil {
+		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
 			resp.Body.Close()
+			return nil, fmt.Errorf("access denied (HTTP %d): account may lack the required subscription tier", resp.StatusCode)
 		}
+
+		resp.Body.Close()
+		logger.Logger.Printf("Download failed with status %d, retrying...", resp.StatusCode)
 
 		time.Sleep(backoff)
 		backoff *= 2

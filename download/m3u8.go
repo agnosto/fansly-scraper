@@ -355,6 +355,10 @@ func downloadFile(ctx context.Context, url string, fileName string, cookies map[
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to download segment: HTTP %d", resp.StatusCode)
+	}
+
 	out, err := os.Create(fileName)
 	if err != nil {
 		return err
