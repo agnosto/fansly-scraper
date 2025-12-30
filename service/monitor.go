@@ -31,18 +31,19 @@ import (
 )
 
 type MonitoringService struct {
-	activeMonitors   map[string]string
-	mu               sync.Mutex
-	activeRecordings map[string]bool
-	activeMonitoring map[string]bool
-	storagePath      string
-	recordingsPath   string
-	stopChan         chan struct{}
-	logger           *log.Logger
-	isTUI            bool
-	notificationSvc  *notifications.NotificationService
-	chatRecorder     *ChatRecorder
-	fileService      *service.FileService
+	activeMonitors       map[string]string
+	mu                   sync.Mutex
+	activeRecordings     map[string]bool
+	activeMonitoring     map[string]bool
+	storagePath          string
+	recordingsPath       string
+	stopChan             chan struct{}
+	logger               *log.Logger
+	isTUI                bool
+	notificationSvc      *notifications.NotificationService
+	chatRecorder         *ChatRecorder
+	fileService          *service.FileService
+	processedPostService *service.ProcessedPostService
 }
 
 func (ms *MonitoringService) GetRecordingsPath() string {
@@ -67,6 +68,7 @@ func NewMonitoringService(storagePath string, logger *log.Logger) *MonitoringSer
 	}
 
 	var fileService *service.FileService
+	var processedPostService *service.ProcessedPostService
 	database, err := db.NewDatabase(cfg.Options.SaveLocation)
 	if err != nil {
 		logger.Printf("Error initializing database: %v", err)
@@ -74,20 +76,23 @@ func NewMonitoringService(storagePath string, logger *log.Logger) *MonitoringSer
 	} else {
 		fileRepo := repository.NewFileRepository(database.DB)
 		fileService = service.NewFileService(fileRepo)
+		postRepo := repository.NewProcessedPostRepository(database.DB)
+		processedPostService = service.NewProcessedPostService(postRepo)
 		logger.Printf("Database initialized successfully for monitoring service")
 	}
 
 	mt := &MonitoringService{
-		activeMonitors:   make(map[string]string),
-		activeRecordings: make(map[string]bool),
-		activeMonitoring: make(map[string]bool),
-		storagePath:      storagePath,
-		recordingsPath:   filepath.Join(filepath.Dir(storagePath), "active_recordings"),
-		stopChan:         make(chan struct{}),
-		logger:           logger,
-		isTUI:            false,
-		notificationSvc:  notifications.NewNotificationService(cfg),
-		fileService:      fileService,
+		activeMonitors:       make(map[string]string),
+		activeRecordings:     make(map[string]bool),
+		activeMonitoring:     make(map[string]bool),
+		storagePath:          storagePath,
+		recordingsPath:       filepath.Join(filepath.Dir(storagePath), "active_recordings"),
+		stopChan:             make(chan struct{}),
+		logger:               logger,
+		isTUI:                false,
+		notificationSvc:      notifications.NewNotificationService(cfg),
+		fileService:          fileService,
+		processedPostService: processedPostService,
 	}
 
 	return mt
@@ -106,7 +111,7 @@ func (ms *MonitoringService) StartMonitoring() {
 	}
 }
 
-func (ms *MonitoringService) saveLiveRecording(modelName, filename string) error {
+func (ms *MonitoringService) saveLiveRecording(modelName, filename, postID string) error {
 	if ms.fileService == nil {
 		return fmt.Errorf("file service not initialized")
 	}
@@ -124,10 +129,10 @@ func (ms *MonitoringService) saveLiveRecording(modelName, filename string) error
 	}
 
 	ms.logger.Printf("Saving live recording to database: %s with hash %s", filename, hash)
-	return ms.fileService.SaveFile(modelName, hash, filename, "livestream")
+	return ms.fileService.SaveFile(modelName, hash, filename, "livestream", postID)
 }
 
-func (ms *MonitoringService) saveContactSheet(modelName, filename string) error {
+func (ms *MonitoringService) saveContactSheet(modelName, filename, postID string) error {
 	if ms.fileService == nil {
 		return fmt.Errorf("file service not initialized")
 	}
@@ -144,7 +149,7 @@ func (ms *MonitoringService) saveContactSheet(modelName, filename string) error 
 	}
 
 	ms.logger.Printf("Saving contact sheet to database: %s with hash %s", filename, hash)
-	return ms.fileService.SaveFile(modelName, hash, filename, "contact_sheet")
+	return ms.fileService.SaveFile(modelName, hash, filename, "contact_sheet", postID)
 }
 
 func (ms *MonitoringService) loadState() {
@@ -347,6 +352,7 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 		ms.logger.Printf("Error fetching stream data for %s: %v", modelID, err)
 		return
 	}
+	historyID := streamData.HistoryID
 
 	// Create directory structure
 	cfg, err := config.LoadConfig(config.GetConfigPath())
@@ -549,7 +555,7 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 
 			// Save the livestream recording to database
 			ms.logger.Printf("Attempting to save live recording info to database for %s: %s", username, finalFilename)
-			if err := ms.saveLiveRecording(username, finalFilename); err != nil {
+			if err := ms.saveLiveRecording(username, finalFilename, historyID); err != nil {
 				ms.logger.Printf("Error saving live recording info for %s to database: %v", username, err)
 			} else {
 				ms.logger.Printf("Successfully saved live recording info for %s to database", username)
@@ -570,7 +576,7 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 						contactSheetPath = contactSheetFilename // Set the path on success
 
 						// Save contact sheet info to database
-						if err := ms.saveContactSheet(username, contactSheetFilename); err != nil {
+						if err := ms.saveContactSheet(username, contactSheetFilename, historyID); err != nil {
 							ms.logger.Printf("Error saving contact sheet info for %s to database: %v", username, err)
 						} else {
 							ms.logger.Printf("Successfully saved contact sheet info for %s to database", username)
@@ -578,6 +584,14 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 					}
 				}
 			}
+
+			ms.logger.Printf("Saving stream metadata to library for: %s", historyID)
+			ms.processedPostService.MarkPostAsProcessed(
+				historyID,
+				username,
+				streamData.Title, // You may need to add Title to StreamData struct
+				time.Now().Unix(),
+			)
 
 			ms.notificationSvc.NotifyLiveEnd(username, modelID, finalFilename, contactSheetPath)
 		}

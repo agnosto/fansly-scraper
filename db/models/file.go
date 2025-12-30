@@ -11,6 +11,7 @@ type File struct {
 	Hash      string `gorm:"uniqueIndex;not null"`
 	Path      string `gorm:"not null"`
 	FileType  string `gorm:"not null"`
+	PostID    string `gorm:"index"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

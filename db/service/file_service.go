@@ -17,12 +17,13 @@ func NewFileService(repo repository.FileRepository) *FileService {
 }
 
 // SaveFile saves a file to the database
-func (s *FileService) SaveFile(model, hash, path, fileType string) error {
+func (s *FileService) SaveFile(model, hash, path, fileType, postID string) error {
 	file := &models.File{
 		Model:    model,
 		Hash:     hash,
 		Path:     path,
 		FileType: fileType,
+		PostID:   postID,
 	}
 
 	return s.repo.Create(file)

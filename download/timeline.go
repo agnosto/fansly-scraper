@@ -48,7 +48,7 @@ type Downloader struct {
 	logMu                sync.Mutex
 	ffmpegAvailable      bool
 	fileService          *service.FileService
-	processedPostService *service.ProcessedPostService
+	ProcessedPostService *service.ProcessedPostService
 	cfg                  *config.Config
 	m3u8Semaphore        *semaphore.Weighted
 }
@@ -66,8 +66,8 @@ func (d *Downloader) fileExists(filePath string) bool {
 	return d.fileService.FileExists(filePath)
 }
 
-func (d *Downloader) saveFileHash(modelName string, hash, path, fileType string) error {
-	return d.fileService.SaveFile(modelName, hash, path, fileType)
+func (d *Downloader) saveFileHash(modelName string, hash, path, fileType, postID string) error {
+	return d.fileService.SaveFile(modelName, hash, path, fileType, postID)
 }
 
 func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error) {
@@ -110,7 +110,7 @@ func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error
 
 	return &Downloader{
 		fileService:          fileService,
-		processedPostService: processedPostService,
+		ProcessedPostService: processedPostService,
 		authToken:            cfg.Account.AuthToken,
 		userAgent:            cfg.Account.UserAgent,
 		saveLocation:         cfg.Options.SaveLocation,
@@ -191,41 +191,38 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 		go func(post posts.Post) {
 			defer wg.Done()
 
-			if d.cfg.Options.SkipDownloadedPosts && d.processedPostService.PostExists(post.ID) {
-				logger.Logger.Printf("[INFO] [%s] Skipping already processed post %s", modelName, post.ID)
-				d.progressBar.Add(1)
-				return
+			shouldSkipFiles := d.cfg.Options.SkipDownloadedPosts && d.ProcessedPostService.PostExists(post.ID)
+
+			if !shouldSkipFiles {
+				semaphore <- struct{}{}
+				// We only fetch media and download if we aren't skipping
+				accountMediaItems, err := posts.GetPostMedia(post.ID, d.headers)
+				if err != nil {
+					logger.Logger.Printf("[ERROR] [%s] Failed to fetch media for post %s: %v", modelName, post.ID, err)
+					d.progressBar.Add(1)
+					<-semaphore
+					return
+				}
+
+				for i, accountMedia := range accountMediaItems {
+					err = d.DownloadMediaItem(ctx, accountMedia, baseDir, modelName, post, i)
+					if err != nil {
+						logger.Logger.Printf("[ERROR] [%s] Failed to download media item %s: %v", modelName, accountMedia.ID, err)
+						continue
+					}
+				}
+				<-semaphore
+			} else {
+				logger.Logger.Printf("[INFO] [%s] Skipping files for post %s, but updating metadata", modelName, post.ID)
 			}
 
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-
-			accountMediaItems, err := posts.GetPostMedia(post.ID, d.headers)
+			// always save/update metadata
+			err := d.ProcessedPostService.MarkPostAsProcessed(post.ID, modelName, post.Content, post.CreatedAt)
 			if err != nil {
-				logger.Logger.Printf("[ERROR] [%s] Failed to fetch media for post %s: %v", modelName, post.ID, err)
-				d.progressBar.Add(1)
-				return
+				logger.Logger.Printf("[ERROR] [%s] Failed to save post metadata %s: %v", modelName, post.ID, err)
 			}
 
-			// Corrected loop: Call downloadMediaItem for each AccountMedia object.
-			// The index `i` is passed for filename generation.
-			for i, accountMedia := range accountMediaItems {
-				err = d.DownloadMediaItem(ctx, accountMedia, baseDir, modelName, post, i)
-				if err != nil {
-					logger.Logger.Printf("[ERROR] [%s] Failed to download media item %s: %v", modelName, accountMedia.ID, err)
-					continue
-				}
-
-			}
-
-			if d.cfg.Options.SkipDownloadedPosts {
-				err := d.processedPostService.MarkPostAsProcessed(post.ID, modelName)
-				if err != nil {
-					logger.Logger.Printf("[ERROR] [%s] Failed to mark post %s as processed: %v", modelName, post.ID, err)
-				}
-			}
-			d.progressBar.Add(1) // Increment bar when entire post is done
-
+			d.progressBar.Add(1)
 		}(post)
 	}
 	wg.Wait()
@@ -425,6 +422,20 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 		}
 	}
 
+	var sourceID string
+	if contentSource != nil {
+		switch v := contentSource.(type) {
+		case posts.Post:
+			sourceID = v.ID
+		case posts.Message:
+			sourceID = v.ID
+		case posts.Story:
+			sourceID = v.ID
+		case posts.PostInfo:
+			sourceID = v.ID
+		}
+	}
+
 	mainType := getMediaType(item.Mimetype)
 
 	processMediaItem := func(mediaItem posts.MediaItem) {
@@ -525,7 +536,7 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 				logger.Logger.Printf("[ERROR] failed to hash existing file %s: %v", filePath, err)
 				return fmt.Errorf("error hashing existing file: %v", err)
 			}
-			err = d.saveFileHash(modelName, hashString, filePath, fileType)
+			err = d.saveFileHash(modelName, hashString, filePath, fileType, sourceID)
 			if err != nil {
 				logger.Logger.Printf("[ERROR] failed to save hash for existing file %s: %v", filePath, err)
 				return fmt.Errorf("error saving hash for existing file: %v", err)
@@ -567,7 +578,7 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 		return d.DownloadM3U8(ctx, modelName, fullUrl, filePath, sourceID, frameRate, isDiagnosis)
 	}
 
-	return d.downloadRegularFile(mediaUrl, filePath, modelName, fileType, isDiagnosis)
+	return d.downloadRegularFile(mediaUrl, filePath, modelName, fileType, sourceID, isDiagnosis)
 }
 
 func (d *Downloader) downloadWithRetry(url string) (*http.Response, error) {
@@ -612,7 +623,7 @@ func (d *Downloader) downloadWithRetry(url string) (*http.Response, error) {
 	return nil, fmt.Errorf("failed to download %s after %d retries", url, maxRetries)
 }
 
-func (d *Downloader) downloadRegularFile(url, filePath string, modelName string, fileType string, isDiagnosis bool) error {
+func (d *Downloader) downloadRegularFile(url, filePath string, modelName string, fileType, postID string, isDiagnosis bool) error {
 	if err := d.limiter.Wait(context.Background()); err != nil {
 		return fmt.Errorf("rate limiter wait error: %v", err)
 	}
@@ -658,7 +669,7 @@ func (d *Downloader) downloadRegularFile(url, filePath string, modelName string,
 	hashString := hex.EncodeToString(hash.Sum(nil))
 	//return d.saveFileHash(modelName, hashString, filePath, fileType)
 	if !isDiagnosis {
-		return d.saveFileHash(modelName, hashString, filePath, fileType)
+		return d.saveFileHash(modelName, hashString, filePath, fileType, postID)
 	}
 
 	return nil

@@ -258,6 +258,12 @@ func runDownloadPostMode(postIdentifier string, downloader *download.Downloader)
 		logger.Logger.Printf("Failed to load config: %v", err)
 		os.Exit(1)
 	}
+
+	if cfg.Options.SkipDownloadedPosts && downloader.ProcessedPostService.PostExists(postID) {
+		fmt.Printf("Post %s has already been processed. Skipping.\n", postID)
+		return
+	}
+
 	fanslyHeaders, err := headers.NewFanslyHeaders(cfg)
 	if err != nil {
 		fmt.Printf("Failed to create headers: %v\n", err)
@@ -316,6 +322,8 @@ func runDownloadPostMode(postIdentifier string, downloader *download.Downloader)
 			logger.Logger.Printf("[ERROR] Failed to download media item %s: %v", media.ID, err)
 		}
 	}
+
+	downloader.ProcessedPostService.MarkPostAsProcessed(postInfo.ID, modelName, postInfo.Content, postInfo.CreatedAt)
 
 	fmt.Println("Post download complete.")
 }

@@ -15,6 +15,8 @@ type StreamData struct {
 	ChatRoomID    string
 	StreamID      string
 	StreamVersion string
+	HistoryID     string
+	Title         string
 }
 
 func GetStreamData(modelID string) (StreamData, error) {
@@ -74,6 +76,8 @@ func GetStreamData(modelID string) (StreamData, error) {
 	// Extract only the fields we need
 	chatRoomID, _ := response["chatRoomId"].(string)
 	streamID, _ := stream["id"].(string)
+	historyID, _ := stream["historyId"].(string)
+	title, _ := stream["title"].(string)
 
 	version := ""
 	if v, ok := stream["version"].(float64); ok {
@@ -84,5 +88,7 @@ func GetStreamData(modelID string) (StreamData, error) {
 		ChatRoomID:    chatRoomID,
 		StreamID:      streamID,
 		StreamVersion: version,
+		HistoryID:     historyID,
+		Title:         title,
 	}, nil
 }

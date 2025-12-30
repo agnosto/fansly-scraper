@@ -86,5 +86,5 @@ func (d *Downloader) processProfileImage(ctx context.Context, img *auth.ProfileI
 
 	logger.Logger.Printf("[INFO] Downloading new %s for %s: %s", imgType, modelName, filename)
 
-	return d.downloadRegularFile(url, filePath, modelName, "image", false)
+	return d.downloadRegularFile(url, filePath, modelName, "image", "profile", false)
 }

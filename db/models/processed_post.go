@@ -9,6 +9,9 @@ type ProcessedPost struct {
 	ID            uint   `gorm:"primaryKey"`
 	PostID        string `gorm:"uniqueIndex;not null"`
 	ModelUsername string `gorm:"index;not null"`
+	Content       string
+	Link          string
+	PostCreatedAt time.Time
 	CreatedAt     time.Time
 }
 

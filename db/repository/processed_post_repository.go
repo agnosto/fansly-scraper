@@ -3,12 +3,14 @@ package repository
 import (
 	"github.com/agnosto/fansly-scraper/db/models"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ProcessedPostRepository defines the interface for post operations
 type ProcessedPostRepository interface {
 	Create(post *models.ProcessedPost) error
 	ExistsByPostID(postID string) (bool, error)
+	Upsert(post *models.ProcessedPost) error
 }
 
 // GormProcessedPostRepository implements ProcessedPostRepository using GORM
@@ -31,4 +33,11 @@ func (r *GormProcessedPostRepository) ExistsByPostID(postID string) (bool, error
 	var count int64
 	err := r.db.Model(&models.ProcessedPost{}).Where("post_id = ?", postID).Count(&count).Error
 	return count > 0, err
+}
+
+func (r *GormProcessedPostRepository) Upsert(post *models.ProcessedPost) error {
+	return r.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "post_id"}},
+		UpdateAll: true,
+	}).Create(post).Error
 }
