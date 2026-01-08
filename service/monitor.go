@@ -585,13 +585,17 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 				}
 			}
 
-			ms.logger.Printf("Saving stream metadata to library for: %s", historyID)
-			ms.processedPostService.MarkPostAsProcessed(
-				historyID,
-				username,
-				streamData.Title, // You may need to add Title to StreamData struct
-				time.Now().Unix(),
-			)
+			if ms.processedPostService != nil {
+				ms.logger.Printf("Saving stream metadata to library for: %s", historyID)
+				ms.processedPostService.MarkPostAsProcessed(
+					historyID,
+					username,
+					streamData.Title,
+					time.Now().Unix(),
+				)
+			} else {
+				ms.logger.Printf("Skipping database entry for %s: processedPostService is nil", historyID)
+			}
 
 			ms.notificationSvc.NotifyLiveEnd(username, modelID, finalFilename, contactSheetPath)
 		}
