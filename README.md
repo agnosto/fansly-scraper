@@ -1,5 +1,19 @@
 # Fansly Scraper
 
+> [!WARNING]
+> **‼️ Windows Defender False Positive**
+>
+> The Windows executable of this program is frequently being flagged as **`Trojan:Script/Wacatac.B!ml`** by Windows Defender and other AV. This is a **false positive**.
+>
+> **Why is this happening?**
+> The `!ml` in the detection name means it was flagged by a Machine Learning model, not a human. Because this is an unsigned, open-source scraper tool that makes many internet requests, the automated system incorrectly flags it as suspicious. This is a common issue for many Go and Rust-based command-line tools.
+>
+> **What you can do:**
+> 1.  **Trust the program:** You can temporarily disable Windows Defender to download and run the program, and then add it as an exception.
+> 2.  **Build from source:** If you have Go installed, you can build it yourself. The program is not flagged when you compile it locally or install via go.
+>
+> The code is fully open-source for you to inspect. It is safe to use.
+
 A simple all in one tool to download and monitor content from Fansly creators.
 
 > **⚠️ Currently in development** - Some features may not work perfectly. See [known issues](#known-issues) below.
@@ -120,4 +134,3 @@ Alternatively, you can make a one-time donation via cryptocurrency:
 
 > [!CAUTION]
 > **Disclaimer**: This tool is not affiliated with Fansly or Select Media LLC. Use at your own risk. The developer of this script is not responsible for the end users' actions or any outcomes that may be taken upon the end users' account. Use at your own risk.
-
