@@ -4,6 +4,8 @@
 > **Project Status Update**
 >
 > Due to a recent health scare, this project is taking a very far backseat priority in my life. Updates and support will be very minimal for the foreseeable future. Thank you for your understanding.
+>
+> If you're looking for a more actively maintained alternative with a full WebUI, live dashboard and VOD player, and automatic background monitoring and archiving, check out **[Accerso](https://accesro.one)**.
 
 > [!WARNING]
 > **‼️ Windows Defender False Positive** (literally no idea why or where this came from)
