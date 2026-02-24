@@ -114,6 +114,10 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editConfigFinishedMsg:
 		// Config editing is finished, refresh the UI
 		return m, tea.ClearScreen
+	case setupWizardFinishedMsg:
+		m.state = MainMenuState
+		m.accountsFetched = false
+		return m, tea.ClearScreen
 	case downloadCompleteMsg:
 		return m, tea.Sequence(
 			tea.Tick(3*time.Second, func(time.Time) tea.Msg {
@@ -123,7 +127,7 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case delayedDownloadCompleteMsg:
 		m.state = CompletionState
 		m.cursorPos = 0
-		return m, nil
+		return m, tea.ClearScreen
 	case likeUnlikeCompletedMsg:
 		return m, tea.Sequence(
 			tea.Tick(3*time.Second, func(time.Time) tea.Msg {
