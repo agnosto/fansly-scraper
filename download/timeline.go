@@ -277,6 +277,30 @@ func (d *Downloader) DownloadMediaItem(ctx context.Context, accountMedia posts.A
 	return nil
 }
 
+func (d *Downloader) resolveUniqueFilePath(dir, filename, ext string) string {
+	full := filepath.Join(dir, filename)
+	if !d.fileExists(full) {
+		if _, err := os.Stat(full); os.IsNotExist(err) {
+			return filename
+		}
+	}
+
+	stem := strings.TrimSuffix(filename, ext)
+	for n := 1; ; n++ {
+		candidate := fmt.Sprintf("%s_%d%s", stem, n, ext)
+		fullCandidate := filepath.Join(dir, candidate)
+		if !d.fileExists(fullCandidate) {
+			if _, err := os.Stat(fullCandidate); os.IsNotExist(err) {
+				return candidate
+			}
+		}
+		if n > 10000 {
+			// safety valve — fall back to mediaID
+			return fmt.Sprintf("%s_%s%s", stem, filepath.Base(dir), ext)
+		}
+	}
+}
+
 func (d *Downloader) generateFilename(bestMedia posts.MediaItem, modelName string, contentSource any, index int, isPreview bool, ext string) string {
 	suffix := ""
 	if isPreview {
@@ -515,6 +539,7 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 
 	// Generate filename using the new centralized function
 	fileName := d.generateFilename(bestMedia, modelName, contentSource, index, isPreview, ext)
+	fileName = d.resolveUniqueFilePath(filepath.Join(baseDir, subDir), fileName, ext)
 	filePath := filepath.Join(baseDir, subDir, fileName)
 
 	// ... (Rest of downloadSingleItem logic remains the same)
