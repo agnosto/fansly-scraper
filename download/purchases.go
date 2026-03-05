@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/agnosto/fansly-scraper/auth"
 	"github.com/agnosto/fansly-scraper/logger"
 	"github.com/agnosto/fansly-scraper/posts"
 	"github.com/schollz/progressbar/v3"
@@ -23,10 +24,10 @@ type AccountInfo struct {
 func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 	purchasedAlbum, err := posts.FetchPurchasedAlbums(d.headers)
 	if err != nil {
-		// If there's no purchased album, it's not a fatal error, just means nothing to do.
 		logger.Logger.Printf("[INFO] Could not find a 'Purchases' album or an error occurred: %v", err)
 		return nil
 	}
+
 	albumID := purchasedAlbum.ID
 	logger.Logger.Printf("Purchases Album ID: %s, Title: %s", albumID, purchasedAlbum.Title)
 
@@ -41,44 +42,58 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 		return nil
 	}
 
+	// Build albumContent lookup: mediaId -> AlbumContent (for createdAt timestamps)
 	albumContentMap := make(map[string]posts.AlbumContent)
 	for _, ac := range content.Response.AlbumContent {
 		albumContentMap[ac.MediaId] = ac
 	}
 
+	// Group media by accountId, preserving order
+	var accountOrder []string
 	accountInfoMap := make(map[string]*AccountInfo)
-	var accountInfoMutex sync.Mutex
-
 	for _, media := range accountMediaItems {
-		accountInfoMutex.Lock()
 		if _, exists := accountInfoMap[media.AccountId]; !exists {
+			accountOrder = append(accountOrder, media.AccountId)
 			accountInfoMap[media.AccountId] = &AccountInfo{
-				ID:    media.AccountId,
-				Media: []posts.AccountMedia{},
+				ID: media.AccountId,
 			}
 		}
 		accountInfoMap[media.AccountId].Media = append(accountInfoMap[media.AccountId].Media, media)
-		accountInfoMutex.Unlock()
 	}
 
-	var wg sync.WaitGroup
-	for accountID := range accountInfoMap {
-		wg.Add(1)
-		go func(accID string) {
-			defer wg.Done()
-			username, err := posts.FetchAccountInfo(accID, d.headers)
-			if err != nil || username == "" {
-				logger.Logger.Printf("Error fetching account info for %s or username is empty: %v. Using Account ID as fallback.", accID, err)
-				username = accID // Fallback
+	// Resolve all account IDs → usernames in a single batched call (mirrors auth.GetAccountDetails)
+	// This avoids the per-goroutine rate-limit hammering that caused all folders to fall back to IDs.
+	uniqueIDs := accountOrder
+	logger.Logger.Printf("[INFO] Resolving usernames for %d unique accounts...", len(uniqueIDs))
+
+	resolvedModels, err := auth.GetAccountDetails(uniqueIDs, d.headers)
+	if err != nil {
+		logger.Logger.Printf("[WARN] Batch username resolution failed (%v); falling back to account IDs for folder names.", err)
+	} else {
+		for _, model := range resolvedModels {
+			if info, ok := accountInfoMap[model.ID]; ok {
+				if model.Username != "" {
+					info.Username = model.Username
+				}
 			}
-			accountInfoMutex.Lock()
-			accountInfoMap[accID].Username = username
-			accountInfoMutex.Unlock()
-		}(accountID)
+		}
 	}
-	wg.Wait()
 
-	d.progressBar = progressbar.NewOptions(len(accountMediaItems),
+	// Any account whose username is still empty (deleted/private) gets its ID as fallback
+	for _, info := range accountInfoMap {
+		if info.Username == "" {
+			info.Username = info.ID
+			logger.Logger.Printf("[INFO] Could not resolve username for account %s; using ID as folder name.", info.ID)
+		}
+	}
+
+	// Count total media for the progress bar
+	totalMedia := 0
+	for _, info := range accountInfoMap {
+		totalMedia += len(info.Media)
+	}
+
+	d.progressBar = progressbar.NewOptions(totalMedia,
 		progressbar.OptionSetWriter(os.Stderr),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionSetWidth(40),
@@ -95,22 +110,24 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 		progressbar.OptionShowCount(),
 	)
 
-	for _, accountInfo := range accountInfoMap {
-		var baseDir, modelNameForFile string
-		if accountInfo.Username == accountInfo.ID {
-			baseDir = filepath.Join(d.saveLocation, accountInfo.ID, "purchases")
-			modelNameForFile = accountInfo.ID
-		} else {
-			baseDir = filepath.Join(d.saveLocation, strings.ToLower(accountInfo.Username), "purchases")
-			modelNameForFile = accountInfo.Username
-		}
+	// Download in stable order
+	var mu sync.Mutex
+	_ = mu // retained in case callers extend this with concurrency later
+
+	for _, accountID := range accountOrder {
+		accountInfo := accountInfoMap[accountID]
+
+		folderName := strings.ToLower(accountInfo.Username)
+		baseDir := filepath.Join(d.saveLocation, folderName, "purchases")
 
 		for _, subDir := range []string{"images", "videos", "audios"} {
 			if err := os.MkdirAll(filepath.Join(baseDir, subDir), os.ModePerm); err != nil {
 				logger.Logger.Printf("Error creating directory %s: %v", filepath.Join(baseDir, subDir), err)
-				continue
 			}
 		}
+
+		logger.Logger.Printf("[INFO] Downloading %d purchased item(s) for %s → %s",
+			len(accountInfo.Media), accountID, folderName)
 
 		for i, media := range accountInfo.Media {
 			postData := posts.Post{
@@ -121,9 +138,8 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 				postData.CreatedAt = ac.CreatedAt
 			}
 
-			err = d.DownloadMediaItem(ctx, media, baseDir, modelNameForFile, postData, i)
-			if err != nil {
-				logger.Logger.Printf("Error downloading media item %s: %v", media.ID, err)
+			if err := d.DownloadMediaItem(ctx, media, baseDir, accountInfo.Username, postData, i); err != nil {
+				logger.Logger.Printf("Error downloading media item %s for account %s: %v", media.ID, accountID, err)
 			}
 			d.progressBar.Add(1)
 		}
