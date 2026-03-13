@@ -279,14 +279,16 @@ func (d *Downloader) DownloadMediaItem(ctx context.Context, accountMedia posts.A
 
 func (d *Downloader) resolveUniqueFilePath(dir, filename, ext string) string {
 	full := filepath.Join(dir, filename)
-	if !d.fileExists(full) {
-		if _, err := os.Stat(full); os.IsNotExist(err) {
-			return filename
-		}
+
+	if d.fileExists(full) {
+		return filename
+	}
+	if _, err := os.Stat(full); err == nil {
+		return filename
 	}
 
 	stem := strings.TrimSuffix(filename, ext)
-	for n := 1; ; n++ {
+	for n := 1; n <= 10000; n++ {
 		candidate := fmt.Sprintf("%s_%d%s", stem, n, ext)
 		fullCandidate := filepath.Join(dir, candidate)
 		if !d.fileExists(fullCandidate) {
@@ -294,11 +296,9 @@ func (d *Downloader) resolveUniqueFilePath(dir, filename, ext string) string {
 				return candidate
 			}
 		}
-		if n > 10000 {
-			// safety valve — fall back to mediaID
-			return fmt.Sprintf("%s_%s%s", stem, filepath.Base(dir), ext)
-		}
 	}
+	// Safety valve
+	return fmt.Sprintf("%s_%s%s", stem, filepath.Base(dir), ext)
 }
 
 func (d *Downloader) generateFilename(bestMedia posts.MediaItem, modelName string, contentSource any, index int, isPreview bool, ext string) string {
