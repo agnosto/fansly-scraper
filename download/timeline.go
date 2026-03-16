@@ -32,6 +32,11 @@ import (
 	"github.com/agnosto/fansly-scraper/headers"
 )
 
+var (
+	resolveMu       sync.Mutex
+	activeDownloads sync.Map
+)
+
 type logWriter struct {
 	d *Downloader
 }
@@ -278,27 +283,44 @@ func (d *Downloader) DownloadMediaItem(ctx context.Context, accountMedia posts.A
 }
 
 func (d *Downloader) resolveUniqueFilePath(dir, filename, ext string) string {
+	resolveMu.Lock()
+	defer resolveMu.Unlock()
+
 	full := filepath.Join(dir, filename)
 
-	if d.fileExists(full) {
-		return filename
-	}
-	if _, err := os.Stat(full); err == nil {
-		return filename
+	// If it doesn't exist in DB and doesn't exist on disk, it's safe.
+	if !d.fileExists(full) {
+		if _, err := os.Stat(full); os.IsNotExist(err) {
+			// Reserve the file immediately with a 0-byte placeholder
+			// so concurrent goroutines instantly see it's taken
+			f, _ := os.OpenFile(full, os.O_RDONLY|os.O_CREATE, 0666)
+			if f != nil {
+				f.Close()
+			}
+			return filename
+		}
 	}
 
 	stem := strings.TrimSuffix(filename, ext)
-	for n := 1; n <= 10000; n++ {
+	for n := 1; ; n++ {
 		candidate := fmt.Sprintf("%s_%d%s", stem, n, ext)
 		fullCandidate := filepath.Join(dir, candidate)
+
 		if !d.fileExists(fullCandidate) {
 			if _, err := os.Stat(fullCandidate); os.IsNotExist(err) {
+				// Reserve the file immediately
+				f, _ := os.OpenFile(fullCandidate, os.O_RDONLY|os.O_CREATE, 0666)
+				if f != nil {
+					f.Close()
+				}
 				return candidate
 			}
 		}
+		if n > 10000 {
+			// Safety valve
+			return fmt.Sprintf("%s_%s%s", stem, filepath.Base(dir), ext)
+		}
 	}
-	// Safety valve
-	return fmt.Sprintf("%s_%s%s", stem, filepath.Base(dir), ext)
 }
 
 func (d *Downloader) generateFilename(bestMedia posts.MediaItem, modelName string, contentSource any, index int, isPreview bool, ext string) string {
@@ -539,37 +561,55 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 
 	// Generate filename using the new centralized function
 	fileName := d.generateFilename(bestMedia, modelName, contentSource, index, isPreview, ext)
-	fileName = d.resolveUniqueFilePath(filepath.Join(baseDir, subDir), fileName, ext)
-	filePath := filepath.Join(baseDir, subDir, fileName)
+	logger.Logger.Printf("[DEBUG] Generated base filename: %s for MediaID: %s", fileName, bestMedia.ID)
+	idealPath := filepath.Join(baseDir, subDir, fileName)
 
-	// ... (Rest of downloadSingleItem logic remains the same)
+	filePath := idealPath
+
 	if !isDiagnosis {
-		if d.fileExists(filePath) {
-			if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		// TIER 1: Check if already downloaded in DB
+		if d.fileExists(idealPath) {
+			if _, err := os.Stat(idealPath); os.IsNotExist(err) {
 				d.progressBar.Describe(fmt.Sprintf("[yellow]File missing[reset], Redownloading %s", fileName))
 			} else {
 				d.progressBar.Describe(fmt.Sprintf("[red]File Exists[reset], Skipping %s", fileName))
-				d.progressBar.Add(1) // Make sure to increment progress bar even on skip
+				d.progressBar.Add(1)
 				return nil
 			}
-		}
+		} else {
+			// Check disk and check if another goroutine is actively writing here
+			_, err := os.Stat(idealPath)
+			_, isActive := activeDownloads.Load(idealPath)
 
-		if _, err := os.Stat(filePath); err == nil {
-			d.progressBar.Describe(fmt.Sprintf("[yellow]No DB Record[reset], Adding %s", fileName))
-			hashString, err := d.hashExistingFile(filePath)
-			if err != nil {
-				logger.Logger.Printf("[ERROR] failed to hash existing file %s: %v", filePath, err)
-				return fmt.Errorf("error hashing existing file: %v", err)
+			// Orphan on disk (Not in DB, and NO OTHER thread is currently downloading it) -> Adopt
+			if err == nil && !isActive {
+				d.progressBar.Describe(fmt.Sprintf("[yellow]No DB Record[reset], Adding %s", fileName))
+				hashString, err := d.hashExistingFile(idealPath)
+				if err != nil {
+					logger.Logger.Printf("[ERROR] failed to hash existing file %s: %v", idealPath, err)
+					return fmt.Errorf("error hashing existing file: %v", err)
+				}
+				err = d.saveFileHash(modelName, hashString, idealPath, fileType, sourceID)
+				if err != nil {
+					logger.Logger.Printf("[ERROR] failed to save hash for existing file %s: %v", idealPath, err)
+					return fmt.Errorf("error saving hash for existing file: %v", err)
+				}
+				d.progressBar.Add(1)
+				return nil
+			} else {
+				// Completely new file (or currently colliding with an active download).
+				fileName = d.resolveUniqueFilePath(filepath.Join(baseDir, subDir), fileName, ext)
+				filePath = filepath.Join(baseDir, subDir, fileName)
 			}
-			err = d.saveFileHash(modelName, hashString, filePath, fileType, sourceID)
-			if err != nil {
-				logger.Logger.Printf("[ERROR] failed to save hash for existing file %s: %v", filePath, err)
-				return fmt.Errorf("error saving hash for existing file: %v", err)
-			}
-			d.progressBar.Add(1)
-			return nil
 		}
+	} else {
+		// Diagnosis mode
+		fileName = d.resolveUniqueFilePath(filepath.Join(baseDir, subDir), fileName, ext)
+		filePath = filepath.Join(baseDir, subDir, fileName)
 	}
+
+	activeDownloads.Store(filePath, true)
+	defer activeDownloads.Delete(filePath)
 
 	d.progressBar.Describe(fmt.Sprintf("[green]Downloading[reset] %s", fileName))
 
