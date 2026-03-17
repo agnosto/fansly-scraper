@@ -405,6 +405,7 @@ func combineSegments(segmentFiles []string, outputFile string, segmentDir string
 	// Now remux the concatenated TS to MP4
 	// Key: regenerate timestamps entirely and force the correct frame rate
 	args := []string{
+		"-y",
 		"-fflags", "+genpts",
 		"-i", concatTempFile,
 	}

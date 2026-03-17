@@ -666,10 +666,19 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 				url.QueryEscape(metadata["Key-Pair-Id"]),
 				url.QueryEscape(metadata["Signature"]))
 		}
-		return d.DownloadM3U8(ctx, modelName, fullUrl, filePath, sourceID, frameRate, isDiagnosis)
+
+		err := d.DownloadM3U8(ctx, modelName, fullUrl, filePath, sourceID, frameRate, isDiagnosis)
+		if err != nil {
+			os.Remove(filePath) // Clean up the 0-byte file if ffmpeg fails
+		}
+		return err
 	}
 
-	return d.downloadRegularFile(mediaUrl, filePath, modelName, fileType, sourceID, isDiagnosis)
+	err = d.downloadRegularFile(mediaUrl, filePath, modelName, fileType, sourceID, isDiagnosis)
+	if err != nil {
+		os.Remove(filePath) // Clean up the 0-byte file if download fails
+	}
+	return err
 }
 
 func (d *Downloader) downloadWithRetry(url string) (*http.Response, error) {
