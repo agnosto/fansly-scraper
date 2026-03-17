@@ -130,6 +130,14 @@ func EnsureConfigUpdated(configPath string) error {
 				cfg.Options.PostLimit = defaultConfig.Options.PostLimit
 				isUpdated = true
 			}
+			if _, exists := optionsMap["skip_long_videos"]; !exists {
+				cfg.Options.SkipLongVideos = defaultConfig.Options.SkipLongVideos
+				isUpdated = true
+			}
+			if _, exists := optionsMap["max_video_duration_seconds"]; !exists {
+				cfg.Options.MaxVideoDurationSeconds = defaultConfig.Options.MaxVideoDurationSeconds
+				isUpdated = true
+			}
 		} else {
 			// If options section doesn't exist at all, add the fields
 			cfg.Options.SkipPreviews = defaultConfig.Options.SkipPreviews
@@ -141,6 +149,8 @@ func EnsureConfigUpdated(configPath string) error {
 			cfg.Options.DateFormat = defaultConfig.Options.DateFormat
 			cfg.Options.DownloadProfilePic = defaultConfig.Options.DownloadProfilePic
 			cfg.Options.PostLimit = defaultConfig.Options.PostLimit
+			cfg.Options.SkipLongVideos = defaultConfig.Options.SkipLongVideos
+			cfg.Options.MaxVideoDurationSeconds = defaultConfig.Options.MaxVideoDurationSeconds
 			isUpdated = true
 		}
 	}
@@ -264,6 +274,13 @@ func MergeConfigs(existing, new *Config) *Config {
 		result.Options.PostLimit = new.Options.PostLimit
 	} else {
 		result.Options.PostLimit = existing.Options.PostLimit
+	}
+
+	result.Options.SkipLongVideos = new.Options.SkipLongVideos
+	if new.Options.MaxVideoDurationSeconds != 0 {
+		result.Options.MaxVideoDurationSeconds = new.Options.MaxVideoDurationSeconds
+	} else {
+		result.Options.MaxVideoDurationSeconds = existing.Options.MaxVideoDurationSeconds
 	}
 
 	// Merge LiveSettings

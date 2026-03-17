@@ -56,6 +56,8 @@ type OptionsConfig struct {
 	SkipDownloadedPosts     bool   `toml:"skip_downloaded_posts"`
 	DownloadProfilePic      bool   `toml:"download_profile_pic"`
 	PostLimit               int    `toml:"post_limit"`
+	SkipLongVideos          bool   `toml:"skip_long_videos"`
+	MaxVideoDurationSeconds int    `toml:"max_video_duration_seconds"`
 }
 
 type NotificationsConfig struct {
@@ -180,6 +182,8 @@ func CreateDefaultConfig() *Config {
 			SkipDownloadedPosts:     false,
 			DownloadProfilePic:      true,
 			PostLimit:               0,
+			SkipLongVideos:          false,
+			MaxVideoDurationSeconds: 2700,
 		},
 		LiveSettings: LiveSettingsConfig{
 			SaveLocation:            "", // Empty means use default path

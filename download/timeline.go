@@ -546,6 +546,32 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 		return nil // Not an error, just skipping
 	}
 
+	if d.cfg.Options.SkipLongVideos && fileType == "video" {
+		maxDur := d.cfg.Options.MaxVideoDurationSeconds
+		if maxDur <= 0 {
+			maxDur = 2700 // sane default if misconfigured (45 minutes * 60 seconds)
+		}
+
+		// Duration lives in the metadata JSON of the *original* item (not variants).
+		// The API puts it as `"duration": <seconds as float>`.
+		var meta struct {
+			Duration float64 `json:"duration"`
+		}
+		if item.Metadata != "" {
+			if err := json.Unmarshal([]byte(item.Metadata), &meta); err == nil && meta.Duration > 0 {
+				if meta.Duration > float64(maxDur) {
+					d.progressBar.Describe(fmt.Sprintf(
+						"[yellow]Skipping long video[reset] %s (%.1f sec > %d sec limit)",
+						item.ID, meta.Duration, maxDur,
+					))
+					logger.Logger.Printf("[INFO] Skipping video %s: duration %.1f sec exceeds limit of %d sec",
+						item.ID, meta.Duration, maxDur)
+					return nil
+				}
+			}
+		}
+	}
+
 	mediaUrl := bestMedia.Locations[0].Location
 	parsedURL, err := url.Parse(mediaUrl)
 	if err != nil {
