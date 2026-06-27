@@ -33,7 +33,11 @@ func (m *MainModel) HandleDownloadProgressMenuUpdate(msg tea.Msg) (tea.Model, te
 func (m *MainModel) RenderDownloadProgressMenu() string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("Downloading %s content for %s...\n\n", m.selectedOption, m.selectedModel))
+	if m.actionChosen == "download_individual_posts" {
+		sb.WriteString("Downloading individual post(s)...\n\n")
+	} else {
+		sb.WriteString(fmt.Sprintf("Downloading %s content for %s...\n\n", m.selectedOption, m.selectedModel))
+	}
 
 	return sb.String()
 }

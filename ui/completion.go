@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -21,6 +20,13 @@ func (m *MainModel) HandleCompletionUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.Select):
 			switch m.cursorPos {
 			case 0: // Process another
+				if m.actionChosen == "download_individual_posts" {
+					m.state = DownloadIndividualPostState
+					m.postLinksInput.Reset()
+					m.postLinksInput.Focus()
+					m.cursorPos = 0
+					return m, nil
+				}
 				m.state = FollowedModelsState
 				m.filteredModels = m.followedModels
 				m.filterInput = ""
@@ -42,8 +48,27 @@ func (m *MainModel) HandleCompletionUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *MainModel) RenderCompletionMenu() string {
 	var sb strings.Builder
+
+	var processAnotherText string
+	switch m.actionChosen {
+	case "download":
+		processAnotherText = "Download another user's posts"
+	case "download_individual_posts":
+		processAnotherText = "Download more individual posts"
+	case "download_purchases":
+		processAnotherText = "Download more purchased content"
+	case "monitor":
+		processAnotherText = "Monitor another user's livestreams"
+	case "like":
+		processAnotherText = "Like another user's posts"
+	case "unlike":
+		processAnotherText = "Unlike another user's posts"
+	default:
+		processAnotherText = "Process another action"
+	}
+
 	options := []string{
-		fmt.Sprintf("Process another %s", m.actionChosen),
+		processAnotherText,
 		"Return to main menu",
 		"Quit",
 	}

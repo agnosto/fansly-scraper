@@ -64,6 +64,12 @@ func (m *MainModel) handleMainMenuSelection() (tea.Model, tea.Cmd) {
 			m.updateTable()
 			return m, nil
 		}
+	case "Download individual post(s)":
+		m.actionChosen = "download_individual_posts"
+		m.state = DownloadIndividualPostState
+		m.postLinksInput.Reset()
+		m.postLinksInput.Focus()
+		return m, nil
 	case "Download purchased content":
 		m.actionChosen = "download_purchases"
 		m.state = DownloadPurchasedState

@@ -73,6 +73,8 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.HandleDonateMenuUpdate(msg)
 		case WallSelectionState:
 			return m.HandleWallSelectionUpdate(msg)
+		case DownloadIndividualPostState:
+			return m.HandleDownloadIndividualPostsUpdate(msg)
 		// Add cases for other states
 		default:
 			logger.Logger.Printf("[DEBUG] Update: Unhandled state: %v", m.state)
@@ -189,6 +191,8 @@ func (m *MainModel) View() string {
 		return m.RenderDonateMenu()
 	case WallSelectionState:
 		return m.RenderWallSelectionMenu()
+	case DownloadIndividualPostState:
+		return m.RenderDownloadIndividualPostsMenu()
 	default:
 		return "Unknown state"
 	}

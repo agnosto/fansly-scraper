@@ -21,6 +21,7 @@ import (
 
 	//"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	//"github.com/charmbracelet/lipgloss"
 )
@@ -42,6 +43,7 @@ const (
 	LoadingState
 	DonateState
 	WallSelectionState
+	DownloadIndividualPostState
 )
 
 type MainModel struct {
@@ -85,6 +87,7 @@ type MainModel struct {
 	loadingTicker             *time.Ticker
 	accountsFetched           bool
 	selectedWallID            string
+	postLinksInput            textinput.Model
 }
 
 type loadingTickMsg struct{}
@@ -227,10 +230,15 @@ func (m *MainModel) Init() tea.Cmd {
 }
 
 func NewMainModel(downloader *download.Downloader, version string, monitoringService *service.MonitoringService) *MainModel {
+	postLinksInput := textinput.New()
+	postLinksInput.Placeholder = "Paste link(s) here (space or comma separated)"
+	postLinksInput.Focus()
+
 	return &MainModel{
 		version: version,
 		options: []string{
 			"Download a user's post",
+			"Download individual post(s)",
 			"Download purchased content",
 			"Monitor a user's livestreams",
 			"Like all of a user's post",
@@ -253,6 +261,7 @@ func NewMainModel(downloader *download.Downloader, version string, monitoringSer
 		loadingMessage:    "",
 		loadingDots:       0,
 		accountsFetched:   false,
+		postLinksInput:    postLinksInput,
 	}
 }
 
