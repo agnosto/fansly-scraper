@@ -422,7 +422,6 @@ func combineSegments(segmentFiles []string, outputFile string, segmentDir string
 		"-c:v", "copy",
 		"-c:a", "copy",
 		"-bsf:a", "aac_adtstoasc",
-		"-vsync", "cfr", // Constant frame rate - drop/duplicate frames as needed
 		"-movflags", "+faststart",
 		outputFile,
 	)
