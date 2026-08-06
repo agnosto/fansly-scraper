@@ -39,17 +39,21 @@ type Location struct {
 }
 
 type MediaItem struct {
-	ID       string `json:"id"`
-	Type     int    `json:"type"`
-	Height   int    `json:"height"`
-	Mimetype string `json:"mimetype"`
-	Metadata string `json:"metadata,omitempty"`
-	Variants []struct {
+	ID        string `json:"id"`
+	Type      int    `json:"type"`
+	Height    int    `json:"height"`
+	Mimetype  string `json:"mimetype"`
+	Metadata  string `json:"metadata,omitempty"`
+	CreatedAt int64  `json:"createdAt,omitempty"`
+	UpdatedAt int64  `json:"updatedAt,omitempty"`
+	Variants  []struct {
 		ID        string     `json:"id"`
 		Type      int        `json:"type"`
 		Height    int        `json:"height"`
 		Mimetype  string     `json:"mimetype"`
 		Metadata  string     `json:"metadata,omitempty"`
+		CreatedAt int64      `json:"createdAt,omitempty"`
+		UpdatedAt int64      `json:"updatedAt,omitempty"`
 		Locations []Location `json:"locations"`
 	} `json:"variants"`
 	Locations []Location `json:"locations"`
@@ -59,6 +63,7 @@ type AccountMedia struct {
 	ID        string     `json:"id"`
 	AccountId string     `json:"accountId"`
 	Access    bool       `json:"access"`
+	CreatedAt int64      `json:"createdAt,omitempty"`
 	Media     MediaItem  `json:"media"`
 	Preview   *MediaItem `json:"preview,omitempty"`
 }

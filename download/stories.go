@@ -18,10 +18,15 @@ func (d *Downloader) DownloadStories(ctx context.Context, modelId, modelName str
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	_, storyMediaItems, err := posts.GetModelStories(modelId, d.headers)
+	stories, storyMediaItems, err := posts.GetModelStories(modelId, d.headers)
 	if err != nil {
 		logger.Logger.Printf("[ERROR] [%s] Failed to get story media: %v", modelName, err)
 		return err
+	}
+
+	storyMap := make(map[string]posts.Story)
+	for _, story := range stories {
+		storyMap[story.ContentID] = story
 	}
 
 	baseDir := filepath.Join(d.saveLocation, strings.ToLower(modelName), "stories")
@@ -49,19 +54,23 @@ func (d *Downloader) DownloadStories(ctx context.Context, modelId, modelName str
 	semaphore := make(chan struct{}, 10)
 
 	for i, mediaItem := range storyMediaItems {
+		var contentSource any
+		if story, ok := storyMap[mediaItem.ID]; ok {
+			contentSource = story
+		}
 		wg.Add(1)
-		go func(media posts.AccountMedia, index int) {
+		go func(media posts.AccountMedia, source any, index int) {
 			defer wg.Done()
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
 			// Pass index to the download function
-			err := d.downloadStoryMediaItem(ctx, media, baseDir, modelName, index)
+			err := d.downloadStoryMediaItem(ctx, media, baseDir, modelName, source, index)
 			if err != nil {
 				logger.Logger.Printf("[ERROR] [%s] Failed to download story media item %s: %v", modelName, media.ID, err)
 			}
 			d.progressBar.Add(1)
-		}(mediaItem, i)
+		}(mediaItem, contentSource, i)
 	}
 
 	wg.Wait()
@@ -69,16 +78,16 @@ func (d *Downloader) DownloadStories(ctx context.Context, modelId, modelName str
 	return nil
 }
 
-func (d *Downloader) downloadStoryMediaItem(ctx context.Context, accountMedia posts.AccountMedia, baseDir, modelName string, index int) error {
-	// Download main media - pass nil for contentSource and the index
-	err := d.downloadSingleItem(ctx, accountMedia.Media, baseDir, modelName, false, nil, index, false)
+func (d *Downloader) downloadStoryMediaItem(ctx context.Context, accountMedia posts.AccountMedia, baseDir, modelName string, contentSource any, index int) error {
+	// Download main media - pass contentSource and the index
+	err := d.downloadSingleItem(ctx, accountMedia, accountMedia.Media, baseDir, modelName, false, contentSource, index, false)
 	if err != nil {
 		return fmt.Errorf("error downloading main media: %v", err)
 	}
 
 	// Download preview if it exists
 	if !d.cfg.Options.SkipPreviews && accountMedia.Preview != nil {
-		err = d.downloadSingleItem(ctx, *accountMedia.Preview, baseDir, modelName, true, nil, index, false)
+		err = d.downloadSingleItem(ctx, accountMedia, *accountMedia.Preview, baseDir, modelName, true, contentSource, index, false)
 		if err != nil {
 			return fmt.Errorf("error downloading preview: %v", err)
 		}

@@ -259,7 +259,7 @@ func (d *Downloader) DownloadMediaItem(ctx context.Context, accountMedia posts.A
 
 	if hasValidLocations(accountMedia.Media) {
 		// Use `contentSource` which can be a post, message, or anything else
-		err := d.downloadSingleItem(ctx, accountMedia.Media, baseDir, modelName, false, contentSource, index, diagMode)
+		err := d.downloadSingleItem(ctx, accountMedia, accountMedia.Media, baseDir, modelName, false, contentSource, index, diagMode)
 		if err != nil {
 			logger.Logger.Printf("[ERROR] [%s] Failed to download main media item %s: %v", modelName, accountMedia.ID, err)
 			return fmt.Errorf("error downloading main media: %v", err)
@@ -268,7 +268,7 @@ func (d *Downloader) DownloadMediaItem(ctx context.Context, accountMedia posts.A
 
 	if !d.cfg.Options.SkipPreviews && accountMedia.Preview != nil && hasValidLocations(*accountMedia.Preview) {
 		// Use `contentSource` here as well
-		err := d.downloadSingleItem(ctx, *accountMedia.Preview, baseDir, modelName, true, contentSource, index, diagMode)
+		err := d.downloadSingleItem(ctx, accountMedia, *accountMedia.Preview, baseDir, modelName, true, contentSource, index, diagMode)
 		if err != nil {
 			logger.Logger.Printf("[ERROR] [%s] Failed to download preview item for media item %s : %v", modelName, accountMedia.ID, err)
 			return fmt.Errorf("error downloading preview: %v", err)
@@ -452,7 +452,53 @@ func (d *Downloader) generateFilename(bestMedia posts.MediaItem, modelName strin
 	return config.SanitizeFilename(baseName) + suffix + ext
 }
 
-func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaItem, baseDir, modelName string, isPreview bool, contentSource any, index int, isDiagnosis bool) error {
+func parseUnixTimestamp(ts int64) time.Time {
+	if ts <= 0 {
+		return time.Time{}
+	}
+	if ts > 1e11 {
+		return time.Unix(ts/1000, (ts%1000)*1000000)
+	}
+	return time.Unix(ts, 0)
+}
+
+func extractTimestamp(contentSource any, accountMedia posts.AccountMedia, item posts.MediaItem) time.Time {
+	var ts int64
+
+	if contentSource != nil {
+		switch v := contentSource.(type) {
+		case posts.Post:
+			ts = v.CreatedAt
+		case posts.Message:
+			ts = v.CreatedAt
+		case posts.Story:
+			ts = v.CreatedAt
+		case posts.PostInfo:
+			ts = v.CreatedAt
+		}
+	}
+
+	if ts <= 0 {
+		ts = accountMedia.CreatedAt
+	}
+
+	if ts <= 0 {
+		ts = item.CreatedAt
+	}
+
+	return parseUnixTimestamp(ts)
+}
+
+func applyFileTimestamp(filePath string, t time.Time) {
+	if t.IsZero() {
+		return
+	}
+	if err := os.Chtimes(filePath, t, t); err != nil {
+		logger.Logger.Printf("[WARN] Failed to set file timestamp for %s: %v", filePath, err)
+	}
+}
+
+func (d *Downloader) downloadSingleItem(ctx context.Context, accountMedia posts.AccountMedia, item posts.MediaItem, baseDir, modelName string, isPreview bool, contentSource any, index int, isDiagnosis bool) error {
 	var mediaItems = []posts.MediaItem{}
 
 	getMediaType := func(mimetype string) string {
@@ -639,6 +685,7 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 
 	d.progressBar.Describe(fmt.Sprintf("[green]Downloading[reset] %s", fileName))
 
+	var dlErr error
 	if bestMedia.Mimetype == "application/vnd.apple.mpegurl" && d.ffmpegAvailable {
 		fullUrl := mediaUrl
 		metadata := bestMedia.Locations[0].Metadata
@@ -667,18 +714,23 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, item posts.MediaIte
 				url.QueryEscape(metadata["Signature"]))
 		}
 
-		err := d.DownloadM3U8(ctx, modelName, fullUrl, filePath, sourceID, frameRate, isDiagnosis)
-		if err != nil {
+		dlErr = d.DownloadM3U8(ctx, modelName, fullUrl, filePath, sourceID, frameRate, isDiagnosis)
+		if dlErr != nil {
 			os.Remove(filePath) // Clean up the 0-byte file if ffmpeg fails
 		}
-		return err
+	} else {
+		dlErr = d.downloadRegularFile(mediaUrl, filePath, modelName, fileType, sourceID, isDiagnosis)
+		if dlErr != nil {
+			os.Remove(filePath) // Clean up the 0-byte file if download fails
+		}
 	}
 
-	err = d.downloadRegularFile(mediaUrl, filePath, modelName, fileType, sourceID, isDiagnosis)
-	if err != nil {
-		os.Remove(filePath) // Clean up the 0-byte file if download fails
+	if dlErr == nil && d.cfg.Options.ApplyFileTimestamps && !isDiagnosis {
+		t := extractTimestamp(contentSource, accountMedia, bestMedia)
+		applyFileTimestamp(filePath, t)
 	}
-	return err
+
+	return dlErr
 }
 
 func (d *Downloader) downloadWithRetry(url string) (*http.Response, error) {

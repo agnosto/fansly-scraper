@@ -65,6 +65,7 @@ console.log('%c➡️ User_Agent =', 'font-size: 12px; color: yellow; font-weigh
 | [content_filename_template](#readable-filenames) | Template for readable filenames. See variables below. | "{date}-{content}_{index}" | "{date}-{content}" |
 | [download_media_type](#filtering-by-media-type)   | Download only specific media. Options: `all`, `images`, `videos`, `audio.` | "all"   | "videos"  |
 | [skip_downloaded_posts](#skipping-processed-posts) | Skip posts that have already been processed to speed up subsequent runs.   | false  | true/false  |
+| apply_file_timestamps | Apply original source publication/creation timestamps to downloaded output files. | false | true/false |
 
 ### M3U8 Video Download
 

@@ -84,7 +84,10 @@ func (d *Downloader) processProfileImage(ctx context.Context, img *auth.ProfileI
 	//	return nil
 	//}
 
-	logger.Logger.Printf("[INFO] Downloading new %s for %s: %s", imgType, modelName, filename)
-
-	return d.downloadRegularFile(url, filePath, modelName, "image", "profile", false)
+	err := d.downloadRegularFile(url, filePath, modelName, "image", "profile", false)
+	if err == nil && d.cfg.Options.ApplyFileTimestamps && img.UpdatedAt > 0 {
+		t := parseUnixTimestamp(img.UpdatedAt)
+		applyFileTimestamp(filePath, t)
+	}
+	return err
 }

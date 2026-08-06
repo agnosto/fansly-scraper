@@ -138,6 +138,10 @@ func EnsureConfigUpdated(configPath string) error {
 				cfg.Options.MaxVideoDurationSeconds = defaultConfig.Options.MaxVideoDurationSeconds
 				isUpdated = true
 			}
+			if _, exists := optionsMap["apply_file_timestamps"]; !exists {
+				cfg.Options.ApplyFileTimestamps = defaultConfig.Options.ApplyFileTimestamps
+				isUpdated = true
+			}
 		} else {
 			// If options section doesn't exist at all, add the fields
 			cfg.Options.SkipPreviews = defaultConfig.Options.SkipPreviews
@@ -151,6 +155,7 @@ func EnsureConfigUpdated(configPath string) error {
 			cfg.Options.PostLimit = defaultConfig.Options.PostLimit
 			cfg.Options.SkipLongVideos = defaultConfig.Options.SkipLongVideos
 			cfg.Options.MaxVideoDurationSeconds = defaultConfig.Options.MaxVideoDurationSeconds
+			cfg.Options.ApplyFileTimestamps = defaultConfig.Options.ApplyFileTimestamps
 			isUpdated = true
 		}
 	}
@@ -282,6 +287,7 @@ func MergeConfigs(existing, new *Config) *Config {
 	} else {
 		result.Options.MaxVideoDurationSeconds = existing.Options.MaxVideoDurationSeconds
 	}
+	result.Options.ApplyFileTimestamps = new.Options.ApplyFileTimestamps
 
 	// Merge LiveSettings
 	result.LiveSettings = existing.LiveSettings
