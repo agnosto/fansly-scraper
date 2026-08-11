@@ -23,9 +23,11 @@ func (m *MainModel) HandleWallSelectionUpdate(msg tea.Msg) (tea.Model, tea.Cmd) 
 			return m, tea.Quit
 		case key.Matches(msg, m.keys.Up):
 			m.table.MoveUp(1)
+			updateTableIndicator(&m.table)
 			return m, nil
 		case key.Matches(msg, m.keys.Down):
 			m.table.MoveDown(1)
+			updateTableIndicator(&m.table)
 			return m, nil
 		case key.Matches(msg, m.keys.Back):
 			m.state = DownloadActionsState
@@ -36,7 +38,7 @@ func (m *MainModel) HandleWallSelectionUpdate(msg tea.Msg) (tea.Model, tea.Cmd) 
 			// The ID is hidden or in column 0 depending on how we set up the table
 			// Let's assume ID is column 0
 			if len(selectedRow) > 0 {
-				m.selectedWallID = selectedRow[0]
+				m.selectedWallID = selectedRow[1]
 				m.state = DownloadProgressState
 				return m, m.startWallDownload()
 			}
@@ -71,6 +73,7 @@ func (m *MainModel) RenderWallSelectionMenu() string {
 // Call this when entering WallSelectionState
 func (m *MainModel) updateWallTable() {
 	columns := []table.Column{
+		{Title: " ", Width: 2},
 		{Title: "ID", Width: 20},
 		{Title: "Name", Width: 30},
 		{Title: "Description", Width: 40},
@@ -93,7 +96,12 @@ func (m *MainModel) updateWallTable() {
 
 	rows := make([]table.Row, len(currentModelWalls))
 	for i, wall := range currentModelWalls {
+		indicator := " "
+		if i == 0 {
+			indicator = ">"
+		}
 		rows[i] = table.Row{
+			indicator,
 			wall.ID,
 			wall.Name,
 			wall.Description,

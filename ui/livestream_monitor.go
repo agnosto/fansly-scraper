@@ -99,12 +99,14 @@ func (m *MainModel) HandleLivestreamMonitorUpdate(msg tea.Msg) (tea.Model, tea.C
 			return m, nil
 		case key.Matches(msg, m.keys.Up):
 			m.monitoringTable.MoveUp(1)
+			updateTableIndicator(&m.monitoringTable)
 		case key.Matches(msg, m.keys.Down):
 			m.monitoringTable.MoveDown(1)
+			updateTableIndicator(&m.monitoringTable)
 		case key.Matches(msg, m.keys.Select):
 			selectedRow := m.monitoringTable.SelectedRow()
-			modelID := selectedRow[1]
-			username := selectedRow[0]
+			modelID := selectedRow[2]
+			username := selectedRow[1]
 
 			// Toggle monitoring without sending log messages
 			m.monitoringService.SetTUIMode(true) // Ensure TUI mode is set
@@ -212,6 +214,7 @@ func (m *MainModel) loadMonitoringState() map[string]string {
 
 func (m *MainModel) updateMonitoringTable() {
 	columns := []table.Column{
+		{Title: " ", Width: 2},
 		{Title: "Username", Width: 20},
 		{Title: "Account ID", Width: 20},
 		{Title: "Monitor Status", Width: 15},
@@ -256,8 +259,17 @@ func (m *MainModel) updateMonitoringTable() {
 	})
 
 	// Build rows from sorted list
+	selectedIdx := m.monitoringTable.Cursor()
+	if len(statusList) > 0 && selectedIdx >= len(statusList) {
+		selectedIdx = len(statusList) - 1
+	}
+
 	rows := make([]table.Row, len(statusList))
 	for i, data := range statusList {
+		indicator := " "
+		if i == selectedIdx {
+			indicator = ">"
+		}
 		monitorStatus := "Not Monitoring"
 		monitorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("red"))
 		liveStatus := "Offline"
@@ -273,6 +285,7 @@ func (m *MainModel) updateMonitoringTable() {
 		}
 
 		rows[i] = table.Row{
+			indicator,
 			data.model.Username,
 			data.model.ID,
 			monitorStyle.Render(monitorStatus),
@@ -286,6 +299,9 @@ func (m *MainModel) updateMonitoringTable() {
 		table.WithFocused(true),
 		table.WithHeight(m.height-10),
 	)
+	if len(rows) > 0 {
+		t.SetCursor(selectedIdx)
+	}
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).

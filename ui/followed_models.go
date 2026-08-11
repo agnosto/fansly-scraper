@@ -27,16 +27,18 @@ func (m *MainModel) HandleFollowedModelsMenuUpdate(msg tea.Msg) (tea.Model, tea.
 			return m, nil
 		case key.Matches(msg, m.keys.Up):
 			m.table.MoveUp(1)
+			updateTableIndicator(&m.table)
 			return m, nil
 		case key.Matches(msg, m.keys.Down):
 			m.table.MoveDown(1)
+			updateTableIndicator(&m.table)
 			return m, nil
 		case key.Matches(msg, m.keys.Select):
 			if len(m.table.Rows()) == 0 {
 				return m, nil
 			}
 			selectedRow := m.table.SelectedRow()
-			m.selectedModel = selectedRow[0]
+			m.selectedModel = selectedRow[1]
 			m.filteredModels = m.followedModels // Reset to unfiltered list
 			m.filterInput = ""                  // Reset filter input
 			m.updateTable()
@@ -102,8 +104,24 @@ func (m *MainModel) RenderFollowedModelsMenu() string {
 	return sb.String()
 }
 
+// updateTableIndicator moves the leading > marker to the table's currently
+// selected row, keeping it in sync as the cursor moves.
+func updateTableIndicator(t *table.Model) {
+	rows := t.Rows()
+	cursor := t.Cursor()
+	for i := range rows {
+		if i == cursor {
+			rows[i][0] = ">"
+		} else {
+			rows[i][0] = " "
+		}
+	}
+	t.UpdateViewport()
+}
+
 func (m *MainModel) updateTable() {
 	columns := []table.Column{
+		{Title: " ", Width: 2},
 		{Title: "Username", Width: 20},
 		//{Title: "AccountId", Width: 20},
 		{Title: "Images", Width: 10},
@@ -113,9 +131,19 @@ func (m *MainModel) updateTable() {
 		{Title: "Bundle Videos", Width: 15},
 	}
 
+	selectedIdx := m.table.Cursor()
+	if len(m.filteredModels) > 0 && selectedIdx >= len(m.filteredModels) {
+		selectedIdx = len(m.filteredModels) - 1
+	}
+
 	rows := make([]table.Row, len(m.filteredModels))
 	for i, model := range m.filteredModels {
+		indicator := " "
+		if i == selectedIdx {
+			indicator = ">"
+		}
 		rows[i] = table.Row{
+			indicator,
 			model.Username,
 			//model.ID,
 			fmt.Sprintf("%d", model.TimelineStats.ImageCount),
@@ -134,6 +162,9 @@ func (m *MainModel) updateTable() {
 		table.WithFocused(true),
 		table.WithHeight(tableHeight),
 	)
+	if len(rows) > 0 {
+		t.SetCursor(selectedIdx)
+	}
 
 	s := table.DefaultStyles()
 	s.Header = s.Header.
