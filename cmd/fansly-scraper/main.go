@@ -32,7 +32,7 @@ import (
 
 var ffmpegAvailable bool
 
-const version = "v0.9.3"
+const version = "v0.9.4"
 
 func main() {
 	flags, subcommand := cmd.ParseFlags()
