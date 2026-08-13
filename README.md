@@ -17,7 +17,7 @@
 >
 > **Recommended Solution - Install via Go (should hopefully bypass AV issues):**
 > ```bash
-> go install github.com/agnosto/fansly-scraper/cmd/fansly-scraper@latest
+> GOPROXY=direct go install github.com/agnosto/fansly-scraper/cmd/fansly-scraper@latest
 > ```
 >
 > **What you can do:**
@@ -43,7 +43,7 @@ A simple all in one tool to download and monitor content from Fansly creators.
 - **Manual way**: Get from [GitHub releases](https://github.com/agnosto/fansly-scraper/releases)
 - **Intall Via Go**: 
 ```bash
-go install github.com/agnosto/fansly-scraper/cmd/fansly-scraper@latest
+GOPROXY=direct go install github.com/agnosto/fansly-scraper/cmd/fansly-scraper@latest
 ```
 
 ### 2. Run the Program
