@@ -17,6 +17,17 @@ Note: If a `config.toml` file exists in the same directory as the executable, th
 
 This document outlines available options for the Scraper.
 
+## Database Location
+
+Where the scraper's local database (`downloads.db`) is stored. It always lives next to the config file, in the same folder (`%APPDATA%\fansly-scraper\` on Windows, `~/.config/fansly-scraper/` on Linux and macOS), never in your download folder.
+
+SQLite needs file locking that network shares such as SMB cannot provide, so a database kept in a network download folder fails to start with `database is locked (5) (SQLITE_BUSY)`. Keeping it out of the download folder means your `save_location` can be a NAS, an SMB share, or a local disk without affecting the scraper.
+
+If a `downloads.db` is found in `save_location` from an earlier version, it is imported into the config folder on the next run. The original is left behind as `downloads.db.bak` in your download folder and is safe to delete.
+
+> [!NOTE]
+> The database is shared by every run, so pointing several configs at the same download folder no longer shares their download history.
+
 ## Account Settings
 
 | Setting | Description | Required | Example |
@@ -89,7 +100,7 @@ The setting is not case-sensitive, and both singular and plural forms work (e.g.
 
 ### Skipping Processed Posts
 
-Set `skip_downloaded_posts` to `true` to dramatically speed up re-running the scraper on a creator you have already downloaded. When enabled, the application keeps a record of every post it successfully processes in its local database (`downloads.db`). On future runs, it will skip any post ID that is already in its records, avoiding the need to re-fetch and check media for that post.
+Set `skip_downloaded_posts` to `true` to dramatically speed up re-running the scraper on a creator you have already downloaded. When enabled, the application keeps a record of every post it successfully processes in its local database (`downloads.db`, see [Database Location](#database-location)). On future runs, it will skip any post ID that is already in its records, avoiding the need to re-fetch and check media for that post.
 
 > [!WARNING]
 > Due to API rate limits or network issues, it's possible for the application to mark a post as "processed" even if some of its media failed to download. If you suspect content is missing from a previous run, it is recommended to temporarily set `skip_downloaded_posts = false` to force the scraper to re-check all of the creator's posts for any missing files.

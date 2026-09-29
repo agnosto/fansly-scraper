@@ -78,7 +78,7 @@ func NewMonitoringService(storagePath string, logger *log.Logger) *MonitoringSer
 		fileService = service.NewFileService(fileRepo)
 		postRepo := repository.NewProcessedPostRepository(database.DB)
 		processedPostService = service.NewProcessedPostService(postRepo)
-		logger.Printf("Database initialized successfully for monitoring service")
+		logger.Printf("Database initialized successfully for monitoring service (%s)", database.Path)
 	}
 
 	mt := &MonitoringService{

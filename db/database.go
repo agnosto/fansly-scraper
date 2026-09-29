@@ -3,7 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
-	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/agnosto/fansly-scraper/db/models"
@@ -14,14 +14,32 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
+// busyTimeoutMS makes a blocked writer wait instead of failing immediately
+// with SQLITE_BUSY, which happens when the monitoring service and the TUI
+// touch the same database at once.
+const busyTimeoutMS = 5000
+
 // Database represents the database connection
 type Database struct {
 	DB *gorm.DB
+	// Path is the file the connection was opened from.
+	Path string
 }
 
 // NewDatabase creates a new database connection
 func NewDatabase(saveLocation string) (*Database, error) {
-	dbPath := filepath.Join(saveLocation, "downloads.db")
+	dbPath, err := ResolveDBPath(saveLocation)
+	if err != nil {
+		return nil, err
+	}
+	dbLog("[INFO] Using database at %s", dbPath)
+
+	return openDB(dbPath)
+}
+
+// openDB opens the database at dbPath, migrating it to the current schema if
+// needed.
+func openDB(dbPath string) (*Database, error) {
 	// Check if the database exists and has the old schema
 	needsMigration, err := checkOldSchema(dbPath)
 	if err != nil {
@@ -34,14 +52,16 @@ func NewDatabase(saveLocation string) (*Database, error) {
 		Colorful: true,
 	}
 
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
-		Logger: gormlogger.New(
-			logger.Logger,
-			logConfig,
-		),
-	})
+	gormConfig := &gorm.Config{Logger: gormlogger.Discard}
+	// logger.Logger is nil until the config has been loaded, and gorm writes
+	// to it whenever a query warns or fails, so discard until then.
+	if logger.Logger != nil {
+		gormConfig.Logger = gormlogger.New(logger.Logger, logConfig)
+	}
+
+	db, err := gorm.Open(sqlite.Open(dataSourceName(dbPath)), gormConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+		return nil, fmt.Errorf("failed to connect to database at %s: %w", dbPath, err)
 	}
 
 	// If we need to migrate from the old schema
@@ -56,7 +76,17 @@ func NewDatabase(saveLocation string) (*Database, error) {
 		}
 	}
 
-	return &Database{DB: db}, nil
+	return &Database{DB: db, Path: dbPath}, nil
+}
+
+// dataSourceName adds the busy timeout pragma to the path. The driver splits
+// the data source on the first "?" and treats what comes before it as a plain
+// path, so a path that already contains a "?" has to be used as-is.
+func dataSourceName(dbPath string) string {
+	if strings.ContainsRune(dbPath, '?') {
+		return dbPath
+	}
+	return fmt.Sprintf("%s?_pragma=busy_timeout(%d)", dbPath, busyTimeoutMS)
 }
 
 // checkOldSchema checks if the database has the old schema

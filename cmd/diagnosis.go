@@ -12,6 +12,7 @@ import (
 	"github.com/agnosto/fansly-scraper/auth"
 	"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/core"
+	"github.com/agnosto/fansly-scraper/db"
 	"github.com/agnosto/fansly-scraper/download"
 	"github.com/agnosto/fansly-scraper/headers"
 	"github.com/agnosto/fansly-scraper/posts"
@@ -84,6 +85,15 @@ func (ds *DiagnosisSuite) testConfig() {
 	configPath := config.GetConfigPath()
 	ds.log(fmt.Sprintf(" - Config path: %s", ds.sanitizePath(configPath)))
 	ds.log(" - PASS: Config loaded successfully.")
+
+	dbPath, err := db.ResolveDBPath(ds.cfg.Options.SaveLocation)
+	if err != nil {
+		ds.log(fmt.Sprintf(" - FAIL: Database is unavailable: %v", err))
+	} else if info, err := os.Stat(dbPath); err != nil {
+		ds.log(fmt.Sprintf(" - INFO: Database path: %s (will be created on first run)", ds.sanitizePath(dbPath)))
+	} else {
+		ds.log(fmt.Sprintf(" - Database path: %s (%.1f KB)", ds.sanitizePath(dbPath), float64(info.Size())/1024))
+	}
 
 	redactedCfg := *ds.cfg
 	redactedCfg.Account.AuthToken = "[REDACTED]"
