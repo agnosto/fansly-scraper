@@ -34,6 +34,22 @@ ffmpeg_conversion_options = ""
   notify_on_live_start = true
   notify_on_live_end = false
 
+[ui] # TUI colors. Accepts hex ("#89dceb"), ANSI 256 ("240") or named ("red") colors. Set any value to "" to use the built-in default.
+  title_color = "#f5c2e7"            # headings and titles
+  accent_color = "#f5c2e7"           # config path, donation addresses
+  selected_color = "#89dceb"         # selected menu option
+  success_color = "#a6e3a1"          # welcome/success messages
+  error_color = "#f38ba8"            # errors, update-available notice
+  warning_color = "#fab387"          # warnings
+  link_color = "#89b4fa"             # URLs and sponsor links
+  muted_color = "#6c7086"            # secondary/hint text
+  help_key_color = "#89dceb"         # key bindings in the help tooltip
+  help_desc_color = "#cdd6f4"        # descriptions in the help tooltip
+  border_color = "240"               # table header borders
+  selected_row_fg_color = "229"      # selected table row text
+  selected_row_bg_color = "#cba6f7"  # selected table row background
+  live_color = "green"               # live/monitoring status
+  offline_color = "red"              # offline/not-monitoring status
 
 [security_headers] # These get automatically added, no need to touch unless you want to.
 device_id = ""

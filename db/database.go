@@ -71,7 +71,7 @@ func openDB(dbPath string) (*Database, error) {
 		}
 	} else {
 		// Run normal migrations for new database
-		if err := db.AutoMigrate(&models.File{}, &models.ProcessedPost{}); err != nil {
+		if err := db.AutoMigrate(&models.File{}, &models.ProcessedPost{}, &models.Account{}); err != nil {
 			return nil, fmt.Errorf("failed to run migrations: %w", err)
 		}
 	}

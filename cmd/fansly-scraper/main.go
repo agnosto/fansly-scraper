@@ -214,7 +214,7 @@ func main() {
 		return
 	}
 
-	model := ui.NewMainModel(downloader, version, monitoringService)
+	model := ui.NewMainModel(downloader, version, monitoringService, cfg)
 	model.UpdateAvailable = updateAvailable
 	model.LatestVersion = latestVersion
 	p := tea.NewProgram(model, tea.WithAltScreen())

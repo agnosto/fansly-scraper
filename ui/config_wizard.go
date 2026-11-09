@@ -35,6 +35,21 @@ type ConfigWizardModel struct {
 	snippet    string
 	waiting    bool
 	stopFn     func(ctx context.Context) error
+	// Embedded is true when the wizard runs as a state inside the main TUI
+	// program. In that mode quitting sets done instead of returning tea.Quit,
+	// so the outer program keeps ownership of the terminal.
+	Embedded bool
+	done     bool
+}
+
+// quitCmd is used everywhere the wizard finishes. Standalone it quits the
+// program; embedded it just marks the wizard done so the host can switch back.
+func (m *ConfigWizardModel) quitCmd() tea.Cmd {
+	if m.Embedded {
+		m.done = true
+		return nil
+	}
+	return tea.Quit
 }
 
 const (
@@ -89,14 +104,14 @@ func (m *ConfigWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					_ = m.stopFn(context.Background())
 					m.stopFn = nil
 				}
-				return m, tea.Quit
+				return m, m.quitCmd()
 			case "esc":
 				if m.stopFn != nil {
 					_ = m.stopFn(context.Background())
 					m.stopFn = nil
 				}
 				m.message = "Setup cancelled."
-				return m, tea.Quit
+				return m, m.quitCmd()
 			case "up":
 				if !m.locCustom {
 					m.locCursor = (m.locCursor - 1 + len(m.locOptions)) % len(m.locOptions)
@@ -154,10 +169,10 @@ func (m *ConfigWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case wizardStepLogin:
 			switch msg.String() {
 			case "ctrl+c":
-				return m, tea.Quit
+				return m, m.quitCmd()
 			case "esc":
 				m.message = "Setup cancelled."
-				return m, tea.Quit
+				return m, m.quitCmd()
 			case "a":
 				if !m.autoActive {
 					m.message = "Starting browser auto-capture..."
@@ -201,7 +216,7 @@ func (m *ConfigWizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.message = err.Error()
 					return m, nil
 				}
-				return m, tea.Quit
+				return m, m.quitCmd()
 			case "tab":
 				m.cursor = (m.cursor + 1) % len(m.inputs)
 				for i := range m.inputs {

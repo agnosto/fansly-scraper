@@ -54,7 +54,7 @@ func (d *Downloader) DumpChatLogs(ctx context.Context, modelId, modelName string
 
 	bar := progressbar.NewOptions(-1,
 		progressbar.OptionSetDescription("Fetching Chat Logs"),
-		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionSetWriter(d.progressWriter()),
 		progressbar.OptionSpinnerType(14),
 		progressbar.OptionFullWidth(),
 	)

@@ -18,6 +18,11 @@ import (
 
 // HandleMainMenuUpdate handles updates when in the MainMenuState
 func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// The setup wizard runs embedded as a state; delegate everything to it
+	// so no second tea.Program ever touches the terminal.
+	if m.state == WizardState {
+		return m.handleWizardUpdate(msg)
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		logger.Logger.Printf("Window size changed to %dx%d", msg.Width, msg.Height)
@@ -116,10 +121,6 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editConfigFinishedMsg:
 		// Config editing is finished, refresh the UI
 		return m, tea.ClearScreen
-	case setupWizardFinishedMsg:
-		m.state = MainMenuState
-		m.accountsFetched = false
-		return m, tea.ClearScreen
 	case downloadCompleteMsg:
 		return m, tea.Sequence(
 			tea.Tick(3*time.Second, func(time.Time) tea.Msg {
@@ -193,7 +194,38 @@ func (m *MainModel) View() string {
 		return m.RenderWallSelectionMenu()
 	case DownloadIndividualPostState:
 		return m.RenderDownloadIndividualPostsMenu()
+	case WizardState:
+		if m.wizard != nil {
+			return m.wizard.View()
+		}
+		return ""
 	default:
 		return "Unknown state"
 	}
+}
+
+// handleWizardUpdate delegates all messages to the embedded setup wizard.
+// When the wizard finishes (done), control returns to the main menu.
+func (m *MainModel) handleWizardUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.wizard == nil {
+		m.state = MainMenuState
+		return m, nil
+	}
+	// ctrl+c always quits the whole application, even from the wizard
+	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "ctrl+c" {
+		m.quit = true
+		return m, tea.Quit
+	}
+	model, cmd := m.wizard.Update(msg)
+	if w, ok := model.(*ConfigWizardModel); ok {
+		m.wizard = w
+	}
+	if m.wizard != nil && m.wizard.done {
+		m.wizard = nil
+		m.state = MainMenuState
+		m.cursorPos = 0
+		m.accountsFetched = false
+		return m, tea.ClearScreen
+	}
+	return m, cmd
 }

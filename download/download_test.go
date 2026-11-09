@@ -1,6 +1,7 @@
 package download
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -117,5 +118,24 @@ func TestApplyFileTimestamp(t *testing.T) {
 	// Compare Unix timestamps to avoid sub-second / OS precision discrepancies
 	if info.ModTime().Unix() != targetTime.Unix() {
 		t.Errorf("expected mod time unix %d, got %d", targetTime.Unix(), info.ModTime().Unix())
+	}
+}
+
+func TestProgressWriterQuietMode(t *testing.T) {
+	d := &Downloader{}
+
+	if w := d.progressWriter(); w != os.Stderr {
+		t.Errorf("expected stderr writer by default, got %T", w)
+	}
+	d.SetQuiet(true)
+	if w := d.progressWriter(); w != io.Discard {
+		t.Errorf("expected io.Discard in quiet mode, got %T", w)
+	}
+	if !d.isQuiet() {
+		t.Errorf("expected isQuiet to be true after SetQuiet(true)")
+	}
+	d.SetQuiet(false)
+	if w := d.progressWriter(); w != os.Stderr {
+		t.Errorf("expected stderr writer after SetQuiet(false), got %T", w)
 	}
 }

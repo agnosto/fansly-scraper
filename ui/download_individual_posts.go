@@ -10,7 +10,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // HandleDownloadIndividualPostsUpdate handles updates when in the DownloadIndividualPostState
@@ -46,13 +45,13 @@ func (m *MainModel) HandleDownloadIndividualPostsUpdate(msg tea.Msg) (tea.Model,
 func (m *MainModel) RenderDownloadIndividualPostsMenu() string {
 	var sb strings.Builder
 
-	sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#a6e3a1")).Bold(true).Render("Download Individual Post(s)") + "\n\n")
+	sb.WriteString(m.theme.Success.Bold(true).Render("Download Individual Post(s)") + "\n\n")
 	sb.WriteString("Paste one or more Fansly post links or IDs below.\n")
 	sb.WriteString("You can separate multiple links/IDs with spaces or commas.\n\n")
 
 	sb.WriteString(m.postLinksInput.View() + "\n\n")
 
-	sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#6c7086")).Render("Press Enter to download, Esc to cancel / return to menu") + "\n")
+	sb.WriteString(m.theme.Muted.Render("Press Enter to download, Esc to cancel / return to menu") + "\n")
 
 	return sb.String()
 }

@@ -21,7 +21,30 @@ type Config struct {
 	Options         OptionsConfig         `toml:"options"`
 	LiveSettings    LiveSettingsConfig    `toml:"live_settings"`
 	Notifications   NotificationsConfig   `toml:"notifications"`
+	UI              UIConfig              `toml:"ui"`
 	SecurityHeaders SecurityHeadersConfig `toml:"security_headers"`
+}
+
+// UIConfig holds TUI colors. Any empty value falls back to the built-in
+// default, so users only need to set the colors they want to change.
+// Values accept any lipgloss color: hex ("#89dceb"), ANSI 256 ("240") or
+// named ("red") colors.
+type UIConfig struct {
+	TitleColor         string `toml:"title_color"`           // headings and titles
+	AccentColor        string `toml:"accent_color"`          // config path, addresses
+	SelectedColor      string `toml:"selected_color"`        // selected menu option
+	SuccessColor       string `toml:"success_color"`         // welcome/success messages
+	ErrorColor         string `toml:"error_color"`           // errors, update-available notice
+	WarningColor       string `toml:"warning_color"`         // warnings
+	LinkColor          string `toml:"link_color"`            // URLs and sponsor links
+	MutedColor         string `toml:"muted_color"`           // secondary/hint text
+	HelpKeyColor       string `toml:"help_key_color"`        // key bindings in the help tooltip
+	HelpDescColor      string `toml:"help_desc_color"`       // descriptions in the help tooltip
+	BorderColor        string `toml:"border_color"`          // table header borders
+	SelectedRowFgColor string `toml:"selected_row_fg_color"` // selected table row text
+	SelectedRowBgColor string `toml:"selected_row_bg_color"` // selected table row background
+	LiveColor          string `toml:"live_color"`            // live/monitoring status
+	OfflineColor       string `toml:"offline_color"`         // offline/not-monitoring status
 }
 
 type LiveSettingsConfig struct {
@@ -210,6 +233,23 @@ func CreateDefaultConfig() *Config {
 			NotifyOnLiveStart:         true,
 			NotifyOnLiveEnd:           false,
 			SendContactSheetOnLiveEnd: false,
+		},
+		UI: UIConfig{
+			TitleColor:         "#f5c2e7",
+			AccentColor:        "#f5c2e7",
+			SelectedColor:      "#89dceb",
+			SuccessColor:       "#a6e3a1",
+			ErrorColor:         "#f38ba8",
+			WarningColor:       "#fab387",
+			LinkColor:          "#89b4fa",
+			MutedColor:         "#6c7086",
+			HelpKeyColor:       "#89dceb",
+			HelpDescColor:      "#cdd6f4",
+			BorderColor:        "240",
+			SelectedRowFgColor: "229",
+			SelectedRowBgColor: "#cba6f7",
+			LiveColor:          "green",
+			OfflineColor:       "red",
 		},
 		SecurityHeaders: SecurityHeadersConfig{
 			DeviceID:    "",

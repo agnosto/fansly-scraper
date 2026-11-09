@@ -42,7 +42,7 @@ func (d *Downloader) DownloadMessages(ctx context.Context, modelId, modelName st
 	}
 
 	d.progressBar = progressbar.NewOptions(totalMediaItems,
-		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionSetWriter(d.progressWriter()),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionUseANSICodes(true),
 		progressbar.OptionSetPredictTime(true),

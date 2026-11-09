@@ -3,7 +3,6 @@ package ui
 import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"strings"
 )
 
@@ -78,7 +77,7 @@ func (m *MainModel) RenderCompletionMenu() string {
 
 	for i, opt := range options {
 		if i == m.cursorPos {
-			sb.WriteString("> " + lipgloss.NewStyle().Foreground(lipgloss.Color("#89dceb")).Render(opt) + "\n")
+			sb.WriteString("> " + m.theme.Selected.Render(opt) + "\n")
 		} else {
 			sb.WriteString("  " + opt + "\n")
 		}

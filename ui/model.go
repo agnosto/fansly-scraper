@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/agnosto/fansly-scraper/auth"
+	"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/core"
 	"github.com/agnosto/fansly-scraper/download"
 	"github.com/agnosto/fansly-scraper/service"
@@ -44,6 +45,7 @@ const (
 	DonateState
 	WallSelectionState
 	DownloadIndividualPostState
+	WizardState
 )
 
 type MainModel struct {
@@ -65,6 +67,7 @@ type MainModel struct {
 	filteredLiveMonitorModels []auth.FollowedModel
 	keys                      keyMap
 	help                      help.Model
+	theme                     Theme
 	width                     int
 	height                    int
 	actionChosen              string
@@ -88,6 +91,7 @@ type MainModel struct {
 	accountsFetched           bool
 	selectedWallID            string
 	postLinksInput            textinput.Model
+	wizard                    *ConfigWizardModel
 }
 
 type loadingTickMsg struct{}
@@ -129,7 +133,6 @@ type editConfigMsg struct {
 }
 
 type editConfigFinishedMsg struct{}
-type setupWizardFinishedMsg struct{}
 
 type downloadErrorMsg struct {
 	Error error
@@ -229,12 +232,23 @@ func (m *MainModel) Init() tea.Cmd {
 	)
 }
 
-func NewMainModel(downloader *download.Downloader, version string, monitoringService *service.MonitoringService) *MainModel {
+func NewMainModel(downloader *download.Downloader, version string, monitoringService *service.MonitoringService, cfg *config.Config) *MainModel {
 	postLinksInput := textinput.New()
 	postLinksInput.Placeholder = "Paste link(s) here (space or comma separated)"
 	postLinksInput.Focus()
 
-	return &MainModel{
+	theme := DefaultTheme()
+	if cfg != nil {
+		theme = NewTheme(cfg.UI)
+	}
+
+	// The TUI owns the terminal (alt screen), so the downloader must not
+	// write progress bars or stray prints to stdout/stderr.
+	if downloader != nil {
+		downloader.SetQuiet(true)
+	}
+
+	m := &MainModel{
 		version: version,
 		options: []string{
 			"Download a user's post",
@@ -253,6 +267,7 @@ func NewMainModel(downloader *download.Downloader, version string, monitoringSer
 		cursorPos:         0,
 		keys:              defaultKeyMap,
 		help:              help.New(),
+		theme:             theme,
 		downloader:        downloader,
 		state:             MainMenuState,
 		monitoredModels:   make(map[string]bool),
@@ -263,6 +278,8 @@ func NewMainModel(downloader *download.Downloader, version string, monitoringSer
 		accountsFetched:   false,
 		postLinksInput:    postLinksInput,
 	}
+	theme.ApplyHelp(&m.help)
+	return m
 }
 
 func (m *MainModel) Reset() {

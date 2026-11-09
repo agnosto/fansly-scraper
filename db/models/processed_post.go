@@ -8,8 +8,10 @@ import (
 type ProcessedPost struct {
 	ID            uint   `gorm:"primaryKey"`
 	PostID        string `gorm:"uniqueIndex;not null"`
+	AccountID     string `gorm:"index"`
 	ModelUsername string `gorm:"index;not null"`
 	Content       string
+	ContentType   string `gorm:"index"` // timeline, message, story, purchases, livestream
 	Link          string
 	PostCreatedAt time.Time
 	CreatedAt     time.Time

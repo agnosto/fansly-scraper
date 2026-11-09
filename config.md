@@ -236,6 +236,28 @@ To set up Telegram notifications:
 3. Get your chat ID (you can use [userinfobot](https://t.me/userinfobot) or send a message to your bot and check `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`)
 4. Add the bot token to `telegram_bot_token` and chat ID to `telegram_chat_id`
 
+## UI Colors
+
+The `[ui]` section controls the TUI colors. Every value accepts a hex color (`"#89dceb"`), an ANSI 256 color (`"240"`) or a named color (`"red"`). Set any value to `""` to fall back to the built-in default.
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| title_color | Headings and titles | "#f5c2e7" |
+| accent_color | Config path, donation addresses | "#f5c2e7" |
+| selected_color | Selected menu option | "#89dceb" |
+| success_color | Welcome/success messages | "#a6e3a1" |
+| error_color | Errors, update-available notice | "#f38ba8" |
+| warning_color | Warnings | "#fab387" |
+| link_color | URLs and sponsor links | "#89b4fa" |
+| muted_color | Secondary/hint text | "#6c7086" |
+| help_key_color | Key bindings in the help tooltip | "#89dceb" |
+| help_desc_color | Descriptions in the help tooltip | "#cdd6f4" |
+| border_color | Table header borders | "240" |
+| selected_row_fg_color | Selected table row text | "229" |
+| selected_row_bg_color | Selected table row background | "#cba6f7" |
+| live_color | Live/monitoring status | "green" |
+| offline_color | Offline/not-monitoring status | "red" |
+
 ## Security Headers
 
 These are automatically managed by the application:

@@ -53,6 +53,11 @@ func (d *Downloader) DownloadPostByID(ctx context.Context, postIdentifier string
 	modelName := accountDetails[0].Username
 	logger.Logger.Printf("Post by model: %s (ID: %s)", modelName, postInfo.AccountId)
 
+	// Cache the account ID → username mapping for later runs
+	if err := d.accountService.SaveAccount(postInfo.AccountId, modelName, accountDetails[0].DisplayName, "", ""); err != nil {
+		logger.Logger.Printf("[WARN] Failed to cache account info for %s: %v", modelName, err)
+	}
+
 	// 4. Create directories for the model
 	baseDir := filepath.Join(d.cfg.Options.SaveLocation, strings.ToLower(modelName), "timeline")
 	for _, subDir := range []string{"images", "videos", "audios"} {
@@ -76,6 +81,6 @@ func (d *Downloader) DownloadPostByID(ctx context.Context, postIdentifier string
 		}
 	}
 
-	d.ProcessedPostService.MarkPostAsProcessed(postInfo.ID, modelName, postInfo.Content, postInfo.CreatedAt)
+	d.ProcessedPostService.MarkPostAsProcessedFull(postInfo.ID, postInfo.AccountId, modelName, postInfo.Content, "timeline", postInfo.CreatedAt)
 	return nil
 }

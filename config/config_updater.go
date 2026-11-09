@@ -224,6 +224,20 @@ func EnsureConfigUpdated(configPath string) error {
 		}
 	}
 
+	// UI colors: if the whole [ui] section is missing, take the defaults;
+	// otherwise backfill only the keys that are absent from the raw TOML.
+	if reflect.DeepEqual(cfg.UI, UIConfig{}) {
+		cfg.UI = defaultConfig.UI
+		isUpdated = true
+	} else if uiMap, ok := rawConfig["ui"].(map[string]any); ok {
+		if fillMissingStringFields(uiMap, &cfg.UI, &defaultConfig.UI) {
+			isUpdated = true
+		}
+	} else {
+		cfg.UI = defaultConfig.UI
+		isUpdated = true
+	}
+
 	if isUpdated {
 		//log.Println("Config file has been updated with new default values.")
 		// Save the updated config. Use the simple SaveConfig which now just encodes.
@@ -236,6 +250,31 @@ func EnsureConfigUpdated(configPath string) error {
 	}
 
 	return nil
+}
+
+// fillMissingStringFields copies string fields from def into dst for every
+// toml key absent from the raw section map. It returns true if anything was
+// changed. Keys present in the file are left untouched, even when empty
+// (empty means "use the built-in default" at render time).
+func fillMissingStringFields(sectionMap map[string]any, dst, def any) bool {
+	dstVal := reflect.ValueOf(dst).Elem()
+	defVal := reflect.ValueOf(def).Elem()
+	changed := false
+	for i := 0; i < dstVal.NumField(); i++ {
+		field := dstVal.Type().Field(i)
+		key := field.Tag.Get("toml")
+		if key == "" {
+			continue
+		}
+		if _, exists := sectionMap[key]; exists {
+			continue
+		}
+		if dstVal.Field(i).Kind() == reflect.String && dstVal.Field(i).String() == "" {
+			dstVal.Field(i).Set(defVal.Field(i))
+			changed = true
+		}
+	}
+	return changed
 }
 
 // MergeConfigs merges a new configuration into an existing one.
@@ -354,9 +393,33 @@ func MergeConfigs(existing, new *Config) *Config {
 		result.Notifications.TelegramChatID = new.Notifications.TelegramChatID
 	}
 
+	// Merge UI colors: the new config wins per-field when non-empty,
+	// otherwise keep the existing value, otherwise the default.
+	result.UI = mergeUIConfigs(existing.UI, new.UI, defaultConfig.UI)
+
 	// Security Headers are always taken from the new config.
 	result.SecurityHeaders = new.SecurityHeaders
 
+	return result
+}
+
+// mergeUIConfigs merges UI color settings field by field: new non-empty
+// values win, then existing values, then defaults.
+func mergeUIConfigs(existing, new, def UIConfig) UIConfig {
+	result := existing
+	newVal := reflect.ValueOf(new)
+	res := reflect.ValueOf(&result).Elem()
+	defVal := reflect.ValueOf(def)
+	for i := 0; i < res.NumField(); i++ {
+		if res.Field(i).Kind() != reflect.String {
+			continue
+		}
+		if newVal.Field(i).String() != "" {
+			res.Field(i).Set(newVal.Field(i))
+		} else if res.Field(i).String() == "" {
+			res.Field(i).Set(defVal.Field(i))
+		}
+	}
 	return result
 }
 

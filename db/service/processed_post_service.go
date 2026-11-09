@@ -20,10 +20,21 @@ func NewProcessedPostService(repo repository.ProcessedPostRepository) *Processed
 
 // MarkPostAsProcessed saves a post ID to the database
 func (s *ProcessedPostService) MarkPostAsProcessed(postID, modelUsername string, content string, postCreatedAt int64) error {
+	return s.MarkPostAsProcessedFull(postID, "", modelUsername, content, "timeline", postCreatedAt)
+}
+
+// MarkPostAsProcessedFull saves a post to the database with its creator
+// account ID and content type (timeline, message, story, purchases, livestream)
+func (s *ProcessedPostService) MarkPostAsProcessedFull(postID, accountID, modelUsername, content, contentType string, postCreatedAt int64) error {
+	if contentType == "" {
+		contentType = "timeline"
+	}
 	post := &models.ProcessedPost{
 		PostID:        postID,
+		AccountID:     accountID,
 		ModelUsername: modelUsername,
 		Content:       content,
+		ContentType:   contentType,
 		Link:          fmt.Sprintf("https://fansly.com/post/%s", postID),
 		PostCreatedAt: time.Unix(postCreatedAt, 0),
 	}

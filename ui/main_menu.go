@@ -17,7 +17,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // HandleMainMenuUpdate handles updates when in the MainMenuState
@@ -145,26 +144,22 @@ func (m *MainModel) handleMainMenuSelection() (tea.Model, tea.Cmd) {
 			return editConfigFinishedMsg{}
 		})
 	case "Run setup wizard":
-		return m, func() tea.Msg {
-			p := tea.NewProgram(NewConfigWizardModel())
-			if _, err := p.Run(); err != nil {
-				logger.Logger.Printf("Error running setup wizard: %v", err)
-			}
-			return setupWizardFinishedMsg{}
-		}
+		w := NewConfigWizardModel()
+		w.Embedded = true
+		m.wizard = w
+		m.state = WizardState
+		return m, w.Init()
 	case "Reset configuration":
-		return m, func() tea.Msg {
-			if err := config.ResetConfig(); err != nil {
-				logger.Logger.Printf("Error resetting config: %v", err)
-				return setupWizardFinishedMsg{}
-			}
+		if err := config.ResetConfig(); err != nil {
+			logger.Logger.Printf("Error resetting config: %v", err)
+		} else {
 			logger.Logger.Printf("Configuration reset to defaults. Launching setup wizard...")
-			p := tea.NewProgram(NewConfigWizardModel())
-			if _, err := p.Run(); err != nil {
-				logger.Logger.Printf("Error running setup wizard after reset: %v", err)
-			}
-			return setupWizardFinishedMsg{}
 		}
+		w := NewConfigWizardModel()
+		w.Embedded = true
+		m.wizard = w
+		m.state = WizardState
+		return m, w.Init()
 	case "Donate":
 		m.state = DonateState
 		return m, nil
@@ -181,25 +176,25 @@ func (m *MainModel) RenderMainMenu() string {
 
 	// Initial Load Welcome message
 	configPath := config.GetConfigPath()
-	styledConfigPath := lipgloss.NewStyle().Foreground(lipgloss.Color("#f5c2e7")).Render(configPath)
+	styledConfigPath := m.theme.Accent.Render(configPath)
 	welcomeMessage := "Config path: " + styledConfigPath + "\n" + "Welcome to Fansly-scraper Version " + m.version
 	if m.UpdateAvailable {
 		updateMsg := fmt.Sprintf(" (Update %s available)", m.LatestVersion)
-		welcomeMessage += lipgloss.NewStyle().Foreground(lipgloss.Color("#f38ba8")).Render(updateMsg)
+		welcomeMessage += m.theme.Error.Render(updateMsg)
 	}
-	styledWelcomeMessage := lipgloss.NewStyle().Foreground(lipgloss.Color("#a6e3a1")).Render(welcomeMessage)
+	styledWelcomeMessage := m.theme.Success.Render(welcomeMessage)
 	sb.WriteString(styledWelcomeMessage + "\n")
 
 	// Maintainer Repo
 	repoLink := "https://github.com/agnosto/fansly-scraper"
-	styledRepoLink := lipgloss.NewStyle().Foreground(lipgloss.Color("#89b4fa")).Render(repoLink)
+	styledRepoLink := m.theme.Link.Render(repoLink)
 	sb.WriteString("Maintainer's repo: " + styledRepoLink + "\n\n")
 
 	sb.WriteString("What would you like to do? " + "\n")
 
 	for i, opt := range m.options {
 		if i == m.cursorPos {
-			sb.WriteString("> " + lipgloss.NewStyle().Foreground(lipgloss.Color("#89dceb")).Render(opt) + "\n")
+			sb.WriteString("> " + m.theme.Selected.Render(opt) + "\n")
 		} else {
 			sb.WriteString("  " + opt + "\n")
 		}

@@ -37,10 +37,6 @@ var (
 	activeDownloads sync.Map
 )
 
-type logWriter struct {
-	d *Downloader
-}
-
 type Downloader struct {
 	db                   *sql.DB
 	saveLocation         string
@@ -54,17 +50,35 @@ type Downloader struct {
 	ffmpegAvailable      bool
 	fileService          *service.FileService
 	ProcessedPostService *service.ProcessedPostService
+	accountService       *service.AccountService
 	cfg                  *config.Config
 	m3u8Semaphore        *semaphore.Weighted
+	// quiet suppresses all direct terminal output (progress bars, stray
+	// prints) so the TUI's alt screen is not corrupted while it runs.
+	quiet bool
 }
 
-func (w logWriter) Write(p []byte) (n int, err error) {
-	w.d.logMu.Lock()
-	defer w.d.logMu.Unlock()
-	w.d.progressBar.Clear()
-	fmt.Print(string(p))
-	w.d.progressBar.RenderBlank()
-	return len(p), nil
+// SetQuiet toggles terminal output from the downloader. The TUI enables it;
+// CLI mode leaves it off so progress bars still render.
+func (d *Downloader) SetQuiet(quiet bool) {
+	d.logMu.Lock()
+	defer d.logMu.Unlock()
+	d.quiet = quiet
+}
+
+// progressWriter returns where progress bars should render.
+func (d *Downloader) progressWriter() io.Writer {
+	if d.isQuiet() {
+		return io.Discard
+	}
+	return os.Stderr
+}
+
+// isQuiet reports whether terminal output is suppressed (TUI mode).
+func (d *Downloader) isQuiet() bool {
+	d.logMu.Lock()
+	defer d.logMu.Unlock()
+	return d.quiet
 }
 
 func (d *Downloader) fileExists(filePath string) bool {
@@ -90,12 +104,17 @@ func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error
 	fileRepo := repository.NewFileRepository(database.DB)
 	fileService := service.NewFileService(fileRepo)
 
+	accountRepo := repository.NewAccountRepository(database.DB)
+	accountService := service.NewAccountService(accountRepo)
+
 	fanslyHeaders, err := headers.NewFanslyHeaders(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Fansly headers: %v", err)
 	}
 
 	limiter := rate.NewLimiter(rate.Every(2*time.Second), 3)
+	// This initial bar is only a placeholder until a download op replaces it
+	// with one built via d.progressWriter(); CLI mode keeps stderr here.
 	bar := progressbar.NewOptions(-1,
 		progressbar.OptionSetWriter(os.Stderr),
 		progressbar.OptionEnableColorCodes(true),
@@ -116,6 +135,7 @@ func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error
 	return &Downloader{
 		fileService:          fileService,
 		ProcessedPostService: processedPostService,
+		accountService:       accountService,
 		authToken:            cfg.Account.AuthToken,
 		userAgent:            cfg.Account.UserAgent,
 		saveLocation:         cfg.Options.SaveLocation,
@@ -144,6 +164,14 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 		folderName = fmt.Sprintf("wall_%s", wallID)
 	}
 
+	// Cache the account ID → username mapping so later runs (e.g. purchases)
+	// can name folders correctly even if the API rate limits.
+	if modelId != "" && modelName != "" {
+		if err := d.accountService.SaveAccount(modelId, modelName, "", "", ""); err != nil {
+			logger.Logger.Printf("[WARN] [%s] Failed to cache account info: %v", modelName, err)
+		}
+	}
+
 	baseDir := filepath.Join(d.saveLocation, strings.ToLower(modelName), folderName)
 	for _, subDir := range []string{"images", "videos", "audios"} {
 		if err = os.MkdirAll(filepath.Join(baseDir, subDir), os.ModePerm); err != nil {
@@ -152,7 +180,7 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 	}
 
 	d.progressBar = progressbar.NewOptions(len(timelinePosts),
-		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionSetWriter(d.progressWriter()),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionUseANSICodes(true),
 		progressbar.OptionSetPredictTime(true),
@@ -222,7 +250,7 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 			}
 
 			// always save/update metadata
-			err := d.ProcessedPostService.MarkPostAsProcessed(post.ID, modelName, post.Content, post.CreatedAt)
+			err := d.ProcessedPostService.MarkPostAsProcessedFull(post.ID, modelId, modelName, post.Content, "timeline", post.CreatedAt)
 			if err != nil {
 				logger.Logger.Printf("[ERROR] [%s] Failed to save post metadata %s: %v", modelName, post.ID, err)
 			}
@@ -238,7 +266,9 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 	d.progressBar.Finish()
 	//d.progressBar.Clear()
 	//fmt.Print("\033[2K\r")
-	fmt.Println()
+	if !d.isQuiet() {
+		fmt.Println()
+	}
 	return nil
 }
 
@@ -796,7 +826,7 @@ func (d *Downloader) downloadRegularFile(url, filePath string, modelName string,
 
 	/*d.progressBar = progressbar.NewOptions(
 		-1,
-		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionSetWriter(d.progressWriter()),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionUseANSICodes(true),
 		progressbar.OptionShowBytes(true),

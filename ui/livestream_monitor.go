@@ -164,7 +164,7 @@ func (m *MainModel) HandleLiveMonitorFilterUpdate(msg tea.Msg) (tea.Model, tea.C
 
 func (m *MainModel) RenderLivestreamMonitorMenu() string {
 	var sb strings.Builder
-	sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#f5c2e7")).Render("Livestream Monitoring") + "\n\n")
+	sb.WriteString(m.theme.Title.Render("Livestream Monitoring") + "\n\n")
 	sb.WriteString(m.monitoringTable.View() + "\n")
 	helpView := m.help.View(m.keys)
 	height := m.height - strings.Count(helpView, "\n") - m.monitoringTable.Height() - 8
@@ -177,7 +177,7 @@ func (m *MainModel) RenderLivestreamMonitorMenu() string {
 
 func (m *MainModel) RenderLiveMonitorFilterMenu() string {
 	var sb strings.Builder
-	sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#f5c2e7")).Render("Livestream Monitoring Filter") + "\n\n")
+	sb.WriteString(m.theme.Title.Render("Livestream Monitoring Filter") + "\n\n")
 	sb.WriteString("Filter by username: " + m.liveMonitorFilterInput + "\n")
 	sb.WriteString(m.monitoringTable.View() + "\n")
 	return sb.String()
@@ -271,16 +271,16 @@ func (m *MainModel) updateMonitoringTable() {
 			indicator = ">"
 		}
 		monitorStatus := "Not Monitoring"
-		monitorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("red"))
+		monitorStyle := lipgloss.NewStyle().Foreground(m.theme.Offline)
 		liveStatus := "Offline"
-		liveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("red"))
+		liveStyle := lipgloss.NewStyle().Foreground(m.theme.Offline)
 
 		if data.isMonitored {
 			monitorStatus = "Monitoring"
-			monitorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("green"))
+			monitorStyle = lipgloss.NewStyle().Foreground(m.theme.Live)
 			if data.isLive {
 				liveStatus = "Live"
-				liveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("green"))
+				liveStyle = lipgloss.NewStyle().Foreground(m.theme.Live)
 			}
 		}
 
@@ -302,17 +302,7 @@ func (m *MainModel) updateMonitoringTable() {
 	if len(rows) > 0 {
 		t.SetCursor(selectedIdx)
 	}
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(false)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("#cba6f7")).
-		Bold(false)
-	t.SetStyles(s)
+	t.SetStyles(m.theme.TableStyles())
 	m.monitoringTable = t
 }
 

@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // HandleMainMenuUpdate handles updates when in the MainMenuState
@@ -84,7 +83,7 @@ func (m *MainModel) handleFollowedModelsSelection() (tea.Model, tea.Cmd) {
 func (m *MainModel) RenderFollowedModelsMenu() string {
 	var sb strings.Builder
 
-	sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#f5c2e7")).Render(m.welcome) + "\n")
+	sb.WriteString(m.theme.Title.Render(m.welcome) + "\n")
 	switch m.actionChosen {
 	case "download":
 		sb.WriteString("Who would you like to scrape? \n")
@@ -98,6 +97,9 @@ func (m *MainModel) RenderFollowedModelsMenu() string {
 	sb.WriteString(m.table.View() + "\n")
 	helpView := m.help.View(m.keys)
 	height := m.height - strings.Count(helpView, "\n") - m.table.Height() - 8
+	if height < 0 {
+		height = 0
+	}
 
 	sb.WriteString("\n" + strings.Repeat("\n", height) + helpView)
 
@@ -166,17 +168,7 @@ func (m *MainModel) updateTable() {
 		t.SetCursor(selectedIdx)
 	}
 
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(false)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("#cba6f7")).
-		Bold(false)
-	t.SetStyles(s)
+	t.SetStyles(m.theme.TableStyles())
 
 	m.table = t
 

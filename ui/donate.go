@@ -59,11 +59,11 @@ func createDonateColumn(header, address string, headerStyle, addressStyle lipglo
 // RenderDonateMenu renders the donation screen with side-by-side QR codes
 func (m *MainModel) RenderDonateMenu() string {
 	// Styles
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#a6e3a1")).PaddingBottom(1)
-	addressHeaderStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#89dceb"))
-	addressStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#f5c2e7"))
-	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#b4befe")).PaddingTop(1)
-	sponsorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#89b4fa"))
+	titleStyle := m.theme.Success.Bold(true).PaddingBottom(1)
+	addressHeaderStyle := m.theme.Selected.Bold(true)
+	addressStyle := m.theme.Accent
+	helpStyle := m.theme.HelpDesc.PaddingTop(1)
+	sponsorStyle := m.theme.Link
 	columnSeparator := "    " // 4 spaces between the columns
 
 	// Create each column's content as a self-contained string block

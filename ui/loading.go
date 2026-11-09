@@ -11,8 +11,7 @@ func (m *MainModel) RenderLoadingScreen() string {
 	var sb strings.Builder
 
 	// Create a centered loading message
-	loadingStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#f5c2e7")).
+	loadingStyle := m.theme.Title.
 		Bold(true).
 		Padding(2, 0, 1, 0)
 

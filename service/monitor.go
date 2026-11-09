@@ -233,7 +233,7 @@ func (ms *MonitoringService) monitorModel(modelID, username string) {
 	}()
 
 	if !ms.isTUI {
-		fmt.Printf("Starting to monitor %s (%s)\n", username, modelID)
+		ms.logger.Printf("Starting to monitor %s (%s)", username, modelID)
 	}
 
 	cfg, err := config.LoadConfig(config.GetConfigPath())
@@ -248,7 +248,7 @@ func (ms *MonitoringService) monitorModel(modelID, username string) {
 		isLive, playbackUrl, err := core.CheckIfModelIsLive(modelID)
 		if err != nil {
 			if !ms.isTUI {
-				fmt.Printf("Error checking if %s is live: %v\n", username, err)
+				ms.logger.Printf("Error checking if %s is live: %v", username, err)
 			}
 		} else if isLive {
 			lockFile := filepath.Join(ms.recordingsPath, modelID+".lock")
@@ -281,7 +281,7 @@ func (ms *MonitoringService) monitorModel(modelID, username string) {
 
 				continue
 			} else if !ms.isTUI {
-				fmt.Printf("%s is already being recorded\n", username)
+				ms.logger.Printf("%s is already being recorded", username)
 			}
 		} else {
 			// When the model is no longer live, the 'wasLive' flag is reset.
@@ -305,7 +305,7 @@ func (ms *MonitoringService) monitorModel(modelID, username string) {
 	}
 
 	if !ms.isTUI {
-		fmt.Printf("Stopped monitoring %s (%s)\n", username, modelID)
+		ms.logger.Printf("Stopped monitoring %s (%s)", username, modelID)
 	}
 }
 
@@ -587,10 +587,12 @@ func (ms *MonitoringService) startRecording(modelID, username, playbackUrl strin
 
 			if ms.processedPostService != nil {
 				ms.logger.Printf("Saving stream metadata to library for: %s", historyID)
-				ms.processedPostService.MarkPostAsProcessed(
+				ms.processedPostService.MarkPostAsProcessedFull(
 					historyID,
+					modelID,
 					username,
 					streamData.Title,
+					"livestream",
 					time.Now().Unix(),
 				)
 			} else {
@@ -705,7 +707,7 @@ func (ms *MonitoringService) generateContactSheet(mp4Filename string) error {
 }
 
 func (ms *MonitoringService) Run() {
-	fmt.Printf("Starting monitoring service\n")
+	ms.logger.Printf("Starting monitoring service")
 	ms.loadState()
 	//ms.loadActiveRecordings()
 

@@ -16,7 +16,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	//"github.com/charmbracelet/bubbles/table"
 )
 
@@ -60,7 +59,7 @@ func (m *MainModel) RenderDownloadActionsMenu() string {
 	sb.WriteString(fmt.Sprintf("What would you like to scrape from %s?\n", m.selectedModel))
 	for i, opt := range m.downloadOptions {
 		if i == m.cursorPos {
-			sb.WriteString("> " + lipgloss.NewStyle().Foreground(lipgloss.Color("#89dceb")).Render(opt) + "\n")
+			sb.WriteString("> " + m.theme.Selected.Render(opt) + "\n")
 		} else {
 			sb.WriteString("  " + opt + "\n")
 		}

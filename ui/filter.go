@@ -8,7 +8,6 @@ import (
 	//"github.com/agnosto/fansly-scraper/core"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	//"github.com/charmbracelet/bubbles/key"
 	//"github.com/charmbracelet/bubbles/table"
 )
@@ -55,7 +54,7 @@ func (m *MainModel) HandleFilterModelsMenuUpdate(msg tea.Msg) (tea.Model, tea.Cm
 func (m *MainModel) RenderFilterModelsMenu() string {
 	var sb strings.Builder
 
-	sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#f5c2e7")).Render(m.welcome) + "\n")
+	sb.WriteString(m.theme.Title.Render(m.welcome) + "\n")
 	sb.WriteString("Filter by username: " + m.filterInput + "\n")
 	sb.WriteString(m.table.View() + "\n")
 

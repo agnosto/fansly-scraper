@@ -37,7 +37,7 @@ func (d *Downloader) DownloadStories(ctx context.Context, modelId, modelName str
 	}
 
 	d.progressBar = progressbar.NewOptions(len(storyMediaItems),
-		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionSetWriter(d.progressWriter()),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionUseANSICodes(true),
 		progressbar.OptionSetPredictTime(true),
