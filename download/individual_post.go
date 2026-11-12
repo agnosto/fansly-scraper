@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/agnosto/fansly-scraper/auth"
 	"github.com/agnosto/fansly-scraper/logger"
 	"github.com/agnosto/fansly-scraper/posts"
+	"github.com/schollz/progressbar/v3"
 )
 
 // DownloadPostByID downloads a single post by its ID or URL.
@@ -28,6 +30,8 @@ func (d *Downloader) DownloadPostByID(ctx context.Context, postIdentifier string
 	}
 
 	logger.Logger.Printf("Starting download for post: %s", postID)
+	d.resetProgress()
+	d.describe(fmt.Sprintf("Fetching post %s...", postID))
 
 	// Perform login to ensure session is valid and currentAccountID is populated
 	if _, err := auth.Login(d.headers); err != nil {
@@ -74,12 +78,36 @@ func (d *Downloader) DownloadPostByID(ctx context.Context, postIdentifier string
 	}
 
 	logger.Logger.Printf("Found %d media items to download for post %s.", len(accountMediaItems), postID)
+
+	// Fresh progress state for this operation so the TUI doesn't show the
+	// previous download's totals.
+	d.setProgressTotal(len(accountMediaItems))
+	d.progressBar = progressbar.NewOptions(len(accountMediaItems),
+		progressbar.OptionSetWriter(d.barWriter()),
+		progressbar.OptionEnableColorCodes(true),
+		progressbar.OptionSetWidth(40),
+		progressbar.OptionSetDescription("[cyan]Downloading Post[reset]"),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "[green]=[reset]",
+			SaucerHead:    "[green]>[reset]",
+			SaucerPadding: " ",
+			BarStart:      "[",
+			BarEnd:        "]",
+		}),
+		progressbar.OptionThrottle(15*time.Millisecond),
+		progressbar.OptionShowIts(),
+		progressbar.OptionShowCount(),
+	)
+	d.describe(fmt.Sprintf("Downloading post %s...", postID))
+
 	for i, media := range accountMediaItems {
 		err := d.DownloadMediaItem(ctx, media, baseDir, modelName, postForDownloader, i)
 		if err != nil {
 			logger.Logger.Printf("[ERROR] Failed to download media item %s: %v", media.ID, err)
 		}
+		d.addProgress(1)
 	}
+	d.progressBar.Finish()
 
 	d.ProcessedPostService.MarkPostAsProcessedFull(postInfo.ID, postInfo.AccountId, modelName, postInfo.Content, "timeline", postInfo.CreatedAt)
 	return nil

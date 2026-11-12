@@ -31,7 +31,8 @@ func (m *MainModel) HandleDownloadIndividualPostsUpdate(msg tea.Msg) (tea.Model,
 			val := strings.TrimSpace(m.postLinksInput.Value())
 			if val != "" {
 				m.state = DownloadProgressState
-				return m, m.startIndividualPostsDownload(val)
+				m.progressTicking = true
+				return m, tea.Batch(m.startIndividualPostsDownload(val), progressTickCmd())
 			}
 			return m, nil
 		}

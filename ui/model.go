@@ -11,6 +11,7 @@ import (
 	"github.com/agnosto/fansly-scraper/core"
 	"github.com/agnosto/fansly-scraper/download"
 	"github.com/agnosto/fansly-scraper/service"
+	"github.com/agnosto/fansly-scraper/utils"
 
 	"context"
 	"sync"
@@ -20,7 +21,7 @@ import (
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 
-	//"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -92,6 +93,9 @@ type MainModel struct {
 	selectedWallID            string
 	postLinksInput            textinput.Model
 	wizard                    *ConfigWizardModel
+	progressTicking           bool
+	progressView              progress.Model
+	fetchAnim                 float64
 }
 
 type loadingTickMsg struct{}
@@ -139,6 +143,15 @@ type downloadErrorMsg struct {
 }
 
 type tickMsg struct{}
+
+// progressTickMsg re-renders the progress screens while a download runs.
+type progressTickMsg struct{}
+
+func progressTickCmd() tea.Cmd {
+	return tea.Tick(400*time.Millisecond, func(time.Time) tea.Msg {
+		return progressTickMsg{}
+	})
+}
 
 type downloadCompleteMsg struct{}
 
@@ -242,11 +255,13 @@ func NewMainModel(downloader *download.Downloader, version string, monitoringSer
 		theme = NewTheme(cfg.UI)
 	}
 
-	// The TUI owns the terminal (alt screen), so the downloader must not
-	// write progress bars or stray prints to stdout/stderr.
+	// The TUI owns the terminal (alt screen), so the downloader and the
+	// package-level progress bars must not write to stdout/stderr; progress
+	// is rendered inside the TUI instead.
 	if downloader != nil {
 		downloader.SetQuiet(true)
 	}
+	utils.SetTerminalQuiet(true)
 
 	m := &MainModel{
 		version: version,
@@ -279,6 +294,10 @@ func NewMainModel(downloader *download.Downloader, version string, monitoringSer
 		postLinksInput:    postLinksInput,
 	}
 	theme.ApplyHelp(&m.help)
+	m.progressView = progress.New(
+		progress.WithSolidFill(theme.BarColor),
+		progress.WithWidth(40),
+	)
 	return m
 }
 

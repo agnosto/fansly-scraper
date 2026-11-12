@@ -103,6 +103,8 @@ func resolveUsernames(d *Downloader, accountInfoMap map[string]*AccountInfo, uni
 }
 
 func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
+	d.resetProgress()
+	d.describe("Fetching purchases album...")
 	purchasedAlbum, err := posts.FetchPurchasedAlbums(d.headers)
 	if err != nil {
 		logger.Logger.Printf("[INFO] Could not find a 'Purchases' album or an error occurred: %v", err)
@@ -149,6 +151,7 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 	// Only genuinely unresolvable (deleted) accounts fall back to their ID.
 	uniqueIDs := accountOrder
 	logger.Logger.Printf("[INFO] Resolving usernames for %d unique accounts...", len(uniqueIDs))
+	d.describe(fmt.Sprintf("Resolving usernames for %d creator(s)...", len(uniqueIDs)))
 
 	resolveUsernames(d, accountInfoMap, uniqueIDs)
 
@@ -179,7 +182,7 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 	}
 
 	d.progressBar = progressbar.NewOptions(totalMedia,
-		progressbar.OptionSetWriter(d.progressWriter()),
+		progressbar.OptionSetWriter(d.barWriter()),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionSetWidth(40),
 		progressbar.OptionSetDescription("[cyan]Downloading Purchased Content[reset]"),
@@ -194,6 +197,8 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 		progressbar.OptionShowIts(),
 		progressbar.OptionShowCount(),
 	)
+	d.setProgressTotal(totalMedia)
+	d.describe("Downloading purchased content...")
 
 	// Download in stable order
 	for _, accountID := range accountOrder {
@@ -228,7 +233,7 @@ func (d *Downloader) DownloadPurchasedContent(ctx context.Context) error {
 			if err := d.ProcessedPostService.MarkPostAsProcessedFull(media.ID, accountID, accountInfo.Username, "", "purchases", postData.CreatedAt); err != nil {
 				logger.Logger.Printf("[WARN] Failed to record purchased media %s in database: %v", media.ID, err)
 			}
-			d.progressBar.Add(1)
+			d.addProgress(1)
 		}
 	}
 

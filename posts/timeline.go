@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/agnosto/fansly-scraper/headers"
 	"github.com/agnosto/fansly-scraper/logger"
+	"github.com/agnosto/fansly-scraper/utils"
 	"github.com/schollz/progressbar/v3"
 	"golang.org/x/time/rate"
 )
@@ -95,7 +95,7 @@ func GetAllTimelinePosts(accountID string, wallID string, fanslyHeaders *headers
 
 	bar := progressbar.NewOptions(-1,
 		progressbar.OptionSetDescription("Fetching Timeline"),
-		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionSetWriter(utils.ProgressWriter()),
 		progressbar.OptionSetWidth(15),
 		progressbar.OptionThrottle(65*time.Millisecond),
 		progressbar.OptionShowCount(),
@@ -103,7 +103,9 @@ func GetAllTimelinePosts(accountID string, wallID string, fanslyHeaders *headers
 		progressbar.OptionFullWidth(),
 	)
 
-	bar.Add(len(initialResponse.Response.Posts))
+	fetched := len(initialResponse.Response.Posts)
+	bar.Add(fetched)
+	utils.ReportFetch(fetched)
 
 	for hasMore {
 		response, err := getTimelineBatchResponse(accountID, wallID, before, fanslyHeaders)
@@ -113,10 +115,12 @@ func GetAllTimelinePosts(accountID string, wallID string, fanslyHeaders *headers
 
 		posts := response.Response.Posts
 		allPosts = append(allPosts, posts...)
+		fetched += len(posts)
 
 		if limit > 0 && len(allPosts) >= limit {
 			allPosts = allPosts[:limit]
 			bar.Add(len(posts))
+			utils.ReportFetch(fetched)
 			logger.Logger.Printf("[INFO] Reached post limit of %d inside loop. Stopping fetch", limit)
 			break
 		}
@@ -128,6 +132,7 @@ func GetAllTimelinePosts(accountID string, wallID string, fanslyHeaders *headers
 		}
 
 		bar.Add(len(posts))
+		utils.ReportFetch(fetched)
 	}
 
 	bar.Finish()

@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -28,6 +29,7 @@ import (
 	"github.com/agnosto/fansly-scraper/db/service"
 	"github.com/agnosto/fansly-scraper/logger"
 	"github.com/agnosto/fansly-scraper/posts"
+	"github.com/agnosto/fansly-scraper/utils"
 
 	"github.com/agnosto/fansly-scraper/headers"
 )
@@ -56,6 +58,117 @@ type Downloader struct {
 	// quiet suppresses all direct terminal output (progress bars, stray
 	// prints) so the TUI's alt screen is not corrupted while it runs.
 	quiet bool
+	// status mirrors the progress bar state so the TUI can render it inline.
+	status       ProgressStatus
+	progressHook func(ProgressStatus)
+}
+
+// ProgressStatus is a snapshot of download progress for display in the TUI.
+type ProgressStatus struct {
+	Description string
+	Current     int
+	Total       int
+	// Level is derived from the progressbar color tag: "info", "warn" or "error".
+	Level string
+	// Bytes/BytesTotal track the in-flight file's download size, when known.
+	Bytes      int64
+	BytesTotal int64
+	// StartedAt is when the current operation began (for elapsed display).
+	StartedAt time.Time
+}
+
+// progressColorTag matches progressbar color tags like [green] / [reset] so
+// they can be stripped before showing the description in the TUI.
+var progressColorTag = regexp.MustCompile(`\[[a-z]+\]`)
+
+// SetProgressHook registers a callback invoked on every progress update.
+func (d *Downloader) SetProgressHook(hook func(ProgressStatus)) {
+	d.logMu.Lock()
+	defer d.logMu.Unlock()
+	d.progressHook = hook
+}
+
+// ProgressStatus returns a snapshot of the current download progress.
+func (d *Downloader) ProgressStatus() ProgressStatus {
+	d.logMu.Lock()
+	defer d.logMu.Unlock()
+	return d.status
+}
+
+func (d *Downloader) mutateStatus(mut func(*ProgressStatus)) {
+	d.logMu.Lock()
+	mut(&d.status)
+	hook := d.progressHook
+	snapshot := d.status
+	d.logMu.Unlock()
+	if hook != nil {
+		hook(snapshot)
+	}
+}
+
+// describe updates the progress bar description and the TUI-visible status.
+func (d *Downloader) describe(desc string) {
+	if d.progressBar != nil {
+		d.progressBar.Describe(desc)
+	}
+	level := "info"
+	switch {
+	case strings.HasPrefix(desc, "[red]"):
+		level = "error"
+	case strings.HasPrefix(desc, "[yellow]"):
+		level = "warn"
+	}
+	clean := progressColorTag.ReplaceAllString(desc, "")
+	d.mutateStatus(func(s *ProgressStatus) {
+		s.Description = clean
+		s.Level = level
+		s.Bytes = 0
+		s.BytesTotal = 0
+	})
+}
+
+// setBytes records the in-flight file's byte progress (0 total = unknown).
+func (d *Downloader) setBytes(written, total int64) {
+	d.mutateStatus(func(s *ProgressStatus) { s.Bytes = written; s.BytesTotal = total })
+}
+
+// byteWriter is an io.Writer that reports cumulative bytes via callback,
+// throttled so it doesn't lock on every small write.
+type byteWriter struct {
+	report  func(written, total int64)
+	total   int64
+	written int64
+	lastUpd time.Time
+}
+
+func (w *byteWriter) Write(p []byte) (int, error) {
+	w.written += int64(len(p))
+	if w.report != nil && time.Since(w.lastUpd) >= 100*time.Millisecond {
+		w.lastUpd = time.Now()
+		w.report(w.written, w.total)
+	}
+	return len(p), nil
+}
+
+// addProgress advances the progress bar and the TUI-visible counter.
+func (d *Downloader) addProgress(n int) {
+	if d.progressBar != nil {
+		d.progressBar.Add(n)
+	}
+	d.mutateStatus(func(s *ProgressStatus) { s.Current += n })
+}
+
+// setProgressTotal resets the counter and sets the total for a new operation.
+func (d *Downloader) setProgressTotal(total int) {
+	d.mutateStatus(func(s *ProgressStatus) { s.Total = total; s.Current = 0 })
+}
+
+// resetProgress clears all progress state; call at the start of every
+// operation so stale counts from a previous run don't show during fetches.
+func (d *Downloader) resetProgress() {
+	d.mutateStatus(func(s *ProgressStatus) {
+		*s = ProgressStatus{StartedAt: time.Now()}
+	})
 }
 
 // SetQuiet toggles terminal output from the downloader. The TUI enables it;
@@ -72,6 +185,21 @@ func (d *Downloader) progressWriter() io.Writer {
 		return io.Discard
 	}
 	return os.Stderr
+}
+
+// dynamicWriter resolves the quiet state at write time, so a bar created
+// before SetQuiet(true) still goes silent once the TUI takes over.
+type dynamicWriter struct {
+	d *Downloader
+}
+
+func (w dynamicWriter) Write(p []byte) (int, error) {
+	return w.d.progressWriter().Write(p)
+}
+
+// barWriter returns the writer to give to progress bars.
+func (d *Downloader) barWriter() io.Writer {
+	return dynamicWriter{d}
 }
 
 // isQuiet reports whether terminal output is suppressed (TUI mode).
@@ -113,10 +241,37 @@ func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error
 	}
 
 	limiter := rate.NewLimiter(rate.Every(2*time.Second), 3)
-	// This initial bar is only a placeholder until a download op replaces it
-	// with one built via d.progressWriter(); CLI mode keeps stderr here.
-	bar := progressbar.NewOptions(-1,
-		progressbar.OptionSetWriter(os.Stderr),
+
+	d := &Downloader{
+		fileService:          fileService,
+		ProcessedPostService: processedPostService,
+		accountService:       accountService,
+		authToken:            cfg.Account.AuthToken,
+		userAgent:            cfg.Account.UserAgent,
+		saveLocation:         cfg.Options.SaveLocation,
+		M3U8Download:         cfg.Options.M3U8Download,
+		headers:              fanslyHeaders,
+		limiter:              limiter,
+		ffmpegAvailable:      ffmpegAvailable,
+		cfg:                  cfg,
+		m3u8Semaphore:        semaphore.NewWeighted(2),
+	}
+
+	// Surface the posts package's fetch counts (timeline/messages pages) in
+	// the progress status while no download total is set yet, so the TUI can
+	// show "Fetching ... (N)" during fetches.
+	utils.SetFetchHook(func(n int) {
+		d.mutateStatus(func(s *ProgressStatus) {
+			if s.Total == 0 {
+				s.Current = n
+			}
+		})
+	})
+
+	// Placeholder bar until a download op replaces it; the writer resolves
+	// the quiet state at write time so the TUI can silence it after this.
+	d.progressBar = progressbar.NewOptions(-1,
+		progressbar.OptionSetWriter(d.barWriter()),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionShowBytes(true),
 		progressbar.OptionSetWidth(15),
@@ -132,27 +287,15 @@ func NewDownloader(cfg *config.Config, ffmpegAvailable bool) (*Downloader, error
 		}),
 	)
 
-	return &Downloader{
-		fileService:          fileService,
-		ProcessedPostService: processedPostService,
-		accountService:       accountService,
-		authToken:            cfg.Account.AuthToken,
-		userAgent:            cfg.Account.UserAgent,
-		saveLocation:         cfg.Options.SaveLocation,
-		M3U8Download:         cfg.Options.M3U8Download,
-		headers:              fanslyHeaders,
-		limiter:              limiter,
-		progressBar:          bar,
-		ffmpegAvailable:      ffmpegAvailable,
-		cfg:                  cfg,
-		m3u8Semaphore:        semaphore.NewWeighted(2),
-	}, nil
+	return d, nil
 }
 
 func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName string, wallID string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	d.resetProgress()
+	d.describe(fmt.Sprintf("Fetching %s timeline posts...", modelName))
 	timelinePosts, err := posts.GetAllTimelinePosts(modelId, wallID, d.headers, d.cfg.Options.PostLimit)
 	if err != nil {
 		logger.Logger.Printf("[ERROR] [%s] Failed to get timeline posts: %v", modelName, err)
@@ -180,7 +323,7 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 	}
 
 	d.progressBar = progressbar.NewOptions(len(timelinePosts),
-		progressbar.OptionSetWriter(d.progressWriter()),
+		progressbar.OptionSetWriter(d.barWriter()),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionUseANSICodes(true),
 		progressbar.OptionSetPredictTime(true),
@@ -199,6 +342,8 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 			BarEnd:        "]",
 		}),
 	)
+	d.setProgressTotal(len(timelinePosts))
+	d.describe(fmt.Sprintf("Processing %s timeline...", modelName))
 
 	tickerDone := make(chan bool)
 	go func() {
@@ -210,7 +355,7 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 				return
 			case <-ticker.C:
 				if d.progressBar != nil {
-					d.progressBar.Add(0)
+					d.addProgress(0)
 				}
 			}
 		}
@@ -232,7 +377,7 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 				accountMediaItems, err := posts.GetPostMedia(post.ID, d.headers)
 				if err != nil {
 					logger.Logger.Printf("[ERROR] [%s] Failed to fetch media for post %s: %v", modelName, post.ID, err)
-					d.progressBar.Add(1)
+					d.addProgress(1)
 					<-semaphore
 					return
 				}
@@ -255,7 +400,7 @@ func (d *Downloader) DownloadTimeline(ctx context.Context, modelId, modelName st
 				logger.Logger.Printf("[ERROR] [%s] Failed to save post metadata %s: %v", modelName, post.ID, err)
 			}
 
-			d.progressBar.Add(1)
+			d.addProgress(1)
 		}(post)
 	}
 	wg.Wait()
@@ -306,7 +451,7 @@ func (d *Downloader) DownloadMediaItem(ctx context.Context, accountMedia posts.A
 	}
 
 	if !hasValidLocations(accountMedia.Media) && (accountMedia.Preview == nil || !hasValidLocations(*accountMedia.Preview)) {
-		d.progressBar.Describe(fmt.Sprintf("[yellow]No valid media or preview locations[reset] for item %s", accountMedia.ID))
+		d.describe(fmt.Sprintf("[yellow]No valid media or preview locations[reset] for item %s", accountMedia.ID))
 	}
 
 	return nil
@@ -587,7 +732,7 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, accountMedia posts.
 	processMediaItem(item)
 
 	if len(mediaItems) == 0 {
-		d.progressBar.Describe(fmt.Sprintf("[red]No suitable media found[reset] for item %s", item.ID))
+		d.describe(fmt.Sprintf("[red]No suitable media found[reset] for item %s", item.ID))
 		return nil
 	}
 
@@ -618,7 +763,7 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, accountMedia posts.
 	mediaTypeFilter := d.cfg.Options.DownloadMediaType
 	normalizedFilter := strings.TrimSuffix(mediaTypeFilter, "s")
 	if normalizedFilter != "all" && normalizedFilter != fileType {
-		d.progressBar.Describe(fmt.Sprintf("[yellow]Skipping[reset] %s due to media type filter (%s)", item.ID, mediaTypeFilter))
+		d.describe(fmt.Sprintf("[yellow]Skipping[reset] %s due to media type filter (%s)", item.ID, mediaTypeFilter))
 		return nil // Not an error, just skipping
 	}
 
@@ -636,7 +781,7 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, accountMedia posts.
 		if item.Metadata != "" {
 			if err := json.Unmarshal([]byte(item.Metadata), &meta); err == nil && meta.Duration > 0 {
 				if meta.Duration > float64(maxDur) {
-					d.progressBar.Describe(fmt.Sprintf(
+					d.describe(fmt.Sprintf(
 						"[yellow]Skipping long video[reset] %s (%.1f sec > %d sec limit)",
 						item.ID, meta.Duration, maxDur,
 					))
@@ -672,10 +817,10 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, accountMedia posts.
 		// TIER 1: Check if already downloaded in DB
 		if d.fileExists(idealPath) {
 			if _, err := os.Stat(idealPath); os.IsNotExist(err) {
-				d.progressBar.Describe(fmt.Sprintf("[yellow]File missing[reset], Redownloading %s", fileName))
+				d.describe(fmt.Sprintf("[yellow]File missing[reset], Redownloading %s", fileName))
 			} else {
-				d.progressBar.Describe(fmt.Sprintf("[red]File Exists[reset], Skipping %s", fileName))
-				d.progressBar.Add(1)
+				d.describe(fmt.Sprintf("[red]File Exists[reset], Skipping %s", fileName))
+				d.addProgress(1)
 				return nil
 			}
 		} else {
@@ -685,7 +830,7 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, accountMedia posts.
 
 			// Orphan on disk (Not in DB, and NO OTHER thread is currently downloading it) -> Adopt
 			if err == nil && !isActive {
-				d.progressBar.Describe(fmt.Sprintf("[yellow]No DB Record[reset], Adding %s", fileName))
+				d.describe(fmt.Sprintf("[yellow]No DB Record[reset], Adding %s", fileName))
 				hashString, err := d.hashExistingFile(idealPath)
 				if err != nil {
 					logger.Logger.Printf("[ERROR] failed to hash existing file %s: %v", idealPath, err)
@@ -696,7 +841,7 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, accountMedia posts.
 					logger.Logger.Printf("[ERROR] failed to save hash for existing file %s: %v", idealPath, err)
 					return fmt.Errorf("error saving hash for existing file: %v", err)
 				}
-				d.progressBar.Add(1)
+				d.addProgress(1)
 				return nil
 			} else {
 				// Completely new file (or currently colliding with an active download).
@@ -713,7 +858,7 @@ func (d *Downloader) downloadSingleItem(ctx context.Context, accountMedia posts.
 	activeDownloads.Store(filePath, true)
 	defer activeDownloads.Delete(filePath)
 
-	d.progressBar.Describe(fmt.Sprintf("[green]Downloading[reset] %s", fileName))
+	d.describe(fmt.Sprintf("[green]Downloading[reset] %s", fileName))
 
 	var dlErr error
 	if bestMedia.Mimetype == "application/vnd.apple.mpegurl" && d.ffmpegAvailable {
@@ -826,7 +971,7 @@ func (d *Downloader) downloadRegularFile(url, filePath string, modelName string,
 
 	/*d.progressBar = progressbar.NewOptions(
 		-1,
-		progressbar.OptionSetWriter(d.progressWriter()),
+		progressbar.OptionSetWriter(d.barWriter()),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionUseANSICodes(true),
 		progressbar.OptionShowBytes(true),
@@ -842,7 +987,7 @@ func (d *Downloader) downloadRegularFile(url, filePath string, modelName string,
 	)*/
 
 	// Update the description of the main bar
-	d.progressBar.Describe(fmt.Sprintf("[cyan]Downloading[reset] %s", filepath.Base(filePath)))
+	d.describe(fmt.Sprintf("[cyan]Downloading[reset] %s", filepath.Base(filePath)))
 
 	out, err := os.Create(filePath)
 	if err != nil {
@@ -851,7 +996,10 @@ func (d *Downloader) downloadRegularFile(url, filePath string, modelName string,
 	defer out.Close()
 
 	hash := sha256.New()
-	_, err = io.Copy(io.MultiWriter(out, hash), resp.Body)
+	bw := &byteWriter{total: resp.ContentLength, report: d.setBytes}
+	d.setBytes(0, resp.ContentLength)
+	_, err = io.Copy(io.MultiWriter(out, hash, bw), resp.Body)
+	d.setBytes(bw.written, bw.total)
 	if err != nil {
 		return err
 	}

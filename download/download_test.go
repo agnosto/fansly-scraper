@@ -139,3 +139,86 @@ func TestProgressWriterQuietMode(t *testing.T) {
 		t.Errorf("expected stderr writer after SetQuiet(false), got %T", w)
 	}
 }
+
+func TestProgressStatusTracking(t *testing.T) {
+	d := &Downloader{}
+
+	d.setProgressTotal(10)
+	d.describe("[green]Downloading[reset] 867383099653111808.mp4")
+	d.addProgress(1)
+	d.addProgress(2)
+
+	st := d.ProgressStatus()
+	if st.Total != 10 {
+		t.Errorf("expected total 10, got %d", st.Total)
+	}
+	if st.Current != 3 {
+		t.Errorf("expected current 3, got %d", st.Current)
+	}
+	if st.Description != "Downloading 867383099653111808.mp4" {
+		t.Errorf("expected color tags stripped from description, got %q", st.Description)
+	}
+
+	// New operation resets the counter
+	d.setProgressTotal(5)
+	st = d.ProgressStatus()
+	if st.Total != 5 || st.Current != 0 {
+		t.Errorf("expected reset to 0/5, got %d/%d", st.Current, st.Total)
+	}
+}
+
+func TestProgressStatusLevel(t *testing.T) {
+	d := &Downloader{}
+	d.describe("[green]Downloading[reset] a.mp4")
+	if st := d.ProgressStatus(); st.Level != "info" {
+		t.Errorf("expected info level, got %q", st.Level)
+	}
+	d.describe("[yellow]Skipping[reset] b.mp4 due to filter")
+	if st := d.ProgressStatus(); st.Level != "warn" {
+		t.Errorf("expected warn level, got %q", st.Level)
+	}
+	d.describe("[red]File Exists[reset], Skipping c.mp4")
+	if st := d.ProgressStatus(); st.Level != "error" {
+		t.Errorf("expected error level, got %q", st.Level)
+	}
+	if st := d.ProgressStatus(); st.Description != "File Exists, Skipping c.mp4" {
+		t.Errorf("expected tags stripped, got %q", st.Description)
+	}
+}
+
+func TestByteWriterReportsProgress(t *testing.T) {
+	d := &Downloader{}
+	var lastWritten, lastTotal int64
+	bw := &byteWriter{total: 100, report: func(w, tot int64) { lastWritten, lastTotal = w, tot }}
+	bw.lastUpd = time.Now().Add(-time.Second) // force first report
+	if n, err := bw.Write(make([]byte, 40)); n != 40 || err != nil {
+		t.Fatalf("Write returned %d, %v", n, err)
+	}
+	st := d.ProgressStatus()
+	_ = st
+	// report goes through the callback, not the status, when wired directly;
+	// via d.setBytes the status is updated:
+	bw2 := &byteWriter{total: 100, report: d.setBytes}
+	bw2.lastUpd = time.Now().Add(-time.Second)
+	bw2.Write(make([]byte, 40))
+	if st := d.ProgressStatus(); st.Bytes != 40 || st.BytesTotal != 100 {
+		t.Errorf("expected 40/100 bytes, got %d/%d", st.Bytes, st.BytesTotal)
+	}
+	if lastWritten != 40 || lastTotal != 100 {
+		t.Errorf("callback got %d/%d", lastWritten, lastTotal)
+	}
+}
+
+func TestResetProgressClearsState(t *testing.T) {
+	d := &Downloader{}
+	d.setProgressTotal(13)
+	d.describe("[green]Downloading[reset] x.mp4")
+	d.addProgress(13)
+	d.setBytes(500, 1000)
+
+	d.resetProgress()
+	st := d.ProgressStatus()
+	if st.Total != 0 || st.Current != 0 || st.Description != "" || st.Bytes != 0 || st.BytesTotal != 0 || st.Level != "" {
+		t.Errorf("expected fully cleared status, got %+v", st)
+	}
+}

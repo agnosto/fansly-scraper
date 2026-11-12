@@ -18,6 +18,8 @@ func (d *Downloader) DownloadStories(ctx context.Context, modelId, modelName str
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	d.resetProgress()
+	d.describe(fmt.Sprintf("Fetching %s stories...", modelName))
 	stories, storyMediaItems, err := posts.GetModelStories(modelId, d.headers)
 	if err != nil {
 		logger.Logger.Printf("[ERROR] [%s] Failed to get story media: %v", modelName, err)
@@ -36,8 +38,10 @@ func (d *Downloader) DownloadStories(ctx context.Context, modelId, modelName str
 		}
 	}
 
+	d.setProgressTotal(len(storyMediaItems))
+	d.describe(fmt.Sprintf("Downloading %s stories...", modelName))
 	d.progressBar = progressbar.NewOptions(len(storyMediaItems),
-		progressbar.OptionSetWriter(d.progressWriter()),
+		progressbar.OptionSetWriter(d.barWriter()),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionUseANSICodes(true),
 		progressbar.OptionSetPredictTime(true),
@@ -69,7 +73,7 @@ func (d *Downloader) DownloadStories(ctx context.Context, modelId, modelName str
 			if err != nil {
 				logger.Logger.Printf("[ERROR] [%s] Failed to download story media item %s: %v", modelName, media.ID, err)
 			}
-			d.progressBar.Add(1)
+			d.addProgress(1)
 		}(mediaItem, contentSource, i)
 	}
 

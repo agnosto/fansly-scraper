@@ -42,7 +42,8 @@ func (m *MainModel) HandleDownloadActionsMenuUpdate(msg tea.Msg) (tea.Model, tea
 				return m, nil
 			}
 			m.state = DownloadProgressState
-			return m, m.startDownload(m.selectedOption)
+			m.progressTicking = true
+			return m, tea.Batch(m.startDownload(m.selectedOption), progressTickCmd())
 		case key.Matches(msg, m.keys.Back):
 			m.state = FollowedModelsState
 			m.cursorPos = 0

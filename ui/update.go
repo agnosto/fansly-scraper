@@ -91,6 +91,17 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, loadingTickCmd()
 		}
 		return m, nil
+	case progressTickMsg:
+		m.progressTicking = false
+		if m.state == DownloadProgressState || m.state == DownloadPurchasedState {
+			m.progressTicking = true
+			m.fetchAnim += 0.04
+			if m.fetchAnim > 1 {
+				m.fetchAnim = 0
+			}
+			return m, progressTickCmd()
+		}
+		return m, nil
 	case fetchAccountInfoMsg:
 		m.isLoading = false
 		if msg.Success {

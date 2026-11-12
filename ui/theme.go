@@ -25,6 +25,8 @@ type Theme struct {
 	RowBg    lipgloss.Color
 	Live     lipgloss.Color
 	Offline  lipgloss.Color
+	// BarColor is the raw color used to fill the in-TUI progress bar.
+	BarColor string
 }
 
 func colorOr(value, fallback string) lipgloss.Color {
@@ -41,10 +43,15 @@ func fgStyle(value, fallback string) lipgloss.Style {
 // NewTheme builds a Theme from the [ui] config section, applying defaults
 // for any unset color.
 func NewTheme(c config.UIConfig) Theme {
+	barColor := c.SelectedColor
+	if barColor == "" {
+		barColor = "#89dceb"
+	}
 	return Theme{
 		Title:    fgStyle(c.TitleColor, "#f5c2e7"),
 		Accent:   fgStyle(c.AccentColor, "#f5c2e7"),
 		Selected: fgStyle(c.SelectedColor, "#89dceb"),
+		BarColor: barColor,
 		Success:  fgStyle(c.SuccessColor, "#a6e3a1"),
 		Error:    fgStyle(c.ErrorColor, "#f38ba8"),
 		Warning:  fgStyle(c.WarningColor, "#fab387"),

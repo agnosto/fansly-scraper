@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/agnosto/fansly-scraper/config"
 	"github.com/agnosto/fansly-scraper/headers"
 	"github.com/agnosto/fansly-scraper/logger"
 	"github.com/agnosto/fansly-scraper/posts"
+	"github.com/agnosto/fansly-scraper/utils"
 	"github.com/schollz/progressbar/v3"
 	"golang.org/x/time/rate"
 )
@@ -45,7 +45,7 @@ func processAllPosts(ctx context.Context, allPosts []posts.Post, configPath, url
 	limiter := rate.NewLimiter(rate.Every(3*time.Second), 1)
 
 	bar := progressbar.NewOptions(len(allPosts),
-		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionSetWriter(utils.ProgressWriter()),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionShowBytes(false),
 		progressbar.OptionSetWidth(15),

@@ -39,7 +39,8 @@ func (m *MainModel) HandleWallSelectionUpdate(msg tea.Msg) (tea.Model, tea.Cmd) 
 			if len(selectedRow) > 0 {
 				m.selectedWallID = selectedRow[1]
 				m.state = DownloadProgressState
-				return m, m.startWallDownload()
+				m.progressTicking = true
+				return m, tea.Batch(m.startWallDownload(), progressTickCmd())
 			}
 		}
 	}

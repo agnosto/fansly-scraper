@@ -6,12 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/agnosto/fansly-scraper/auth"
 	"github.com/agnosto/fansly-scraper/headers"
 	"github.com/agnosto/fansly-scraper/logger"
+	"github.com/agnosto/fansly-scraper/utils"
 	"github.com/schollz/progressbar/v3"
 	"golang.org/x/time/rate"
 )
@@ -138,7 +138,7 @@ func GetAllMessagesWithMedia(modelID string, fanslyHeaders *headers.FanslyHeader
 	msgCursor := "0"
 	bar := progressbar.NewOptions(-1,
 		progressbar.OptionSetDescription("Fetching Messages"),
-		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionSetWriter(utils.ProgressWriter()),
 		progressbar.OptionSetWidth(15),
 		progressbar.OptionThrottle(65*time.Millisecond),
 		progressbar.OptionShowCount(),
@@ -154,6 +154,7 @@ func GetAllMessagesWithMedia(modelID string, fanslyHeaders *headers.FanslyHeader
 		}
 		allMessagesWithMedia = append(allMessagesWithMedia, batch...)
 		bar.Add(len(batch))
+		utils.ReportFetch(len(allMessagesWithMedia))
 
 		if limit > 0 && len(allMessagesWithMedia) >= limit {
 			allMessagesWithMedia = allMessagesWithMedia[:limit]

@@ -26,6 +26,10 @@ func (m *MainModel) HandlePurchaseProgressMenuUpdate(msg tea.Msg) (tea.Model, te
 			return m, tea.Quit
 		}
 	}
+	if !m.progressTicking {
+		m.progressTicking = true
+		return m, progressTickCmd()
+	}
 	return m, nil
 }
 
@@ -34,6 +38,7 @@ func (m *MainModel) RenderPurchaseProgressMenu() string {
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("Downloading purchased content...\n\n"))
+	sb.WriteString(m.renderProgressStatus())
 
 	return sb.String()
 }

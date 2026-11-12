@@ -73,7 +73,7 @@ func (d *Downloader) DownloadM3U8(ctx context.Context, modelName string, m3u8URL
 
 	// Download segments
 	//log.Printf("Extracted segment URLs: %v", segmentURLs)
-	segmentFiles, err := downloadSegments(ctx, segmentURLs, segmentDir, cookies)
+	segmentFiles, err := downloadSegments(ctx, segmentURLs, segmentDir, cookies, d.setBytes)
 	//log.Printf("[DOWNLOAD M3U8] SegmentedFiles: %v", segmentFiles)
 	if err != nil {
 		return err
@@ -260,7 +260,7 @@ func parseSegments(content, baseURL string) ([]string, error) {
 	return segmentURLs, nil
 }
 
-func downloadSegments(ctx context.Context, segmentURLs []string, savePath string, cookies map[string]string) ([]string, error) {
+func downloadSegments(ctx context.Context, segmentURLs []string, savePath string, cookies map[string]string, onProgress func(written, total int64)) ([]string, error) {
 	var wg sync.WaitGroup
 	segmentFiles := make([]string, len(segmentURLs))
 	errors := make(chan error, len(segmentURLs))
@@ -281,7 +281,7 @@ func downloadSegments(ctx context.Context, segmentURLs []string, savePath string
 
 			fileName := filepath.Join(savePath, fmt.Sprintf("segment_%d.ts", i))
 
-			err := downloadFile(ctx, segmentURL, fileName, cookies)
+			err := downloadFile(ctx, segmentURL, fileName, cookies, onProgress)
 			if err != nil {
 				log.Printf("Error downloading segment %d: %v", i, err)
 				errors <- err
@@ -335,7 +335,7 @@ func downloadSegments(ctx context.Context, segmentURLs []string, savePath string
 	return segmentFiles, nil
 }
 
-func downloadFile(ctx context.Context, url string, fileName string, cookies map[string]string) error {
+func downloadFile(ctx context.Context, url string, fileName string, cookies map[string]string, onProgress func(written, total int64)) error {
 	logger.Logger.Printf("Downloading file: %s to %s", url, fileName)
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
@@ -365,7 +365,15 @@ func downloadFile(ctx context.Context, url string, fileName string, cookies map[
 	}
 	defer out.Close()
 
-	written, err := io.Copy(out, resp.Body)
+	var written int64
+	if onProgress != nil {
+		bw := &byteWriter{total: resp.ContentLength, report: onProgress}
+		onProgress(0, resp.ContentLength)
+		written, err = io.Copy(io.MultiWriter(out, bw), resp.Body)
+		onProgress(bw.written, bw.total)
+	} else {
+		written, err = io.Copy(out, resp.Body)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}

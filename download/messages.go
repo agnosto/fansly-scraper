@@ -2,7 +2,7 @@ package download
 
 import (
 	"context"
-	//"fmt"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +18,8 @@ func (d *Downloader) DownloadMessages(ctx context.Context, modelId, modelName st
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	d.resetProgress()
+	d.describe(fmt.Sprintf("Fetching %s messages...", modelName))
 	messagesWithMedia, err := posts.GetAllMessagesWithMedia(modelId, d.headers, d.cfg.Options.PostLimit)
 	if err != nil {
 		logger.Logger.Printf("[ERROR] [%s] Failed to get message media: %v", modelName, err)
@@ -42,7 +44,7 @@ func (d *Downloader) DownloadMessages(ctx context.Context, modelId, modelName st
 	}
 
 	d.progressBar = progressbar.NewOptions(totalMediaItems,
-		progressbar.OptionSetWriter(d.progressWriter()),
+		progressbar.OptionSetWriter(d.barWriter()),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionUseANSICodes(true),
 		progressbar.OptionSetPredictTime(true),
@@ -54,6 +56,8 @@ func (d *Downloader) DownloadMessages(ctx context.Context, modelId, modelName st
 		progressbar.OptionSpinnerType(14),
 		progressbar.OptionFullWidth(),
 	)
+	d.setProgressTotal(totalMediaItems)
+	d.describe(fmt.Sprintf("Downloading %s messages...", modelName))
 
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, 10)
@@ -71,7 +75,7 @@ func (d *Downloader) DownloadMessages(ctx context.Context, modelId, modelName st
 				if err != nil {
 					logger.Logger.Printf("[ERROR] [%s] Failed to download message media item %s: %v", modelName, media.ID, err)
 				}
-				d.progressBar.Add(1)
+				d.addProgress(1)
 			}(mediaItem, msgWithMedia.Message, i)
 		}
 	}
