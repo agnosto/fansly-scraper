@@ -12,6 +12,17 @@ import (
 	//"github.com/charmbracelet/bubbles/table"
 )
 
+// fullRepaintCmd re-posts the current window size, which resets the
+// renderer's frame cache so the next flush redraws every line in place
+// without erasing the screen (avoids the flicker of tea.ClearScreen).
+// Used because rebuilding the filter table can leave stale styled rows
+// behind on some Windows terminals.
+func fullRepaintCmd(width, height int) tea.Cmd {
+	return func() tea.Msg {
+		return tea.WindowSizeMsg{Width: width, Height: height}
+	}
+}
+
 // HandleMainMenuUpdate handles updates when in the MainMenuState
 func (m *MainModel) HandleFilterModelsMenuUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -42,10 +53,10 @@ func (m *MainModel) HandleFilterModelsMenuUpdate(msg tea.Msg) (tea.Model, tea.Cm
 				m.filterInput = m.filterInput[:len(m.filterInput)-1]
 				m.applyFilter()
 			}
-			// Rebuilding the table shrinks/expands rows in place; on Windows
-			// terminals the line-diff renderer leaves the previously styled
-			// row painted, so force a full repaint on every input change.
-			return m, tea.ClearScreen
+			// Rebuilding the table shrinks/expands rows in place; on some
+			// Windows terminals the line-diff renderer leaves the previously
+			// styled row painted, so force a full (flicker-free) repaint.
+			return m, fullRepaintCmd(m.width, m.height)
 		default:
 			// Only accept printable single-character keys; multi-key strings
 			// like "ctrl+a" or literal "space" must not leak into the input.
@@ -53,7 +64,7 @@ func (m *MainModel) HandleFilterModelsMenuUpdate(msg tea.Msg) (tea.Model, tea.Cm
 				m.filterInput += s
 				m.applyFilter()
 			}
-			return m, tea.ClearScreen
+			return m, fullRepaintCmd(m.width, m.height)
 		}
 	}
 	return m, nil
