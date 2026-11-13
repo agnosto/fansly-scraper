@@ -153,10 +153,15 @@ func (m *MainModel) HandleLiveMonitorFilterUpdate(msg tea.Msg) (tea.Model, tea.C
 				m.liveMonitorFilterInput = m.liveMonitorFilterInput[:len(m.liveMonitorFilterInput)-1]
 				m.applyLiveMonitorFilter()
 			}
+			// Same rationale as the account filter: force a full repaint so
+			// the previously styled row cannot linger on Windows terminals.
+			return m, tea.ClearScreen
 		default:
-			m.liveMonitorFilterInput += msg.String()
-			m.applyLiveMonitorFilter()
-			return m, nil
+			if s := msg.String(); len([]rune(s)) == 1 {
+				m.liveMonitorFilterInput += s
+				m.applyLiveMonitorFilter()
+			}
+			return m, tea.ClearScreen
 		}
 	}
 	return m, nil

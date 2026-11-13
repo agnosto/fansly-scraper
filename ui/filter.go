@@ -42,10 +42,18 @@ func (m *MainModel) HandleFilterModelsMenuUpdate(msg tea.Msg) (tea.Model, tea.Cm
 				m.filterInput = m.filterInput[:len(m.filterInput)-1]
 				m.applyFilter()
 			}
+			// Rebuilding the table shrinks/expands rows in place; on Windows
+			// terminals the line-diff renderer leaves the previously styled
+			// row painted, so force a full repaint on every input change.
+			return m, tea.ClearScreen
 		default:
-			m.filterInput += msg.String()
-			m.applyFilter()
-			return m, nil
+			// Only accept printable single-character keys; multi-key strings
+			// like "ctrl+a" or literal "space" must not leak into the input.
+			if s := msg.String(); len([]rune(s)) == 1 {
+				m.filterInput += s
+				m.applyFilter()
+			}
+			return m, tea.ClearScreen
 		}
 	}
 	return m, nil
